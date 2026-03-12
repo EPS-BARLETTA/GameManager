@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PouleManager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <p>PouleManager</p>
+            <small>Organisateur mobile</small>
+          </div>
+        </div>
+        <button class="btn ghost" id="printTopBtn" aria-label="Imprimer le planning">Imprimer</button>
+      </header>
+
+      <div class="stepper hidden" id="stepper" aria-label="Progression de configuration">
+        <div class="step" data-step="type">
+          <span class="step-index">1</span>
+          <span class="step-label">Mode</span>
+        </div>
+        <div class="step" data-step="count">
+          <span class="step-index">2</span>
+          <span class="step-label">Équipes</span>
+        </div>
+        <div class="step" data-step="teams">
+          <span class="step-index">3</span>
+          <span class="step-label">Noms</span>
+        </div>
+        <div class="step" data-step="options">
+          <span class="step-index">4</span>
+          <span class="step-label">Options</span>
+        </div>
+        <div class="step" data-step="results">
+          <span class="step-index">5</span>
+          <span class="step-label">Planning</span>
+        </div>
+      </div>
+
+      <main class="screen-stack" id="screens">
+        <section class="screen active" data-screen="landing">
+        <div class="hero-card">
+            <h1>PouleManager</h1>
+            <div class="hero-benefits" aria-label="Bénéfices principaux">
+              <article>
+                <h3>Créer</h3>
+                <p>Configurer un tournoi complet en moins d’une minute.</p>
+              </article>
+              <article>
+                <h3>Gérer</h3>
+                <p>Rotations claires, répartition terrain et mode live.</p>
+              </article>
+              <article>
+                <h3>Suivre</h3>
+                <p>Saisir les scores, voir le classement et lancer le chrono.</p>
+              </article>
+              <article>
+                <h3>Partager</h3>
+                <p>Imprimer un planning propre ou diffuser en PDF.</p>
+              </article>
+            </div>
+            <div class="cta-group">
+              <button class="btn primary" id="startFlow">Commencer</button>
+              <button class="btn secondary" id="resumeFlow">Reprendre la dernière configuration</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="type">
+          <header class="screen-header">
+            <p class="eyebrow">Étape 1</p>
+            <h2>Choisir le format</h2>
+            <p>Pour cette version, seule la poule unique est disponible. Les autres formats arrivent bientôt.</p>
+          </header>
+          <div class="cards-grid">
+            <article class="mode-card active" data-mode="round-robin" tabindex="0">
+              <div>
+                <h3>Poule unique</h3>
+                <p>Toutes les équipes se rencontrent une fois.</p>
+              </div>
+              <span class="pill">Actif</span>
+            </article>
+            <article class="mode-card disabled">
+              <div>
+                <h3>Playoffs</h3>
+                <p>Prochainement</p>
+              </div>
+              <span class="pill muted">Bientôt</span>
+            </article>
+            <article class="mode-card disabled">
+              <div>
+                <h3>Groupes multiples</h3>
+                <p>Prochainement</p>
+              </div>
+              <span class="pill muted">Bientôt</span>
+            </article>
+          </div>
+          <div class="nav-actions">
+            <button class="btn ghost" data-nav="landing">Retour</button>
+            <button class="btn primary" data-nav="count">Suivant</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="count">
+          <header class="screen-header">
+            <p class="eyebrow">Étape 2</p>
+            <h2>Nombre d'équipes</h2>
+          </header>
+          <div class="counter-card">
+            <button class="circle" id="countMinus" aria-label="Moins d'équipes">−</button>
+            <div class="counter-value" id="teamCountDisplay">8</div>
+            <button class="circle" id="countPlus" aria-label="Plus d'équipes">+</button>
+          </div>
+          <label class="slider-field">
+            <span>Ajuster avec le slider</span>
+            <input type="range" id="teamCountSlider" min="2" max="32" value="8" />
+          </label>
+          <div class="nav-actions">
+            <button class="btn ghost" data-nav="type">Retour</button>
+            <button class="btn primary" data-nav="teams">Suivant</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="teams">
+          <header class="screen-header">
+            <p class="eyebrow">Étape 3</p>
+            <h2>Noms des équipes</h2>
+            <p>Personnalisez chaque équipe. Laissez vide pour garder un nom par défaut.</p>
+          </header>
+          <div class="team-tools">
+            <button class="btn secondary" id="autoFillTeams">Remplissage automatique</button>
+            <div class="bulk-import">
+              <label for="teamBulkInput">Coller une liste de noms (un par ligne)</label>
+              <textarea id="teamBulkInput" rows="4" placeholder="Équipe A&#10;Équipe B&#10;Équipe C"></textarea>
+              <button class="btn primary" id="applyBulkNames">Appliquer la liste</button>
+            </div>
+          </div>
+          <div class="team-list" id="teamFields"></div>
+          <div class="nav-actions">
+            <button class="btn ghost" data-nav="count">Retour</button>
+            <button class="btn primary" data-nav="options">Suivant</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="options">
+          <header class="screen-header">
+            <p class="eyebrow">Étape 4</p>
+            <h2>Options d'organisation</h2>
+          </header>
+          <div class="form-grid">
+            <label class="field">
+              <span>Nombre de terrains / tables</span>
+              <input type="number" id="fieldCount" min="1" max="16" value="2" />
+            </label>
+            <label class="field">
+              <span>Durée moyenne d'un match (minutes)</span>
+              <input type="number" id="matchDuration" min="1" max="180" value="12" />
+            </label>
+            <label class="field">
+              <span>Heure de début</span>
+              <input type="time" id="startTime" value="09:00" />
+            </label>
+            <label class="field switch">
+              <span>Activer le chronomètre</span>
+              <input type="checkbox" id="timerToggle" />
+            </label>
+            <label class="field switch">
+              <span>Son</span>
+              <input type="checkbox" id="soundToggle" checked />
+            </label>
+            <label class="field switch">
+              <span>Vibration</span>
+              <input type="checkbox" id="vibrationToggle" checked />
+            </label>
+          </div>
+          <div class="nav-actions">
+            <button class="btn ghost" data-nav="teams">Retour</button>
+            <button class="btn primary" id="generateBtn">Générer le planning</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="results">
+          <header class="screen-header">
+            <p class="eyebrow">Étape 5</p>
+            <h2>Planning généré</h2>
+            <p id="resultSubtitle">Aucun planning pour le moment.</p>
+          </header>
+          <section class="summary-grid" id="summaryGrid"></section>
+          <div class="results-actions">
+            <div class="primary-actions">
+              <button class="btn secondary" data-nav="options">Modifier</button>
+              <button class="btn secondary" id="regenerateBtn" disabled>Régénérer</button>
+              <button class="btn secondary" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
+              <button class="btn secondary" id="returnLiveBtn" disabled>Revenir au live</button>
+              <button class="btn primary" id="printBtn">Imprimer</button>
+            </div>
+            <div class="secondary-actions">
+              <button class="btn ghost" data-nav="landing">Retour accueil</button>
+              <button class="btn ghost" id="resetAppBtn">Réinitialiser</button>
+            </div>
+          </div>
+          <div class="view-toggle" role="tablist">
+            <button class="tab active" data-view="rotations" role="tab" aria-controls="rotationView">Rotations</button>
+            <button class="tab" data-view="teams" role="tab" aria-controls="teamView">Par équipe</button>
+            <button class="tab" data-view="rankings" role="tab" aria-controls="rankingView">Classement</button>
+          </div>
+          <section class="view" id="rotationView"></section>
+          <section class="view hidden" id="teamView"></section>
+          <section class="view hidden" id="rankingView"></section>
+        </section>
+
+        <section class="screen" data-screen="live">
+          <div class="live-shell" id="liveShell">
+            <header class="live-header">
+              <div class="live-header-block">
+                <p class="eyebrow">Mode live premium</p>
+                <h2 id="liveRotationTitle">Rotation</h2>
+                <p id="liveStatus" class="live-status"></p>
+              </div>
+              <div class="live-header-timer" aria-live="polite">
+                <span class="label">Chrono</span>
+                <div class="live-timer">
+                  <span id="liveTimerDisplay">--:--</span>
+                  <small id="liveTimerState">En pause</small>
+                </div>
+              </div>
+              <div class="live-header-actions">
+                <button class="btn ghost" id="liveModeToggle">Mode écran</button>
+                <button class="btn ghost" id="liveBackBtn">Retour au planning</button>
+              </div>
+            </header>
+            <div class="live-main">
+              <section class="live-matches" id="liveRotationContent" aria-live="polite"></section>
+              <aside class="live-ranking" id="liveRankingPanel">
+                <header>
+                  <div>
+                    <p class="eyebrow">Classement live</p>
+                    <h3>Pos · Équipe · Pts</h3>
+                  </div>
+                  <button class="btn ghost small" id="liveRankingBtn">Vue complète</button>
+                </header>
+                <div class="live-ranking-table" id="liveRankingTable"></div>
+              </aside>
+            </div>
+            <div class="live-rest hidden" id="liveRestNotice"></div>
+            <div class="live-controls" id="liveControls">
+              <div class="control-group primary">
+                <button class="btn primary xl" id="liveNextBtn" disabled>Rotation suivante</button>
+                <button class="btn secondary xl" id="liveFinishBtn">Terminer le tournoi</button>
+              </div>
+              <div class="control-group timer">
+                <button class="btn secondary" id="livePauseBtn">Pause chrono</button>
+                <button class="btn secondary" id="liveResumeBtn">Reprendre chrono</button>
+                <button class="btn secondary" id="liveTimerResetBtn">Reset chrono</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="timer hidden" id="timerWidget" aria-live="polite">
+      <header>
+        <p>Chrono rotation</p>
+        <span id="timerRotationLabel">Rotation 1</span>
+      </header>
+      <div class="timer-display" id="timerDisplay">12:00</div>
+      <div class="timer-controls">
+        <button data-timer="start">START</button>
+        <button data-timer="pause">PAUSE</button>
+        <button data-timer="reset">RESET</button>
+        <button data-timer="next">Rotation suivante</button>
+      </div>
+      <div class="timer-footer">
+        <button id="timerRanking">Voir le classement</button>
+        <button id="timerBackToLive">Retour au live</button>
+      </div>
+    </aside>
+
+    <div class="modal-overlay hidden" id="finalRankingModal" role="dialog" aria-modal="true" aria-labelledby="finalRankingTitle">
+      <div class="modal-card">
+        <header>
+          <div>
+            <p class="eyebrow">Clôture du tournoi</p>
+            <h3 id="finalRankingTitle">Classement final</h3>
+          </div>
+          <button class="btn ghost small" id="finalRankingCloseBtn" aria-label="Fermer">Fermer</button>
+        </header>
+        <div id="finalRankingTable" class="final-ranking-table"></div>
+            <div class="modal-actions">
+              <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
+              <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
+              <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
+            </div>
+          </div>
+        </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
