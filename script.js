@@ -45,6 +45,9 @@ const elements = {
   rankingView: document.getElementById('rankingView'),
   tabButtons: document.querySelectorAll('.tab'),
   summaryGrid: document.getElementById('summaryGrid'),
+  resultsPrimaryHint: document.getElementById('resultsPrimaryHint'),
+  resultsMoreToggle: document.getElementById('resultsMoreToggle'),
+  resultsMorePanel: document.getElementById('resultsMorePanel'),
   resultSubtitle: document.getElementById('resultSubtitle'),
   printHeader: document.getElementById('printHeader'),
   timerWidget: document.getElementById('timerWidget'),
@@ -59,6 +62,9 @@ const elements = {
   liveStatus: document.getElementById('liveStatus'),
   liveRotationContent: document.getElementById('liveRotationContent'),
   liveShell: document.getElementById('liveShell'),
+  liveActionsToggle: document.getElementById('liveActionsToggle'),
+  liveActionsPanel: document.getElementById('liveActionsPanel'),
+  liveChronoBtn: document.getElementById('liveChronoBtn'),
   liveRankingPanel: document.getElementById('liveRankingPanel'),
   liveRankingTable: document.getElementById('liveRankingTable'),
   liveRestNotice: document.getElementById('liveRestNotice'),
@@ -66,6 +72,9 @@ const elements = {
   liveTimerHint: document.getElementById('liveTimerHint'),
   liveTimerDisplay: document.getElementById('liveTimerDisplay'),
   liveTimerState: document.getElementById('liveTimerState'),
+  liveNextRotation: document.getElementById('liveNextRotation'),
+  liveNextLabel: document.getElementById('liveNextLabel'),
+  liveNextList: document.getElementById('liveNextList'),
   liveModeToggle: document.getElementById('liveModeToggle'),
   liveStartBtn: document.getElementById('liveStartBtn'),
   livePauseBtn: document.getElementById('livePauseBtn'),
@@ -85,6 +94,17 @@ const elements = {
   helpModal: document.getElementById('helpModal'),
   helpCloseBtn: document.getElementById('helpCloseBtn'),
   helpFaq: document.getElementById('helpFaq'),
+  chronoRotationLabel: document.getElementById('chronoRotationLabel'),
+  chronoDisplay: document.getElementById('chronoDisplay'),
+  chronoStateLabel: document.getElementById('chronoStateLabel'),
+  chronoMatchMeta: document.getElementById('chronoMatchMeta'),
+  chronoMatches: document.getElementById('chronoMatches'),
+  chronoRest: document.getElementById('chronoRest'),
+  chronoStartBtn: document.getElementById('chronoStartBtn'),
+  chronoPauseBtn: document.getElementById('chronoPauseBtn'),
+  chronoResetBtn: document.getElementById('chronoResetBtn'),
+  chronoNextBtn: document.getElementById('chronoNextBtn'),
+  chronoBackBtn: document.getElementById('chronoBackBtn'),
 };
 
 let state = sanitizeState(loadState() ?? createDefaultState());
@@ -116,6 +136,8 @@ const timerController = {
     setLiveTimerPanelEnabled(true);
     updateTimerDisplay();
     setLiveTimerControlsAvailability(true);
+    setChronoPanelEnabled(true);
+    renderChronoScreen();
   },
   start() {
     if (timerState.intervalId) return;
@@ -163,7 +185,7 @@ const timerController = {
   onEnd() {
     this.pause();
     elements.timerWidget.classList.add('timer-ended');
-    updateTimerDisplay('Terminé');
+    updateTimerDisplay('TEMPS ÉCOULÉ');
     triggerFeedback();
   },
   hide() {
@@ -176,6 +198,12 @@ const timerController = {
     setLiveTimerControlsAvailability(false);
     if (elements.liveTimerDisplay) elements.liveTimerDisplay.textContent = '--:--';
     if (elements.liveTimerState) elements.liveTimerState.textContent = 'Inactif';
+    if (elements.chronoDisplay) elements.chronoDisplay.textContent = '--:--';
+    if (elements.chronoStateLabel) elements.chronoStateLabel.textContent = 'Inactif';
+    setChronoPanelEnabled(false);
+    if (screens.chrono) {
+      screens.chrono.classList.remove('running', 'ended');
+    }
   },
   syncRotation(rotationNumber) {
     timerState.currentRotation = rotationNumber;
@@ -205,6 +233,7 @@ function init() {
   elements.regenerateBtn.disabled = !state.schedule;
   updateResumeButton();
   setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
+  setChronoPanelEnabled(Boolean(state.schedule && state.options.timer));
 }
 
 function bindNavigation() {
@@ -284,6 +313,7 @@ function bindNavigation() {
 
   elements.generateBtn.addEventListener('click', handleGenerate);
   elements.regenerateBtn.addEventListener('click', () => {
+    closeResultsMorePanel();
     if (!state.schedule) return;
     const teams = getFinalTeamNames();
     state.teamNames = teams;
@@ -293,8 +323,14 @@ function bindNavigation() {
 
   elements.printBtn.addEventListener('click', () => window.print());
   elements.printTopBtn.addEventListener('click', () => window.print());
+  if (elements.resultsMoreToggle) {
+    elements.resultsMoreToggle.addEventListener('click', toggleResultsMorePanel);
+  }
   if (elements.startLiveBtn) {
     elements.startLiveBtn.addEventListener('click', startLiveMode);
+  }
+  if (elements.liveActionsToggle) {
+    elements.liveActionsToggle.addEventListener('click', toggleLiveActionsPanel);
   }
 
   elements.tabButtons.forEach(btn => {
@@ -327,10 +363,11 @@ function bindNavigation() {
   elements.rotationView.addEventListener('input', handleScoreInput);
   if (elements.liveRotationContent) {
     elements.liveRotationContent.addEventListener('input', handleScoreInput);
-    elements.liveRotationContent.addEventListener('click', handleScoreAdjust);
+    elements.liveRotationContent.addEventListener('click', handleLiveClick);
   }
   if (elements.liveBackBtn) {
     elements.liveBackBtn.addEventListener('click', () => {
+      closeLiveActionsPanel();
       goTo('results');
       setActiveView('rotations');
     });
@@ -363,11 +400,23 @@ function bindNavigation() {
     elements.liveFinishBtn.addEventListener('click', handleLiveFinish);
   }
   if (elements.liveModeToggle) {
-    elements.liveModeToggle.addEventListener('click', toggleLiveGiantMode);
+    elements.liveModeToggle.addEventListener('click', () => {
+      toggleLiveGiantMode();
+      closeLiveActionsPanel();
+    });
+  }
+  if (elements.liveChronoBtn) {
+    elements.liveChronoBtn.addEventListener('click', () => {
+      closeLiveActionsPanel();
+      if (!state.schedule) return;
+      renderChronoScreen();
+      goTo('chrono');
+    });
   }
   if (elements.returnLiveBtn) {
     elements.returnLiveBtn.addEventListener('click', () => {
       if (!state.schedule) return;
+      closeResultsMorePanel();
       goTo('live');
       renderLiveRotation();
     });
@@ -413,6 +462,25 @@ function bindNavigation() {
   if (elements.helpFaq) {
     elements.helpFaq.addEventListener('click', handleFaqClick);
   }
+  if (elements.chronoBackBtn) {
+    elements.chronoBackBtn.addEventListener('click', () => {
+      goTo('live');
+      renderLiveRotation();
+    });
+  }
+  if (elements.chronoStartBtn) {
+    elements.chronoStartBtn.addEventListener('click', () => timerController.start());
+  }
+  if (elements.chronoPauseBtn) {
+    elements.chronoPauseBtn.addEventListener('click', () => timerController.pause());
+  }
+  if (elements.chronoResetBtn) {
+    elements.chronoResetBtn.addEventListener('click', () => timerController.reset());
+  }
+  if (elements.chronoNextBtn) {
+    elements.chronoNextBtn.addEventListener('click', () => advanceLiveRotation());
+  }
+  document.addEventListener('click', handleGlobalMenuClick);
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     let handled = false;
@@ -424,13 +492,19 @@ function bindNavigation() {
       closeHelpModal();
       handled = true;
     }
+    if (closeOverflowPanels()) {
+      handled = true;
+    }
     if (handled) {
       event.preventDefault();
     }
   });
 
   if (elements.resetAppBtn) {
-    elements.resetAppBtn.addEventListener('click', resetApplication);
+    elements.resetAppBtn.addEventListener('click', () => {
+      closeResultsMorePanel();
+      resetApplication();
+    });
   }
 }
 
@@ -449,10 +523,13 @@ function handleResume() {
   }
   setLiveModeAvailability(Boolean(state.schedule));
   elements.regenerateBtn.disabled = !state.schedule;
+  setChronoPanelEnabled(Boolean(state.schedule && state.options.timer));
+  renderChronoScreen();
 }
 
 function goTo(screen, options = {}) {
   if (!screens[screen]) return;
+  closeOverflowPanels();
   Object.values(screens).forEach(section => section.classList.remove('active'));
   screens[screen].classList.add('active');
   if (screen !== 'live' && elements.liveShell) {
@@ -468,6 +545,9 @@ function goTo(screen, options = {}) {
   }
   updateStepper(screen);
   togglePrintButton(screen === 'results');
+  if (screen === 'chrono') {
+    renderChronoScreen();
+  }
 }
 
 function updateStepper(screen) {
@@ -587,6 +667,7 @@ function renderResults(schedule, options = {}) {
   const resetScores = Boolean(options.resetScores);
   if (resetScores) {
     state.scores = {};
+    state.validatedMatches = {};
   }
   state.schedule = schedule;
   finalRankingSnapshot = null;
@@ -615,6 +696,7 @@ function renderResults(schedule, options = {}) {
   elements.regenerateBtn.disabled = false;
   setLiveModeAvailability(true);
   handleTimerVisibility();
+  renderChronoScreen();
 }
 
 function renderSummary(meta) {
@@ -1000,6 +1082,67 @@ function syncBodyModalState() {
   document.body.classList.toggle('modal-open', shouldLock);
 }
 
+function toggleResultsMorePanel() {
+  if (!elements.resultsMorePanel || !elements.resultsMoreToggle) return;
+  const willOpen = elements.resultsMorePanel.classList.contains('hidden');
+  if (willOpen) {
+    closeLiveActionsPanel();
+    elements.resultsMorePanel.classList.remove('hidden');
+    elements.resultsMoreToggle.setAttribute('aria-expanded', 'true');
+  } else {
+    closeResultsMorePanel();
+  }
+}
+
+function toggleLiveActionsPanel() {
+  if (!elements.liveActionsPanel || !elements.liveActionsToggle) return;
+  const willOpen = elements.liveActionsPanel.classList.contains('hidden');
+  if (willOpen) {
+    closeResultsMorePanel();
+    elements.liveActionsPanel.classList.remove('hidden');
+    elements.liveActionsToggle.setAttribute('aria-expanded', 'true');
+  } else {
+    closeLiveActionsPanel();
+  }
+}
+
+function closeResultsMorePanel() {
+  if (!elements.resultsMorePanel || elements.resultsMorePanel.classList.contains('hidden')) return false;
+  elements.resultsMorePanel.classList.add('hidden');
+  if (elements.resultsMoreToggle) {
+    elements.resultsMoreToggle.setAttribute('aria-expanded', 'false');
+  }
+  return true;
+}
+
+function closeLiveActionsPanel() {
+  if (!elements.liveActionsPanel || elements.liveActionsPanel.classList.contains('hidden')) return false;
+  elements.liveActionsPanel.classList.add('hidden');
+  if (elements.liveActionsToggle) {
+    elements.liveActionsToggle.setAttribute('aria-expanded', 'false');
+  }
+  return true;
+}
+
+function closeOverflowPanels() {
+  const closedResults = closeResultsMorePanel();
+  const closedLive = closeLiveActionsPanel();
+  return closedResults || closedLive;
+}
+
+function handleGlobalMenuClick(event) {
+  if (elements.resultsMorePanel && !elements.resultsMorePanel.classList.contains('hidden')) {
+    if (!event.target.closest('.results-tertiary-cta')) {
+      closeResultsMorePanel();
+    }
+  }
+  if (elements.liveActionsPanel && !elements.liveActionsPanel.classList.contains('hidden')) {
+    if (!event.target.closest('.live-header-actions')) {
+      closeLiveActionsPanel();
+    }
+  }
+}
+
 function startLiveMode() {
   if (!state.schedule) return;
   const maxIndex = Math.max(0, state.schedule.rotations.length - 1);
@@ -1019,6 +1162,7 @@ function renderLiveRotation() {
     if (elements.liveNextBtn) elements.liveNextBtn.disabled = true;
     renderLiveRankingPanel();
     renderLiveRest([]);
+    renderNextRotationPreview();
     return;
   }
   const rotation = state.schedule.rotations[state.liveRotationIndex] || state.schedule.rotations[0];
@@ -1028,6 +1172,7 @@ function renderLiveRotation() {
     if (elements.liveNextBtn) elements.liveNextBtn.disabled = true;
     renderLiveRest([]);
     renderLiveRankingPanel();
+    renderNextRotationPreview();
     return;
   }
   const total = state.schedule.meta.rotationCount;
@@ -1035,6 +1180,7 @@ function renderLiveRotation() {
   elements.liveRotationContent.dataset.rotation = rotation.number;
   elements.liveRotationContent.innerHTML = buildLiveMatchCards(rotation);
   renderLiveRest(rotation.byes);
+  renderNextRotationPreview();
   renderLiveRankingPanel(rotation.number);
   highlightRotation(rotation.number);
   updateLiveControls();
@@ -1042,6 +1188,7 @@ function renderLiveRotation() {
     const label = elements.liveShell.classList.contains('giant-mode') ? 'Quitter le mode écran' : 'Mode écran';
     elements.liveModeToggle.textContent = label;
   }
+  renderChronoScreen();
 }
 
 function buildLiveMatchCards(rotation) {
@@ -1057,36 +1204,54 @@ function buildLiveMatchCard(rotation, match) {
   const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
   const awayScore = formatScoreValue(getScoreValue(matchId, 'away'));
   const complete = isMatchCompleteById(matchId);
+  const validated = isMatchValidated(matchId);
+  const cardClasses = ['live-match-card'];
+  if (validated) {
+    cardClasses.push('validated');
+  } else {
+    cardClasses.push('active');
+  }
   const parts = [];
   if (match.field) parts.push(`Terrain ${match.field}`);
   if (match.order > 1) parts.push(`Vague ${match.order}`);
   if (rotation.startLabel) parts.push(rotation.startLabel);
   const badge = parts.length ? parts.join(' · ') : `Rotation ${rotation.number}`;
-  const status = complete ? 'Validé' : 'Score à saisir';
+  const statusText = validated ? 'VALIDÉ' : 'EN COURS';
+  const badgeClass = validated ? 'success' : 'info';
+  const actionButtons = `
+    <button type="button" class="btn ghost tiny live-validate ${validated ? 'hidden' : ''}" data-validate-match="${matchId}" ${
+      complete ? '' : 'disabled'
+    }>Valider</button>
+    <button type="button" class="btn ghost tiny live-edit ${validated ? '' : 'hidden'}" data-edit-match="${matchId}">Modifier</button>
+  `;
   return `
-    <article class="live-match-card ${complete ? '' : 'incomplete'}" data-match-id="${matchId}">
+    <article class="${cardClasses.join(' ')}${complete || validated ? '' : ' incomplete'}" data-match-id="${matchId}">
       <header>
         <span>${badge}</span>
-        <span>${status}</span>
+        <span class="live-badge ${badgeClass}">${statusText}</span>
       </header>
       <div class="teams">
-        ${buildLiveTeamColumn('home', match.home, homeScore, matchId)}
-        ${buildLiveTeamColumn('away', match.away, awayScore, matchId)}
+        ${buildLiveTeamColumn('home', match.home, homeScore, matchId, { disabled: validated })}
+        ${buildLiveTeamColumn('away', match.away, awayScore, matchId, { disabled: validated })}
+      </div>
+      <div class="live-card-actions">
+        ${actionButtons}
       </div>
     </article>
   `;
 }
 
-function buildLiveTeamColumn(side, name, score, matchId) {
+function buildLiveTeamColumn(side, name, score, matchId, options = {}) {
+  const disabled = options.disabled ? 'disabled' : '';
   const minusLabel = `Diminuer le score de ${name}`;
   const plusLabel = `Augmenter le score de ${name}`;
   return `
     <div class="live-team">
       <strong>${name}</strong>
       <div class="live-score-pad">
-        <button type="button" class="score-adjust" aria-label="${minusLabel}" data-score-side="${side}" data-score-step="-1" data-match-id="${matchId}">−</button>
-        <input type="number" min="0" inputmode="numeric" aria-label="Score ${name}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" />
-        <button type="button" class="score-adjust" aria-label="${plusLabel}" data-score-side="${side}" data-score-step="1" data-match-id="${matchId}">+</button>
+        <button type="button" class="score-adjust" aria-label="${minusLabel}" data-score-side="${side}" data-score-step="-1" data-match-id="${matchId}" ${disabled}>−</button>
+        <input type="number" min="0" inputmode="numeric" aria-label="Score ${name}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" ${disabled} />
+        <button type="button" class="score-adjust" aria-label="${plusLabel}" data-score-side="${side}" data-score-step="1" data-match-id="${matchId}" ${disabled}>+</button>
       </div>
     </div>
   `;
@@ -1102,6 +1267,166 @@ function renderLiveRest(byes = []) {
   const label = byes.length > 1 ? 'Équipes au repos' : 'Équipe au repos';
   elements.liveRestNotice.innerHTML = `<strong>${label} :</strong> ${byes.join(', ')}`;
   elements.liveRestNotice.classList.remove('hidden');
+}
+
+function renderNextRotationPreview() {
+  if (!elements.liveNextRotation || !elements.liveNextList) return;
+  if (!state.schedule) {
+    elements.liveNextRotation.classList.add('hidden');
+    elements.liveNextList.innerHTML = '';
+    if (elements.liveNextLabel) elements.liveNextLabel.textContent = '';
+    return;
+  }
+  const nextRotation = state.schedule.rotations[state.liveRotationIndex + 1];
+  if (!nextRotation) {
+    elements.liveNextRotation.classList.add('hidden');
+    elements.liveNextList.innerHTML = '';
+    if (elements.liveNextLabel) elements.liveNextLabel.textContent = '';
+    return;
+  }
+  const total =
+    state.schedule.meta && state.schedule.meta.rotationCount
+      ? state.schedule.meta.rotationCount
+      : state.schedule.rotations.length;
+  if (elements.liveNextLabel) {
+    elements.liveNextLabel.textContent = `Rotation ${nextRotation.number} / ${total}`;
+  }
+  const cards = nextRotation.matches.length
+    ? nextRotation.matches
+        .map(match => {
+          const metaParts = [];
+          if (match.field) metaParts.push(`Terrain ${match.field}`);
+          if (match.order > 1) metaParts.push(`Vague ${match.order}`);
+          const meta = metaParts.length ? metaParts.join(' · ') : 'Organisation en cours';
+          return `
+            <article class="live-next-card">
+              <span class="meta">${meta}</span>
+              <strong>${match.home}</strong>
+              <span class="vs">vs</span>
+              <strong>${match.away}</strong>
+            </article>
+          `;
+        })
+        .join('')
+    : '<p class="live-next-empty">Aucun match planifié.</p>';
+  elements.liveNextList.innerHTML = cards;
+  elements.liveNextRotation.classList.remove('hidden');
+}
+
+function renderChronoScreen() {
+  if (!elements.chronoRotationLabel) return;
+  if (!state.schedule || !state.schedule.rotations.length) {
+    elements.chronoRotationLabel.textContent = 'Rotation -- / --';
+    if (elements.chronoMatchMeta) {
+      elements.chronoMatchMeta.textContent = 'Générez un planning puis activez le chronomètre pour utiliser ce mode.';
+    }
+    if (elements.chronoMatches) {
+      elements.chronoMatches.innerHTML = '<p class="chrono-empty">Aucun match à afficher.</p>';
+    }
+    if (elements.chronoRest) {
+      elements.chronoRest.classList.add('hidden');
+      elements.chronoRest.textContent = '';
+    }
+    setChronoNextAvailability(false);
+    return;
+  }
+  const maxIndex = state.schedule.rotations.length - 1;
+  const safeIndex = clampNumber(state.liveRotationIndex, 0, maxIndex, 0);
+  const rotation = state.schedule.rotations[safeIndex];
+  if (!rotation) {
+    setChronoNextAvailability(false);
+    return;
+  }
+  const total =
+    state.schedule.meta && state.schedule.meta.rotationCount
+      ? state.schedule.meta.rotationCount
+      : state.schedule.rotations.length;
+  elements.chronoRotationLabel.textContent = `Rotation ${rotation.number} / ${total}`;
+  const missing = countMissingScores(rotation.number);
+  const isComplete = rotation.matches.length > 0 && missing === 0;
+  const isLast = rotation.number === total;
+  const metaParts = [];
+  if (rotation.startLabel) metaParts.push(rotation.startLabel);
+  if (rotation.durationLabel) metaParts.push(rotation.durationLabel);
+  metaParts.push(isComplete ? 'Scores complets' : `${missing} score(s) à saisir`);
+  if (!state.options.timer) metaParts.push('Chrono désactivé');
+  if (elements.chronoMatchMeta) {
+    elements.chronoMatchMeta.textContent = metaParts.filter(Boolean).join(' • ');
+  }
+  if (elements.chronoMatches) {
+    elements.chronoMatches.innerHTML = rotation.matches.length
+      ? rotation.matches.map(match => buildChronoMatchSnapshot(rotation, match)).join('')
+      : '<p class="chrono-empty">Aucun match planifié pour cette rotation.</p>';
+  }
+  const byes = Array.isArray(rotation.byes) ? rotation.byes : [];
+  if (elements.chronoRest) {
+    if (byes.length) {
+      elements.chronoRest.textContent = `Repos : ${byes.join(', ')}`;
+      elements.chronoRest.classList.remove('hidden');
+    } else {
+      elements.chronoRest.classList.add('hidden');
+      elements.chronoRest.textContent = '';
+    }
+  }
+  setChronoNextAvailability(Boolean(!isLast && isComplete));
+}
+
+function buildChronoMatchSnapshot(rotation, match) {
+  const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+  match.id = matchId;
+  const homeScore = getScoreValue(matchId, 'home');
+  const awayScore = getScoreValue(matchId, 'away');
+  const hasScore = Number.isFinite(homeScore) && Number.isFinite(awayScore);
+  const score = hasScore ? `${homeScore} - ${awayScore}` : '--';
+  const details = [];
+  if (match.field) details.push(`Terrain ${match.field}`);
+  if (match.order > 1) details.push(`Vague ${match.order}`);
+  const label = details.length ? details.join(' · ') : `Rotation ${rotation.number}`;
+  return `
+    <article class="chrono-match-card">
+      <span class="label">${label}</span>
+      <div class="teams">
+        <strong>${match.home}</strong>
+        <span class="chrono-score">${score}</span>
+        <strong>${match.away}</strong>
+      </div>
+    </article>
+  `;
+}
+
+function setChronoPanelEnabled(enabled) {
+  [elements.chronoStartBtn, elements.chronoPauseBtn, elements.chronoResetBtn].forEach(btn => {
+    if (!btn) return;
+    btn.disabled = !enabled;
+  });
+  if (screens.chrono) {
+    screens.chrono.classList.toggle('chrono-disabled', !enabled);
+  }
+}
+
+function setChronoNextAvailability(available) {
+  if (!elements.chronoNextBtn) return;
+  elements.chronoNextBtn.disabled = !available;
+}
+
+function validateMatch(matchId) {
+  if (!isMatchCompleteById(matchId)) {
+    alert('Complétez le score avant de valider ce match.');
+    return;
+  }
+  setMatchValidated(matchId, true);
+  persistState();
+  updateMatchCompletionState(matchId);
+  renderChronoScreen();
+}
+
+function unlockValidatedMatch(matchId) {
+  const confirmEdit = window.confirm('Modifier ce score validé ?');
+  if (!confirmEdit) return;
+  setMatchValidated(matchId, false);
+  persistState();
+  updateMatchCompletionState(matchId);
+  renderChronoScreen();
 }
 
 function updateLiveControls() {
@@ -1134,6 +1459,7 @@ function updateLiveControls() {
       : `Rotation ${rotationNumber} / ${total} · ${missing} score(s) à saisir`;
     elements.liveStatus.textContent = status;
   }
+  setChronoNextAvailability(Boolean(state.schedule && !isLast && isComplete));
 }
 
 function advanceLiveRotation(options = {}) {
@@ -1249,6 +1575,7 @@ function handleTimerVisibility() {
     timerController.prepare();
   } else {
     timerController.hide();
+    renderChronoScreen();
   }
 }
 
@@ -1326,9 +1653,26 @@ function updateTimerFabVisibility() {
   elements.timerFab.classList.toggle('hidden', !shouldShow);
 }
 
-function handleScoreAdjust(event) {
-  const button = event.target.closest('.score-adjust');
-  if (!button) return;
+function handleLiveClick(event) {
+  const validateButton = event.target.closest('[data-validate-match]');
+  if (validateButton) {
+    const matchId = validateButton.dataset.validateMatch;
+    if (matchId) validateMatch(matchId);
+    return;
+  }
+  const editButton = event.target.closest('[data-edit-match]');
+  if (editButton) {
+    const matchId = editButton.dataset.editMatch;
+    if (matchId) unlockValidatedMatch(matchId);
+    return;
+  }
+  const adjustButton = event.target.closest('.score-adjust');
+  if (adjustButton) {
+    adjustScore(adjustButton);
+  }
+}
+
+function adjustScore(button) {
   const matchId = button.dataset.matchId;
   const side = button.dataset.scoreSide;
   const delta = Number(button.dataset.scoreStep);
@@ -1340,12 +1684,16 @@ function handleScoreAdjust(event) {
 
 function applyScoreChange(matchId, side, value) {
   setScoreValue(matchId, side, value);
+  if (!isMatchCompleteById(matchId) && isMatchValidated(matchId)) {
+    setMatchValidated(matchId, false);
+  }
   syncScoreInputs(matchId, side, value);
   persistState();
   if (state.schedule) {
     renderRankingView(state.schedule);
     renderLiveRankingPanel();
     updateLiveControls();
+    renderChronoScreen();
   }
 }
 
@@ -1360,13 +1708,42 @@ function syncScoreInputs(matchId, side, value) {
 function updateMatchCompletionState(matchId) {
   if (!matchId) return;
   const complete = isMatchCompleteById(matchId);
+  const validated = isMatchValidated(matchId);
   document.querySelectorAll(`.live-match-card[data-match-id="${matchId}"]`).forEach(card => {
-    card.classList.toggle('incomplete', !complete);
-    const statusNode = card.querySelector('header span:last-child');
-    if (statusNode) {
-      statusNode.textContent = complete ? 'Validé' : 'Score à saisir';
+    card.classList.toggle('validated', validated);
+    card.classList.toggle('active', !validated);
+    card.classList.toggle('incomplete', !validated && !complete);
+    const badge = card.querySelector('.live-badge');
+    if (badge) {
+      badge.textContent = validated ? 'VALIDÉ' : 'EN COURS';
+      badge.classList.toggle('success', validated);
+      badge.classList.toggle('info', !validated);
+    }
+    const validateBtn = card.querySelector('.live-validate');
+    if (validateBtn) {
+      validateBtn.disabled = !complete || validated;
+      validateBtn.classList.toggle('hidden', validated);
+    }
+    const editBtn = card.querySelector('.live-edit');
+    if (editBtn) {
+      editBtn.disabled = !validated;
+      editBtn.classList.toggle('hidden', !validated);
     }
   });
+  toggleMatchInputs(matchId, validated);
+}
+
+function toggleMatchInputs(matchId, disabled) {
+  document
+    .querySelectorAll(`.live-match-card[data-match-id="${matchId}"] .score-adjust`)
+    .forEach(button => {
+      button.disabled = disabled;
+    });
+  document
+    .querySelectorAll(`.live-match-card[data-match-id="${matchId}"] input[data-score-input]`)
+    .forEach(input => {
+      input.disabled = disabled;
+    });
 }
 
 function countMissingScores(rotationNumber) {
@@ -1409,23 +1786,32 @@ function updateTimerDisplay(statusOverride) {
   if (elements.timerRotationLabel) {
     elements.timerRotationLabel.textContent = `Rotation ${timerState.currentRotation}`;
   }
+  const formatted = formatSeconds(timerState.remainingSeconds);
   if (elements.timerDisplay) {
-    elements.timerDisplay.textContent = formatSeconds(timerState.remainingSeconds);
+    elements.timerDisplay.textContent = formatted;
   }
   if (elements.liveTimerDisplay) {
-    elements.liveTimerDisplay.textContent = formatSeconds(timerState.remainingSeconds);
+    elements.liveTimerDisplay.textContent = formatted;
   }
+  if (elements.chronoDisplay) {
+    elements.chronoDisplay.textContent = formatted;
+  }
+  const running = Boolean(timerState.intervalId);
+  const ended = timerState.remainingSeconds === 0;
+  const label = statusOverride || (ended ? 'Terminé' : running ? 'En cours' : 'En pause');
   if (elements.liveTimerState) {
-    const label =
-      statusOverride ||
-      (timerState.remainingSeconds === 0 ? 'Terminé' : timerState.intervalId ? 'En cours' : 'En pause');
     elements.liveTimerState.textContent = label;
   }
+  if (elements.chronoStateLabel) {
+    elements.chronoStateLabel.textContent = label;
+  }
   if (elements.liveTimerPanel) {
-    const running = Boolean(timerState.intervalId);
-    const ended = timerState.remainingSeconds === 0;
     elements.liveTimerPanel.classList.toggle('running', running);
     elements.liveTimerPanel.classList.toggle('ended', ended);
+  }
+  if (screens.chrono) {
+    screens.chrono.classList.toggle('running', running);
+    screens.chrono.classList.toggle('ended', ended);
   }
 }
 
@@ -1602,6 +1988,19 @@ function setScoreValue(matchId, side, value) {
   }
 }
 
+function isMatchValidated(matchId) {
+  return Boolean(state.validatedMatches && state.validatedMatches[matchId]);
+}
+
+function setMatchValidated(matchId, flag) {
+  if (!state.validatedMatches) state.validatedMatches = {};
+  if (flag) {
+    state.validatedMatches[matchId] = true;
+  } else {
+    delete state.validatedMatches[matchId];
+  }
+}
+
 function formatScoreValue(value) {
   return value ?? '';
 }
@@ -1647,6 +2046,7 @@ function createDefaultState() {
     generatedAt: null,
     scores: {},
     liveRotationIndex: 0,
+    validatedMatches: {},
   };
 }
 
@@ -1691,6 +2091,13 @@ function sanitizeState(raw) {
     });
   }
   merged.scores = sanitizedScores;
+  const validatedMatches = {};
+  if (isPlainObject(source.validatedMatches)) {
+    Object.entries(source.validatedMatches).forEach(([key, value]) => {
+      if (value) validatedMatches[key] = true;
+    });
+  }
+  merged.validatedMatches = validatedMatches;
   merged.liveRotationIndex = Number.isInteger(source.liveRotationIndex) ? source.liveRotationIndex : 0;
   if (merged.schedule && Array.isArray(merged.schedule.rotations) && merged.schedule.rotations.length) {
     merged.liveRotationIndex = clampNumber(
@@ -1741,17 +2148,29 @@ function resetApplication() {
 function setLiveModeAvailability(enabled) {
   if (!elements.startLiveBtn) return;
   elements.startLiveBtn.disabled = !enabled;
+  const rotationNumber =
+    state.schedule && state.schedule.rotations[state.liveRotationIndex]
+      ? state.schedule.rotations[state.liveRotationIndex].number
+      : 1;
   if (enabled) {
-    const rotationNumber =
-      state.schedule && state.schedule.rotations[state.liveRotationIndex]
-        ? state.schedule.rotations[state.liveRotationIndex].number
-        : 1;
     elements.startLiveBtn.textContent =
       state.liveRotationIndex > 0 ? `Reprendre le live (Rotation ${rotationNumber})` : 'Démarrer le live';
   } else {
     elements.startLiveBtn.textContent = 'Démarrer le live';
   }
+  if (elements.resultsPrimaryHint) {
+    if (!enabled) {
+      elements.resultsPrimaryHint.textContent = 'Générez un planning pour activer le mode live.';
+    } else if (state.liveRotationIndex > 0) {
+      elements.resultsPrimaryHint.textContent = `Reprenez directement à la rotation ${rotationNumber} ou ajustez les scores.`;
+    } else {
+      elements.resultsPrimaryHint.textContent = 'Passez en mode live pour piloter les rotations et les scores.';
+    }
+  }
   if (elements.returnLiveBtn) {
     elements.returnLiveBtn.disabled = !enabled;
+  }
+  if (elements.liveChronoBtn) {
+    elements.liveChronoBtn.disabled = !enabled;
   }
 }

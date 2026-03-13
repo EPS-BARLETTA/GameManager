@@ -158,31 +158,46 @@
             <p class="eyebrow">Étape 4</p>
             <h2>Options d'organisation</h2>
           </header>
-          <div class="form-grid">
-            <label class="field">
-              <span>Nombre de terrains / tables</span>
-              <input type="number" id="fieldCount" min="1" max="16" value="2" />
-            </label>
-            <label class="field">
-              <span>Durée moyenne d'un match (minutes)</span>
-              <input type="number" id="matchDuration" min="1" max="180" value="12" />
-            </label>
-            <label class="field">
-              <span>Heure de début</span>
-              <input type="time" id="startTime" value="09:00" />
-            </label>
-            <label class="field switch">
-              <span>Activer le chronomètre</span>
-              <input type="checkbox" id="timerToggle" />
-            </label>
-            <label class="field switch">
-              <span>Son</span>
-              <input type="checkbox" id="soundToggle" checked />
-            </label>
-            <label class="field switch">
-              <span>Vibration</span>
-              <input type="checkbox" id="vibrationToggle" checked />
-            </label>
+          <div class="options-layout">
+            <div class="options-group">
+              <div class="form-grid compact">
+                <label class="field">
+                  <span>Nombre de terrains / tables</span>
+                  <input type="number" id="fieldCount" min="1" max="16" value="2" />
+                </label>
+                <label class="field">
+                  <span>Durée moyenne d'un match (minutes)</span>
+                  <input type="number" id="matchDuration" min="1" max="180" value="12" />
+                </label>
+                <label class="field">
+                  <span>Heure de début</span>
+                  <input type="time" id="startTime" value="09:00" />
+                </label>
+              </div>
+              <div class="options-inline">
+                <label class="field switch emphasis">
+                  <span>Activer le chronomètre</span>
+                  <input type="checkbox" id="timerToggle" />
+                </label>
+                <p class="inline-hint">Le chrono reste disponible en live et dans le widget flottant.</p>
+              </div>
+            </div>
+            <details class="options-advanced" id="optionsAdvanced">
+              <summary>
+                <span>Options avancées</span>
+                <small>Son, vibration et préférences live</small>
+              </summary>
+              <div class="form-grid compact">
+                <label class="field switch">
+                  <span>Son</span>
+                  <input type="checkbox" id="soundToggle" checked />
+                </label>
+                <label class="field switch">
+                  <span>Vibration</span>
+                  <input type="checkbox" id="vibrationToggle" checked />
+                </label>
+              </div>
+            </details>
           </div>
           <div class="nav-actions">
             <button class="btn ghost" data-nav="teams">Retour</button>
@@ -198,17 +213,24 @@
           </header>
           <div class="print-header" id="printHeader" aria-hidden="true"></div>
           <section class="summary-grid" id="summaryGrid"></section>
-          <div class="results-actions">
-            <div class="primary-actions">
-              <button class="btn secondary" data-nav="options">Modifier</button>
-              <button class="btn secondary" id="regenerateBtn" disabled>Régénérer</button>
-              <button class="btn secondary" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
-              <button class="btn secondary" id="returnLiveBtn" disabled>Revenir au live</button>
-              <button class="btn primary" id="printBtn">Imprimer</button>
+          <div class="results-action-stack">
+            <div class="results-primary-cta">
+              <button class="btn primary hero" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
+              <p class="action-hint" id="resultsPrimaryHint">Passez en mode live pour piloter les rotations et les scores.</p>
             </div>
-            <div class="secondary-actions">
-              <button class="btn ghost" data-nav="landing">Retour accueil</button>
-              <button class="btn ghost" id="resetAppBtn">Réinitialiser</button>
+            <div class="results-secondary-cta">
+              <button class="btn secondary" data-nav="options">Modifier</button>
+              <button class="btn secondary" id="printBtn">Imprimer</button>
+            </div>
+            <div class="results-tertiary-cta">
+              <button class="btn ghost small" id="resultsMoreToggle" aria-expanded="false" aria-controls="resultsMorePanel">Actions avancées</button>
+              <div class="results-more-panel hidden" id="resultsMorePanel">
+                <p class="muted-label">Gestion rapide</p>
+                <button class="btn ghost" id="regenerateBtn" disabled>Régénérer</button>
+                <button class="btn ghost" id="returnLiveBtn" disabled>Revenir au live</button>
+                <button class="btn ghost" data-nav="landing">Retour accueil</button>
+                <button class="btn ghost" id="resetAppBtn">Réinitialiser</button>
+              </div>
             </div>
           </div>
           <div class="view-toggle" role="tablist">
@@ -230,8 +252,12 @@
                 <p id="liveStatus" class="live-status"></p>
               </div>
               <div class="live-header-actions">
-                <button class="btn ghost" id="liveModeToggle">Mode écran</button>
-                <button class="btn ghost" id="liveBackBtn">Retour au planning</button>
+                <button class="btn ghost small" id="liveActionsToggle" aria-expanded="false" aria-controls="liveActionsPanel">Options live</button>
+                <div class="live-actions-panel hidden" id="liveActionsPanel">
+                  <button class="btn ghost small" id="liveModeToggle">Mode écran</button>
+                  <button class="btn ghost small" id="liveChronoBtn">Mode chrono</button>
+                  <button class="btn ghost small" id="liveBackBtn">Retour au planning</button>
+                </div>
               </div>
             </header>
             <div class="live-main">
@@ -252,7 +278,16 @@
                   <button class="btn secondary" id="liveRankingBtn">Voir classement</button>
                 </div>
               </section>
-              <section class="live-matches" id="liveRotationContent" aria-live="polite"></section>
+              <section class="live-matches">
+                <div id="liveRotationContent" aria-live="polite"></div>
+                <section class="live-next hidden" id="liveNextRotation" aria-live="polite">
+                  <header>
+                    <p class="eyebrow">Prochaine rotation</p>
+                    <span id="liveNextLabel" class="live-next-label"></span>
+                  </header>
+                  <div class="live-next-list" id="liveNextList"></div>
+                </section>
+              </section>
               <aside class="live-ranking" id="liveRankingPanel">
                 <header>
                   <div>
@@ -268,6 +303,36 @@
             <div class="live-controls" id="liveControls">
               <div class="control-group primary">
                 <button class="btn secondary xl" id="liveFinishBtn">Terminer le tournoi</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen chrono-screen" data-screen="chrono">
+          <div class="chrono-shell" id="chronoShell">
+            <header class="chrono-header">
+              <div class="brand chrono-brand">
+                <span class="brand-mark"></span>
+                <div>
+                  <p>PouleManager</p>
+                  <small>Chrono plein écran</small>
+                </div>
+              </div>
+              <button class="btn ghost" id="chronoBackBtn">Retour live</button>
+            </header>
+            <div class="chrono-body">
+              <p class="eyebrow">Chronomètre</p>
+              <h2 id="chronoRotationLabel">Rotation -- / --</h2>
+              <div class="chrono-display" id="chronoDisplay">--:--</div>
+              <p class="chrono-state" id="chronoStateLabel">Inactif</p>
+              <p class="chrono-meta" id="chronoMatchMeta">Activez le chronomètre dans les options pour commencer.</p>
+              <div class="chrono-matches" id="chronoMatches"></div>
+              <p class="chrono-rest hidden" id="chronoRest"></p>
+              <div class="chrono-controls">
+                <button class="btn secondary xl" id="chronoStartBtn">Start</button>
+                <button class="btn secondary xl" id="chronoPauseBtn">Pause</button>
+                <button class="btn secondary xl" id="chronoResetBtn">Reset</button>
+                <button class="btn primary xl" id="chronoNextBtn">Rotation suivante</button>
               </div>
             </div>
           </div>
