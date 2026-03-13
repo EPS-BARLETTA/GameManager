@@ -19,7 +19,10 @@
             <small>Organisateur mobile</small>
           </div>
         </div>
-        <button class="btn ghost" id="printTopBtn" aria-label="Imprimer le planning">Imprimer</button>
+        <div class="topbar-actions">
+          <button class="help-btn" id="helpBtn" aria-label="Aide rapide">?</button>
+          <button class="btn ghost" id="printTopBtn" aria-label="Imprimer le planning">Imprimer</button>
+        </div>
       </header>
 
       <div class="stepper hidden" id="stepper" aria-label="Progression de configuration">
@@ -193,6 +196,7 @@
             <h2>Planning généré</h2>
             <p id="resultSubtitle">Aucun planning pour le moment.</p>
           </header>
+          <div class="print-header" id="printHeader" aria-hidden="true"></div>
           <section class="summary-grid" id="summaryGrid"></section>
           <div class="results-actions">
             <div class="primary-actions">
@@ -225,19 +229,29 @@
                 <h2 id="liveRotationTitle">Rotation</h2>
                 <p id="liveStatus" class="live-status"></p>
               </div>
-              <div class="live-header-timer" aria-live="polite">
-                <span class="label">Chrono</span>
-                <div class="live-timer">
-                  <span id="liveTimerDisplay">--:--</span>
-                  <small id="liveTimerState">En pause</small>
-                </div>
-              </div>
               <div class="live-header-actions">
                 <button class="btn ghost" id="liveModeToggle">Mode écran</button>
                 <button class="btn ghost" id="liveBackBtn">Retour au planning</button>
               </div>
             </header>
             <div class="live-main">
+              <section class="live-timer-panel" id="liveTimerPanel">
+                <div class="timer-face">
+                  <span class="label">Chrono rotation</span>
+                  <div class="live-timer-display" id="liveTimerDisplay">--:--</div>
+                  <p id="liveTimerState" class="timer-state">Inactif</p>
+                </div>
+                <p class="timer-hint" id="liveTimerHint">Activez le chronomètre dans les options pour l'utiliser en live.</p>
+                <div class="timer-actions">
+                  <button class="btn secondary" id="liveStartBtn">Start</button>
+                  <button class="btn secondary" id="livePauseBtn">Pause</button>
+                  <button class="btn secondary" id="liveTimerResetBtn">Reset</button>
+                </div>
+                <div class="timer-actions stacked">
+                  <button class="btn primary" id="liveNextBtn" disabled>Rotation suivante</button>
+                  <button class="btn secondary" id="liveRankingBtn">Voir classement</button>
+                </div>
+              </section>
               <section class="live-matches" id="liveRotationContent" aria-live="polite"></section>
               <aside class="live-ranking" id="liveRankingPanel">
                 <header>
@@ -245,7 +259,7 @@
                     <p class="eyebrow">Classement live</p>
                     <h3>Pos · Équipe · Pts</h3>
                   </div>
-                  <button class="btn ghost small" id="liveRankingBtn">Vue complète</button>
+                  <button class="btn ghost small" id="liveRankingPanelBtn">Vue complète</button>
                 </header>
                 <div class="live-ranking-table" id="liveRankingTable"></div>
               </aside>
@@ -253,13 +267,7 @@
             <div class="live-rest hidden" id="liveRestNotice"></div>
             <div class="live-controls" id="liveControls">
               <div class="control-group primary">
-                <button class="btn primary xl" id="liveNextBtn" disabled>Rotation suivante</button>
                 <button class="btn secondary xl" id="liveFinishBtn">Terminer le tournoi</button>
-              </div>
-              <div class="control-group timer">
-                <button class="btn secondary" id="livePauseBtn">Pause chrono</button>
-                <button class="btn secondary" id="liveResumeBtn">Reprendre chrono</button>
-                <button class="btn secondary" id="liveTimerResetBtn">Reset chrono</button>
               </div>
             </div>
           </div>
@@ -271,6 +279,7 @@
       <header>
         <p>Chrono rotation</p>
         <span id="timerRotationLabel">Rotation 1</span>
+        <button class="timer-close" id="timerCloseBtn" aria-label="Masquer le chrono">×</button>
       </header>
       <div class="timer-display" id="timerDisplay">12:00</div>
       <div class="timer-controls">
@@ -284,6 +293,7 @@
         <button id="timerBackToLive">Retour au live</button>
       </div>
     </aside>
+    <button class="timer-fab hidden" id="timerFab" aria-label="Ouvrir le chrono">⏱</button>
 
     <div class="modal-overlay hidden" id="finalRankingModal" role="dialog" aria-modal="true" aria-labelledby="finalRankingTitle">
       <div class="modal-card">
@@ -302,6 +312,68 @@
             </div>
           </div>
         </div>
+
+    <div class="modal-overlay hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="modal-card help-card">
+        <header>
+          <div>
+            <p class="eyebrow">Aide rapide</p>
+            <h3 id="helpTitle">Questions fréquentes</h3>
+          </div>
+          <button class="btn ghost small" id="helpCloseBtn" aria-label="Fermer l'aide">Fermer</button>
+        </header>
+        <div class="faq-list" id="helpFaq">
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq1" aria-expanded="false">Comment nommer les équipes ?</button>
+            <div class="faq-answer" id="faq1">
+              <p>L’étape « Noms des équipes » permet de personnaliser les noms. Si un champ est vide, un nom par défaut est appliqué.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq2" aria-expanded="false">Existe-t-il un mode automatique pour remplir les équipes ?</button>
+            <div class="faq-answer" id="faq2">
+              <p>Oui. Utilise « Remplissage automatique » ou colle ta liste (un nom par ligne) puis clique sur « Appliquer ».</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq3" aria-expanded="false">Comment savoir combien de temps va durer mon tournoi ?</button>
+            <div class="faq-answer" id="faq3">
+              <p>Renseigne la durée moyenne d’un match, le nombre de terrains et l’heure de début : l’application calcule la durée estimée.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq4" aria-expanded="false">À quoi sert le mode live ?</button>
+            <div class="faq-answer" id="faq4">
+              <p>Le mode live sert à piloter le tournoi en direct : rotation active, saisie des scores, classement, chrono et passage à la rotation suivante.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq5" aria-expanded="false">Comment fonctionne le chronomètre ?</button>
+            <div class="faq-answer" id="faq5">
+              <p>Le chronomètre gère le temps des rotations. Tu peux le lancer, mettre en pause, le réinitialiser et le réduire pour naviguer.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq6" aria-expanded="false">Pourquoi je ne peux pas passer à la rotation suivante ?</button>
+            <div class="faq-answer" id="faq6">
+              <p>La rotation suivante reste verrouillée tant que tous les scores de la rotation en cours ne sont pas remplis et validés.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq7" aria-expanded="false">Comment imprimer le planning ou le classement ?</button>
+            <div class="faq-answer" id="faq7">
+              <p>Depuis la vue souhaitée, clique sur « Imprimer ». Seuls les contenus utiles sont mis en page pour le papier/PDF.</p>
+            </div>
+          </article>
+          <article class="faq-item">
+            <button class="faq-question" data-faq="faq8" aria-expanded="false">Quelle différence entre poule unique, playoffs et groupes multiples ?</button>
+            <div class="faq-answer" id="faq8">
+              <p>Poule unique : tout le monde se rencontre. Playoffs : élimination directe. Groupes multiples : plusieurs poules, parfois suivies d’une phase finale.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
 
     <script src="script.js"></script>
   </body>

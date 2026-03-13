@@ -46,12 +46,15 @@ const elements = {
   tabButtons: document.querySelectorAll('.tab'),
   summaryGrid: document.getElementById('summaryGrid'),
   resultSubtitle: document.getElementById('resultSubtitle'),
+  printHeader: document.getElementById('printHeader'),
   timerWidget: document.getElementById('timerWidget'),
   timerDisplay: document.getElementById('timerDisplay'),
   timerRotationLabel: document.getElementById('timerRotationLabel'),
   timerControls: document.querySelectorAll('[data-timer]'),
   timerRanking: document.getElementById('timerRanking'),
   timerBackToLive: document.getElementById('timerBackToLive'),
+  timerCloseBtn: document.getElementById('timerCloseBtn'),
+  timerFab: document.getElementById('timerFab'),
   liveRotationTitle: document.getElementById('liveRotationTitle'),
   liveStatus: document.getElementById('liveStatus'),
   liveRotationContent: document.getElementById('liveRotationContent'),
@@ -59,22 +62,29 @@ const elements = {
   liveRankingPanel: document.getElementById('liveRankingPanel'),
   liveRankingTable: document.getElementById('liveRankingTable'),
   liveRestNotice: document.getElementById('liveRestNotice'),
+  liveTimerPanel: document.getElementById('liveTimerPanel'),
+  liveTimerHint: document.getElementById('liveTimerHint'),
   liveTimerDisplay: document.getElementById('liveTimerDisplay'),
   liveTimerState: document.getElementById('liveTimerState'),
   liveModeToggle: document.getElementById('liveModeToggle'),
+  liveStartBtn: document.getElementById('liveStartBtn'),
   livePauseBtn: document.getElementById('livePauseBtn'),
-  liveResumeBtn: document.getElementById('liveResumeBtn'),
   liveTimerResetBtn: document.getElementById('liveTimerResetBtn'),
   liveFinishBtn: document.getElementById('liveFinishBtn'),
   liveBackBtn: document.getElementById('liveBackBtn'),
   liveNextBtn: document.getElementById('liveNextBtn'),
   liveRankingBtn: document.getElementById('liveRankingBtn'),
+  liveRankingPanelBtn: document.getElementById('liveRankingPanelBtn'),
   finalRankingModal: document.getElementById('finalRankingModal'),
   finalRankingTable: document.getElementById('finalRankingTable'),
   finalRankingCloseBtn: document.getElementById('finalRankingCloseBtn'),
   finalRankingCsvBtn: document.getElementById('finalRankingCsvBtn'),
   finalRankingOkBtn: document.getElementById('finalRankingOkBtn'),
   finalRankingLiveBtn: document.getElementById('finalRankingLiveBtn'),
+  helpBtn: document.getElementById('helpBtn'),
+  helpModal: document.getElementById('helpModal'),
+  helpCloseBtn: document.getElementById('helpCloseBtn'),
+  helpFaq: document.getElementById('helpFaq'),
 };
 
 let state = sanitizeState(loadState() ?? createDefaultState());
@@ -86,6 +96,10 @@ const timerState = {
   totalRotations: 0,
 };
 let finalRankingSnapshot = null;
+const timerUiState = {
+  expanded: false,
+  available: false,
+};
 
 const timerController = {
   prepare() {
@@ -95,12 +109,16 @@ const timerController = {
     timerState.currentRotation = state.schedule ? (state.liveRotationIndex + 1 || 1) : 1;
     const highlightTarget = state.schedule ? state.schedule.rotations[state.liveRotationIndex]?.number || 1 : 1;
     highlightRotation(highlightTarget);
-    elements.timerWidget.classList.remove('hidden', 'timer-ended', 'running');
+    elements.timerWidget.classList.remove('timer-ended', 'running');
+    timerUiState.available = true;
+    closeTimerPanel({ silent: true });
+    updateTimerFabVisibility();
+    setLiveTimerPanelEnabled(true);
     updateTimerDisplay();
     setLiveTimerControlsAvailability(true);
   },
   start() {
-    if (timerState.intervalId || elements.timerWidget.classList.contains('hidden')) return;
+    if (timerState.intervalId) return;
     timerState.intervalId = setInterval(() => {
       if (timerState.remainingSeconds <= 0) {
         this.onEnd();
@@ -150,7 +168,10 @@ const timerController = {
   },
   hide() {
     this.pause();
-    elements.timerWidget.classList.add('hidden');
+    timerUiState.available = false;
+    closeTimerPanel({ silent: true });
+    updateTimerFabVisibility();
+    setLiveTimerPanelEnabled(false);
     elements.timerWidget.classList.remove('timer-ended', 'running');
     setLiveTimerControlsAvailability(false);
     if (elements.liveTimerDisplay) elements.liveTimerDisplay.textContent = '--:--';
@@ -183,6 +204,7 @@ function init() {
   setLiveModeAvailability(Boolean(state.schedule));
   elements.regenerateBtn.disabled = !state.schedule;
   updateResumeButton();
+  setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
 }
 
 function bindNavigation() {
@@ -288,6 +310,12 @@ function bindNavigation() {
       setActiveView('rankings');
     });
   }
+  if (elements.timerFab) {
+    elements.timerFab.addEventListener('click', () => openTimerPanel());
+  }
+  if (elements.timerCloseBtn) {
+    elements.timerCloseBtn.addEventListener('click', () => closeTimerPanel());
+  }
   if (elements.timerBackToLive) {
     elements.timerBackToLive.addEventListener('click', () => {
       if (!state.schedule) return;
@@ -313,14 +341,20 @@ function bindNavigation() {
       setActiveView('rankings');
     });
   }
+  if (elements.liveRankingPanelBtn) {
+    elements.liveRankingPanelBtn.addEventListener('click', () => {
+      goTo('results');
+      setActiveView('rankings');
+    });
+  }
   if (elements.liveNextBtn) {
     elements.liveNextBtn.addEventListener('click', () => advanceLiveRotation());
   }
   if (elements.livePauseBtn) {
     elements.livePauseBtn.addEventListener('click', () => timerController.pause());
   }
-  if (elements.liveResumeBtn) {
-    elements.liveResumeBtn.addEventListener('click', () => timerController.start());
+  if (elements.liveStartBtn) {
+    elements.liveStartBtn.addEventListener('click', () => timerController.start());
   }
   if (elements.liveTimerResetBtn) {
     elements.liveTimerResetBtn.addEventListener('click', () => timerController.reset());
@@ -363,9 +397,35 @@ function bindNavigation() {
       }
     });
   }
+  if (elements.helpBtn) {
+    elements.helpBtn.addEventListener('click', openHelpModal);
+  }
+  if (elements.helpCloseBtn) {
+    elements.helpCloseBtn.addEventListener('click', closeHelpModal);
+  }
+  if (elements.helpModal) {
+    elements.helpModal.addEventListener('click', event => {
+      if (event.target === elements.helpModal) {
+        closeHelpModal();
+      }
+    });
+  }
+  if (elements.helpFaq) {
+    elements.helpFaq.addEventListener('click', handleFaqClick);
+  }
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden')) {
+    if (event.key !== 'Escape') return;
+    let handled = false;
+    if (elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden')) {
       hideFinalRankingModal();
+      handled = true;
+    }
+    if (elements.helpModal && !elements.helpModal.classList.contains('hidden')) {
+      closeHelpModal();
+      handled = true;
+    }
+    if (handled) {
+      event.preventDefault();
     }
   });
 
@@ -540,6 +600,7 @@ function renderResults(schedule, options = {}) {
   })}`;
   state.liveRotationIndex = 0;
   renderSummary(schedule.meta);
+  updatePrintHeader(schedule.meta);
   renderRotationView(schedule.rotations);
   renderTeamView(schedule.teams);
   renderRankingView(schedule);
@@ -568,6 +629,29 @@ function renderSummary(meta) {
   elements.summaryGrid.innerHTML = info
     .map(item => `<article class="summary-card"><span>${item.label}</span><strong>${item.value}</strong></article>`)
     .join('');
+}
+
+function updatePrintHeader(meta) {
+  if (!elements.printHeader) return;
+  if (!meta) {
+    elements.printHeader.innerHTML = '';
+    return;
+  }
+  const parts = [];
+  if (meta.teamCount) parts.push(`${meta.teamCount} équipe${meta.teamCount > 1 ? 's' : ''}`);
+  if (meta.rotationCount) parts.push(`${meta.rotationCount} rotation${meta.rotationCount > 1 ? 's' : ''}`);
+  if (meta.fieldCount) parts.push(`${meta.fieldCount} terrain${meta.fieldCount > 1 ? 's' : ''}`);
+  const timestamp = state.generatedAt
+    ? `Généré le ${new Date(state.generatedAt).toLocaleString('fr-FR', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })}`
+    : '';
+  elements.printHeader.innerHTML = `
+    <h1>PouleManager · Poule unique</h1>
+    ${parts.length ? `<p>${parts.join(' • ')}</p>` : ''}
+    ${timestamp ? `<p>${timestamp}</p>` : ''}
+  `;
 }
 
 function buildMatchListHTML(rotation) {
@@ -782,13 +866,13 @@ function showFinalRankingModal(uptoRotation) {
   finalRankingSnapshot = computeRankingSnapshot(state.schedule, upto);
   renderFinalRankingTable(finalRankingSnapshot, upto);
   elements.finalRankingModal.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  syncBodyModalState();
 }
 
 function hideFinalRankingModal() {
   if (!elements.finalRankingModal) return;
   elements.finalRankingModal.classList.add('hidden');
-  document.body.classList.remove('modal-open');
+  syncBodyModalState();
 }
 
 function renderFinalRankingTable(snapshot, upto) {
@@ -880,6 +964,42 @@ function buildFinalRankingCsv(snapshot) {
   return [header, ...rows].join('\n');
 }
 
+function openHelpModal() {
+  if (!elements.helpModal) return;
+  elements.helpModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
+function closeHelpModal() {
+  if (!elements.helpModal) return;
+  elements.helpModal.classList.add('hidden');
+  syncBodyModalState();
+}
+
+function handleFaqClick(event) {
+  const question = event.target.closest('.faq-question');
+  if (!question || !elements.helpFaq) return;
+  const item = question.closest('.faq-item');
+  if (!item) return;
+  const isActive = item.classList.contains('active');
+  elements.helpFaq.querySelectorAll('.faq-item').forEach(node => {
+    node.classList.remove('active');
+    const btn = node.querySelector('.faq-question');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+  if (!isActive) {
+    item.classList.add('active');
+    question.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function syncBodyModalState() {
+  const finalOpen = elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden');
+  const helpOpen = elements.helpModal && !elements.helpModal.classList.contains('hidden');
+  const shouldLock = finalOpen || helpOpen;
+  document.body.classList.toggle('modal-open', shouldLock);
+}
+
 function startLiveMode() {
   if (!state.schedule) return;
   const maxIndex = Math.max(0, state.schedule.rotations.length - 1);
@@ -891,6 +1011,7 @@ function startLiveMode() {
 
 function renderLiveRotation() {
   if (!elements.liveRotationContent) return;
+  setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
   if (!state.schedule) {
     elements.liveRotationTitle.textContent = 'Rotation';
     elements.liveRotationContent.innerHTML = '<p>Générez un planning avant de lancer les rotations.</p>';
@@ -1167,6 +1288,44 @@ function handleTimerControl(action) {
   }
 }
 
+function setLiveTimerPanelEnabled(enabled) {
+  if (!elements.liveTimerPanel) return;
+  elements.liveTimerPanel.classList.toggle('disabled', !enabled);
+  if (!enabled) {
+    elements.liveTimerPanel.classList.remove('running');
+    elements.liveTimerPanel.classList.remove('ended');
+  }
+  if (elements.liveTimerHint) {
+    elements.liveTimerHint.classList.toggle('hidden', enabled);
+  }
+  [elements.liveStartBtn, elements.livePauseBtn, elements.liveTimerResetBtn].forEach(btn => {
+    if (!btn) return;
+    btn.disabled = !enabled;
+  });
+}
+
+function openTimerPanel() {
+  if (!elements.timerWidget || !timerUiState.available) return;
+  timerUiState.expanded = true;
+  elements.timerWidget.classList.remove('hidden');
+  updateTimerFabVisibility();
+}
+
+function closeTimerPanel(options = {}) {
+  if (!elements.timerWidget) return;
+  timerUiState.expanded = false;
+  elements.timerWidget.classList.add('hidden');
+  if (!options.silent) {
+    updateTimerFabVisibility();
+  }
+}
+
+function updateTimerFabVisibility() {
+  if (!elements.timerFab) return;
+  const shouldShow = timerUiState.available && !timerUiState.expanded;
+  elements.timerFab.classList.toggle('hidden', !shouldShow);
+}
+
 function handleScoreAdjust(event) {
   const button = event.target.closest('.score-adjust');
   if (!button) return;
@@ -1233,7 +1392,7 @@ function getTimerNextButton() {
 }
 
 function setLiveTimerControlsAvailability(enabled) {
-  [elements.livePauseBtn, elements.liveResumeBtn, elements.liveTimerResetBtn].forEach(btn => {
+  [elements.livePauseBtn, elements.liveStartBtn, elements.liveTimerResetBtn].forEach(btn => {
     if (!btn) return;
     btn.disabled = !enabled;
   });
@@ -1261,6 +1420,12 @@ function updateTimerDisplay(statusOverride) {
       statusOverride ||
       (timerState.remainingSeconds === 0 ? 'Terminé' : timerState.intervalId ? 'En cours' : 'En pause');
     elements.liveTimerState.textContent = label;
+  }
+  if (elements.liveTimerPanel) {
+    const running = Boolean(timerState.intervalId);
+    const ended = timerState.remainingSeconds === 0;
+    elements.liveTimerPanel.classList.toggle('running', running);
+    elements.liveTimerPanel.classList.toggle('ended', ended);
   }
 }
 
@@ -1564,6 +1729,7 @@ function resetApplication() {
   elements.teamView.innerHTML = '';
   elements.rankingView.innerHTML = '';
   elements.resultSubtitle.textContent = 'Aucun planning pour le moment.';
+  updatePrintHeader(null);
   setActiveView('rotations');
   setLiveModeAvailability(false);
   elements.regenerateBtn.disabled = true;
