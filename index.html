@@ -16,11 +16,9 @@
           <span class="brand-mark"></span>
           <div>
             <p>PouleManager</p>
-            <small>Organisateur mobile</small>
           </div>
         </div>
         <div class="topbar-actions">
-          <button class="help-btn" id="helpBtn" aria-label="Aide rapide">?</button>
           <button class="btn ghost" id="printTopBtn" aria-label="Imprimer le planning">Imprimer</button>
         </div>
       </header>
@@ -81,7 +79,7 @@
           <header class="screen-header">
             <p class="eyebrow">Étape 1</p>
             <h2>Choisir le format</h2>
-            <p>Pour cette version, seule la poule unique est disponible. Les autres formats arrivent bientôt.</p>
+            <p>Choisissez comment organiser votre tournoi : poule unique, groupes ou groupes avec phase finale.</p>
           </header>
           <div class="cards-grid">
             <article class="mode-card active" data-mode="round-robin" tabindex="0">
@@ -89,21 +87,20 @@
                 <h3>Poule unique</h3>
                 <p>Toutes les équipes se rencontrent une fois.</p>
               </div>
-              <span class="pill">Actif</span>
+              <span class="pill">Standard</span>
             </article>
-            <article class="mode-card disabled">
+            <article class="mode-card" data-mode="groups" tabindex="0">
               <div>
-                <h3>Playoffs</h3>
-                <p>Prochainement</p>
+                <h3>Groupes</h3>
+                <p>Plusieurs poules avec classement par groupe.</p>
               </div>
-              <span class="pill muted">Bientôt</span>
             </article>
-            <article class="mode-card disabled">
+            <article class="mode-card" data-mode="groups-finals" tabindex="0">
               <div>
-                <h3>Groupes multiples</h3>
-                <p>Prochainement</p>
+                <h3>Groupes + finales</h3>
+                <p>Phase de groupes puis demi-finales et finale.</p>
               </div>
-              <span class="pill muted">Bientôt</span>
+              <span class="pill">Complet</span>
             </article>
           </div>
           <div class="nav-actions">
@@ -174,6 +171,25 @@
                   <input type="time" id="startTime" value="09:00" />
                 </label>
               </div>
+              <div class="form-grid compact">
+                <label class="field">
+                  <span>Temps de rotation entre matchs (minutes)</span>
+                  <input type="number" id="rotationBuffer" min="0" max="30" value="2" />
+                </label>
+                <label class="field">
+                  <span>Pause globale (hydratation / regroupement)</span>
+                  <input type="number" id="breakDuration" min="0" max="180" value="0" />
+                  <small class="field-hint">Temps de pause ajouté au tournoi (hydratation, regroupement, explication des règles).</small>
+                </label>
+                <label class="field">
+                  <span>Durée disponible (minutes)</span>
+                  <input type="number" id="availableDuration" min="0" max="1440" placeholder="Optionnel" />
+                </label>
+                <label class="field">
+                  <span>Heure de fin souhaitée</span>
+                  <input type="time" id="endTime" />
+                </label>
+              </div>
               <div class="options-inline">
                 <label class="field switch emphasis">
                   <span>Activer le chronomètre</span>
@@ -199,6 +215,16 @@
               </div>
             </details>
           </div>
+          <div class="simulation-tools">
+            <button class="btn secondary" id="simulateBtn" type="button">Simuler le tournoi</button>
+            <button class="btn reset-btn" id="resetOptionsBtn" type="button">🔄 Réinitialiser les paramètres</button>
+            <p class="reset-feedback hidden" id="resetFeedback">Paramètres réinitialisés</p>
+            <div class="simulation-result panel-card hidden" id="simulationResult" aria-live="polite"></div>
+          </div>
+          <div class="recommendation-tools">
+            <button class="btn secondary" id="recommendBtn" type="button">Configuration recommandée</button>
+            <div class="recommendation-result panel-card hidden" id="recommendationResult" aria-live="polite"></div>
+          </div>
           <div class="nav-actions">
             <button class="btn ghost" data-nav="teams">Retour</button>
             <button class="btn primary" id="generateBtn">Générer le planning</button>
@@ -213,6 +239,8 @@
           </header>
           <div class="print-header" id="printHeader" aria-hidden="true"></div>
           <section class="summary-grid" id="summaryGrid"></section>
+          <p class="match-insight hidden" id="matchInsight"></p>
+          <p class="time-indicator hidden" id="timeIndicator"></p>
           <div class="results-action-stack">
             <div class="results-primary-cta">
               <button class="btn primary hero" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
@@ -249,6 +277,7 @@
               <div class="live-header-block">
                 <p class="eyebrow">Mode live premium</p>
                 <h2 id="liveRotationTitle">Rotation</h2>
+                <p id="liveMeta" class="live-meta"></p>
                 <p id="liveStatus" class="live-status"></p>
               </div>
               <div class="live-header-actions">
@@ -378,63 +407,87 @@
           </div>
         </div>
 
+    <button class="help-fab" id="helpBtn" aria-label="Aide rapide">❓</button>
+
     <div class="modal-overlay hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
       <div class="modal-card help-card">
         <header>
           <div>
             <p class="eyebrow">Aide rapide</p>
-            <h3 id="helpTitle">Questions fréquentes</h3>
+            <h3 id="helpTitle">Guide express</h3>
           </div>
           <button class="btn ghost small" id="helpCloseBtn" aria-label="Fermer l'aide">Fermer</button>
         </header>
-        <div class="faq-list" id="helpFaq">
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq1" aria-expanded="false">Comment nommer les équipes ?</button>
-            <div class="faq-answer" id="faq1">
-              <p>L’étape « Noms des équipes » permet de personnaliser les noms. Si un champ est vide, un nom par défaut est appliqué.</p>
+        <div class="help-grid" id="helpContent">
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">🏆</span>
+              <div>
+                <p class="help-section-eyebrow">Formats de tournoi</p>
+                <h4>Choisir la bonne formule</h4>
+              </div>
             </div>
+            <ul class="help-list">
+              <li><strong>Poule unique :</strong> toutes les équipes s’affrontent, classement unique.</li>
+              <li><strong>Groupes :</strong> plusieurs poules en parallèle avec classement par groupe.</li>
+              <li><strong>Groupes + finales :</strong> phase de groupes puis demi-finales / finale automatiques.</li>
+            </ul>
           </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq2" aria-expanded="false">Existe-t-il un mode automatique pour remplir les équipes ?</button>
-            <div class="faq-answer" id="faq2">
-              <p>Oui. Utilise « Remplissage automatique » ou colle ta liste (un nom par ligne) puis clique sur « Appliquer ».</p>
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">⏱</span>
+              <div>
+                <p class="help-section-eyebrow">Organisation</p>
+                <h4>Paramétrer son tournoi</h4>
+              </div>
             </div>
+            <ul class="help-list">
+              <li>Indiquez les terrains disponibles et la durée d’un match.</li>
+              <li>Prévoyez un temps de rotation entre matchs + une pause globale.</li>
+              <li>Fixez une heure de début et, si besoin, un créneau disponible.</li>
+            </ul>
           </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq3" aria-expanded="false">Comment savoir combien de temps va durer mon tournoi ?</button>
-            <div class="faq-answer" id="faq3">
-              <p>Renseigne la durée moyenne d’un match, le nombre de terrains et l’heure de début : l’application calcule la durée estimée.</p>
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">📊</span>
+              <div>
+                <p class="help-section-eyebrow">Simulation</p>
+                <h4>Vérifier la faisabilité</h4>
+              </div>
             </div>
+            <ul class="help-list">
+              <li>Le bouton « Simuler » estime matchs, temps total et fin prévue.</li>
+              <li>Analyse pédagogique automatique : matchs/équipe, temps de jeu, engagement.</li>
+              <li>Adaptez la durée, le nombre d’équipes ou les terrains si besoin.</li>
+            </ul>
           </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq4" aria-expanded="false">À quoi sert le mode live ?</button>
-            <div class="faq-answer" id="faq4">
-              <p>Le mode live sert à piloter le tournoi en direct : rotation active, saisie des scores, classement, chrono et passage à la rotation suivante.</p>
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">🎮</span>
+              <div>
+                <p class="help-section-eyebrow">Mode live</p>
+                <h4>Piloter sur le terrain</h4>
+              </div>
             </div>
+            <ul class="help-list">
+              <li>Saisissez les scores en direct et validez les matchs.</li>
+              <li>Suivez la rotation active, la suivante et les équipes au repos.</li>
+              <li>Contrôlez le chronomètre ou passez en mode chrono plein écran.</li>
+            </ul>
           </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq5" aria-expanded="false">Comment fonctionne le chronomètre ?</button>
-            <div class="faq-answer" id="faq5">
-              <p>Le chronomètre gère le temps des rotations. Tu peux le lancer, mettre en pause, le réinitialiser et le réduire pour naviguer.</p>
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">📺</span>
+              <div>
+                <p class="help-section-eyebrow">Projection écran</p>
+                <h4>Partager les infos</h4>
+              </div>
             </div>
-          </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq6" aria-expanded="false">Pourquoi je ne peux pas passer à la rotation suivante ?</button>
-            <div class="faq-answer" id="faq6">
-              <p>La rotation suivante reste verrouillée tant que tous les scores de la rotation en cours ne sont pas remplis et validés.</p>
-            </div>
-          </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq7" aria-expanded="false">Comment imprimer le planning ou le classement ?</button>
-            <div class="faq-answer" id="faq7">
-              <p>Depuis la vue souhaitée, clique sur « Imprimer ». Seuls les contenus utiles sont mis en page pour le papier/PDF.</p>
-            </div>
-          </article>
-          <article class="faq-item">
-            <button class="faq-question" data-faq="faq8" aria-expanded="false">Quelle différence entre poule unique, playoffs et groupes multiples ?</button>
-            <div class="faq-answer" id="faq8">
-              <p>Poule unique : tout le monde se rencontre. Playoffs : élimination directe. Groupes multiples : plusieurs poules, parfois suivies d’une phase finale.</p>
-            </div>
+            <ul class="help-list">
+              <li>Utilisez le mode live ou le mode chrono pour diffuser sur TV / vidéoprojecteur.</li>
+              <li>Le planning et le classement restent lisibles à distance.</li>
+              <li>Le bouton Imprimer génère un PDF propre à distribuer.</li>
+            </ul>
           </article>
         </div>
       </div>

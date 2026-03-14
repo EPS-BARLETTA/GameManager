@@ -7,6 +7,11 @@ const SCREEN_TO_STEP = {
   options: 'options',
   results: 'results',
 };
+const TOURNAMENT_MODES = {
+  'round-robin': { label: 'Poule unique' },
+  groups: { label: 'Groupes' },
+  'groups-finals': { label: 'Groupes + finales' },
+};
 
 const screens = {};
 document.querySelectorAll('[data-screen]').forEach(section => {
@@ -18,6 +23,7 @@ const elements = {
   stepItems: document.querySelectorAll('.step'),
   startFlow: document.getElementById('startFlow'),
   resumeFlow: document.getElementById('resumeFlow'),
+  modeCards: document.querySelectorAll('.mode-card[data-mode]'),
   navButtons: document.querySelectorAll('[data-nav]'),
   printTopBtn: document.getElementById('printTopBtn'),
   countMinus: document.getElementById('countMinus'),
@@ -31,11 +37,21 @@ const elements = {
   fieldCount: document.getElementById('fieldCount'),
   matchDuration: document.getElementById('matchDuration'),
   startTime: document.getElementById('startTime'),
+  rotationBuffer: document.getElementById('rotationBuffer'),
+  breakDuration: document.getElementById('breakDuration'),
+  availableDuration: document.getElementById('availableDuration'),
+  endTime: document.getElementById('endTime'),
+  simulateBtn: document.getElementById('simulateBtn'),
+  simulationResult: document.getElementById('simulationResult'),
+  resetOptionsBtn: document.getElementById('resetOptionsBtn'),
+  resetFeedback: document.getElementById('resetFeedback'),
   timerToggle: document.getElementById('timerToggle'),
   soundToggle: document.getElementById('soundToggle'),
   vibrationToggle: document.getElementById('vibrationToggle'),
   generateBtn: document.getElementById('generateBtn'),
   regenerateBtn: document.getElementById('regenerateBtn'),
+  recommendBtn: document.getElementById('recommendBtn'),
+  recommendationResult: document.getElementById('recommendationResult'),
   startLiveBtn: document.getElementById('startLiveBtn'),
   returnLiveBtn: document.getElementById('returnLiveBtn'),
   printBtn: document.getElementById('printBtn'),
@@ -45,6 +61,8 @@ const elements = {
   rankingView: document.getElementById('rankingView'),
   tabButtons: document.querySelectorAll('.tab'),
   summaryGrid: document.getElementById('summaryGrid'),
+  timeIndicator: document.getElementById('timeIndicator'),
+  matchInsight: document.getElementById('matchInsight'),
   resultsPrimaryHint: document.getElementById('resultsPrimaryHint'),
   resultsMoreToggle: document.getElementById('resultsMoreToggle'),
   resultsMorePanel: document.getElementById('resultsMorePanel'),
@@ -60,6 +78,7 @@ const elements = {
   timerFab: document.getElementById('timerFab'),
   liveRotationTitle: document.getElementById('liveRotationTitle'),
   liveStatus: document.getElementById('liveStatus'),
+  liveMeta: document.getElementById('liveMeta'),
   liveRotationContent: document.getElementById('liveRotationContent'),
   liveShell: document.getElementById('liveShell'),
   liveActionsToggle: document.getElementById('liveActionsToggle'),
@@ -93,7 +112,6 @@ const elements = {
   helpBtn: document.getElementById('helpBtn'),
   helpModal: document.getElementById('helpModal'),
   helpCloseBtn: document.getElementById('helpCloseBtn'),
-  helpFaq: document.getElementById('helpFaq'),
   chronoRotationLabel: document.getElementById('chronoRotationLabel'),
   chronoDisplay: document.getElementById('chronoDisplay'),
   chronoStateLabel: document.getElementById('chronoStateLabel'),
@@ -116,10 +134,14 @@ const timerState = {
   totalRotations: 0,
 };
 let finalRankingSnapshot = null;
+let standingsCache = null;
 const timerUiState = {
   expanded: false,
   available: false,
 };
+let latestRecommendation = null;
+let recommendationApplied = false;
+let resetFeedbackTimeout = null;
 
 const timerController = {
   prepare() {
@@ -225,6 +247,7 @@ function init() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  syncModeSelection();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
   }
@@ -239,6 +262,15 @@ function init() {
 function bindNavigation() {
   elements.startFlow.addEventListener('click', () => goTo('type'));
   elements.resumeFlow.addEventListener('click', handleResume);
+
+  elements.modeCards.forEach(card => {
+    card.addEventListener('click', () => selectTournamentMode(card.dataset.mode));
+    card.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      selectTournamentMode(card.dataset.mode);
+    });
+  });
 
   elements.navButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -292,6 +324,34 @@ function bindNavigation() {
 
   elements.startTime.addEventListener('input', event => {
     state.options.startTime = event.target.value;
+    persistState();
+  });
+
+  elements.rotationBuffer.addEventListener('input', event => {
+    state.options.turnaround = clampNumber(Number(event.target.value), 0, 60, state.options.turnaround);
+    event.target.value = state.options.turnaround;
+    persistState();
+  });
+
+  elements.breakDuration.addEventListener('input', event => {
+    state.options.breakMinutes = clampNumber(Number(event.target.value), 0, 600, state.options.breakMinutes);
+    event.target.value = state.options.breakMinutes;
+    persistState();
+  });
+
+  elements.availableDuration.addEventListener('input', event => {
+    const value = Number(event.target.value);
+    if (Number.isFinite(value) && value > 0) {
+      state.options.availableDuration = clampNumber(value, 0, 1440, value);
+      event.target.value = state.options.availableDuration;
+    } else {
+      state.options.availableDuration = null;
+    }
+    persistState();
+  });
+
+  elements.endTime.addEventListener('input', event => {
+    state.options.endTime = event.target.value;
     persistState();
   });
 
@@ -459,8 +519,22 @@ function bindNavigation() {
       }
     });
   }
-  if (elements.helpFaq) {
-    elements.helpFaq.addEventListener('click', handleFaqClick);
+  if (elements.simulateBtn) {
+    elements.simulateBtn.addEventListener('click', handleSimulationRequest);
+  }
+  if (elements.resetOptionsBtn) {
+    elements.resetOptionsBtn.addEventListener('click', handleOptionsReset);
+  }
+  if (elements.recommendBtn) {
+    elements.recommendBtn.addEventListener('click', handleRecommendationRequest);
+  }
+  if (elements.recommendationResult) {
+    elements.recommendationResult.addEventListener('click', event => {
+      const applyBtn = event.target.closest('[data-action="apply-recommendation"]');
+      if (applyBtn) {
+        applyRecommendedConfiguration();
+      }
+    });
   }
   if (elements.chronoBackBtn) {
     elements.chronoBackBtn.addEventListener('click', () => {
@@ -512,9 +586,11 @@ function handleResume() {
   const stored = loadState();
   if (!stored) return;
   state = sanitizeState(stored);
+  invalidateStandingsCache();
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  syncModeSelection();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
     goTo(state.currentScreen && state.currentScreen !== 'landing' ? state.currentScreen : 'results');
@@ -578,6 +654,32 @@ function renderParticipants() {
   elements.teamCountSlider.value = state.participants;
 }
 
+function getTournamentType() {
+  const allowed = Object.keys(TOURNAMENT_MODES);
+  if (!allowed.includes(state.tournamentType)) {
+    state.tournamentType = 'round-robin';
+  }
+  return state.tournamentType;
+}
+
+function selectTournamentMode(mode) {
+  const allowed = Object.keys(TOURNAMENT_MODES);
+  const next = allowed.includes(mode) ? mode : 'round-robin';
+  if (state.tournamentType === next) return;
+  state.tournamentType = next;
+  syncModeSelection();
+  persistState();
+}
+
+function syncModeSelection() {
+  const current = getTournamentType();
+  elements.modeCards.forEach(card => {
+    const isActive = card.dataset.mode === current;
+    card.classList.toggle('active', isActive);
+    card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
 function adjustParticipants(delta) {
   updateParticipants(state.participants + delta);
 }
@@ -616,6 +718,10 @@ function syncOptionInputs() {
   elements.fieldCount.value = state.options.fields;
   elements.matchDuration.value = state.options.duration;
   elements.startTime.value = state.options.startTime;
+  elements.rotationBuffer.value = state.options.turnaround;
+  elements.breakDuration.value = state.options.breakMinutes;
+  elements.availableDuration.value = state.options.availableDuration ?? '';
+  elements.endTime.value = state.options.endTime || '';
   elements.timerToggle.checked = state.options.timer;
   elements.soundToggle.checked = state.options.sound;
   elements.vibrationToggle.checked = state.options.vibration;
@@ -670,6 +776,14 @@ function renderResults(schedule, options = {}) {
     state.validatedMatches = {};
   }
   state.schedule = schedule;
+  if (state.schedule && state.schedule.meta) {
+    state.schedule.meta.formatLabel =
+      state.schedule.meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label;
+    state.schedule.meta.optionsSnapshot = {
+      duration: state.options.duration,
+    };
+  }
+  invalidateStandingsCache();
   finalRankingSnapshot = null;
   if (!preserveTimestamp || !state.generatedAt) {
     state.generatedAt = new Date().toISOString();
@@ -680,10 +794,21 @@ function renderResults(schedule, options = {}) {
     timeStyle: 'short',
   })}`;
   state.liveRotationIndex = 0;
+  schedule.meta.timeSummary = computeTimeSummary(schedule, state.options);
+  if (schedule.meta.timeSummary) {
+    schedule.meta.estimatedDuration = humanizeDuration(schedule.meta.timeSummary.totalMinutes);
+    schedule.meta.endTime = schedule.meta.timeSummary.estimatedEnd;
+  } else {
+    schedule.meta.estimatedDuration = null;
+    schedule.meta.endTime = null;
+  }
   renderSummary(schedule.meta);
+  updateMatchInsight(state.schedule);
   updatePrintHeader(schedule.meta);
   renderRotationView(schedule.rotations);
-  renderTeamView(schedule.teams);
+  const teamEntries = buildTeamEntriesFromSchedule(schedule);
+  schedule.teams = teamEntries;
+  renderTeamView(teamEntries);
   renderRankingView(schedule);
   renderLiveRankingPanel(schedule.rotations[state.liveRotationIndex]?.number || 1);
   const defaultRotation = Number.isInteger(state.liveRotationIndex) ? state.liveRotationIndex + 1 : 1;
@@ -700,17 +825,37 @@ function renderResults(schedule, options = {}) {
 }
 
 function renderSummary(meta) {
-  const info = [
-    { label: "Équipes", value: meta.teamCount },
-    { label: 'Rotations', value: meta.rotationCount },
-    { label: 'Matchs', value: meta.matchCount },
-    { label: 'Terrains', value: meta.fieldCount },
-  ];
-  if (meta.estimatedDuration) info.push({ label: 'Durée totale', value: meta.estimatedDuration });
-  if (meta.endTime) info.push({ label: 'Fin estimée', value: meta.endTime });
-  elements.summaryGrid.innerHTML = info
+  const cards = [];
+  cards.push({ label: 'Format', value: meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label });
+  cards.push({ label: "Équipes", value: meta.teamCount });
+  if (meta.groupCount) cards.push({ label: 'Groupes', value: meta.groupCount });
+  cards.push({ label: 'Tours de jeu', value: meta.rotationCount });
+  cards.push({ label: 'Matchs au total', value: meta.matchCount });
+  cards.push({ label: 'Terrains', value: meta.fieldCount });
+  const summary = meta.timeSummary;
+  if (summary) {
+    cards.push({ label: 'Volume total de jeu', value: humanizeDuration(summary.matchVolume) });
+    cards.push({ label: 'Temps de transition', value: humanizeDuration(summary.rotationGaps) });
+    cards.push({ label: 'Temps des pauses', value: humanizeDuration(summary.pauseMinutes) });
+    cards.push({ label: 'Durée réelle du tournoi', value: humanizeDuration(summary.totalMinutes) });
+    if (summary.estimatedEnd) {
+      cards.push({ label: 'Fin prévue', value: summary.estimatedEnd });
+    }
+  } else {
+    cards.push({ label: 'Volume total de jeu', value: '-' });
+    cards.push({ label: 'Durée réelle du tournoi', value: '-' });
+  }
+  const cardsHtml = cards
     .map(item => `<article class="summary-card"><span>${item.label}</span><strong>${item.value}</strong></article>`)
     .join('');
+  const analysisMetrics = buildPedagogyMetrics(meta, summary, meta.optionsSnapshot || state.options);
+  const analysisCard = `<article class="summary-card analysis-card">
+        <span>Analyse pédagogique</span>
+        ${buildAnalysisListHTML(analysisMetrics)}
+        ${buildAnalysisTagHTML(analysisMetrics)}
+      </article>`;
+  elements.summaryGrid.innerHTML = cardsHtml + analysisCard;
+  renderTimeIndicator(summary);
 }
 
 function updatePrintHeader(meta) {
@@ -719,10 +864,24 @@ function updatePrintHeader(meta) {
     elements.printHeader.innerHTML = '';
     return;
   }
+  const formatLabel = meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label;
   const parts = [];
   if (meta.teamCount) parts.push(`${meta.teamCount} équipe${meta.teamCount > 1 ? 's' : ''}`);
   if (meta.rotationCount) parts.push(`${meta.rotationCount} rotation${meta.rotationCount > 1 ? 's' : ''}`);
   if (meta.fieldCount) parts.push(`${meta.fieldCount} terrain${meta.fieldCount > 1 ? 's' : ''}`);
+  if (meta.groupCount) parts.push(`${meta.groupCount} groupe${meta.groupCount > 1 ? 's' : ''}`);
+  let timeLine = '';
+  if (meta.timeSummary && Number.isFinite(meta.timeSummary.matchVolume)) {
+    const summary = meta.timeSummary;
+    const segments = [
+      `Volume de jeu : ${humanizeDuration(summary.matchVolume)}`,
+      `Transitions : ${humanizeDuration(summary.rotationGaps)}`,
+      `Pauses : ${humanizeDuration(summary.pauseMinutes)}`,
+      `Durée réelle : ${humanizeDuration(summary.totalMinutes)}`,
+    ];
+    if (summary.estimatedEnd) segments.push(`Fin prévue ${summary.estimatedEnd}`);
+    timeLine = `<p>${segments.join(' • ')}</p>`;
+  }
   const timestamp = state.generatedAt
     ? `Généré le ${new Date(state.generatedAt).toLocaleString('fr-FR', {
         dateStyle: 'medium',
@@ -730,27 +889,558 @@ function updatePrintHeader(meta) {
       })}`
     : '';
   elements.printHeader.innerHTML = `
-    <h1>PouleManager · Poule unique</h1>
+    <h1>PouleManager · ${formatLabel}</h1>
     ${parts.length ? `<p>${parts.join(' • ')}</p>` : ''}
+    ${timeLine}
     ${timestamp ? `<p>${timestamp}</p>` : ''}
   `;
+}
+
+function renderTimeIndicator(summary) {
+  if (!elements.timeIndicator) return;
+  if (!summary) {
+    elements.timeIndicator.textContent = '';
+    elements.timeIndicator.classList.add('hidden');
+    elements.timeIndicator.classList.remove('ok', 'alert');
+    return;
+  }
+  const { totalMinutes, feasibility } = summary;
+  elements.timeIndicator.classList.remove('ok', 'alert');
+  if (!feasibility) {
+    elements.timeIndicator.textContent = `Durée réelle estimée : ${humanizeDuration(
+      totalMinutes
+    )}. Indiquez un créneau disponible ou une heure de fin pour vérifier la faisabilité.`;
+    elements.timeIndicator.classList.remove('hidden');
+    return;
+  }
+  const deltaLabel = humanizeDuration(Math.abs(feasibility.delta));
+  if (feasibility.ok) {
+    elements.timeIndicator.classList.add('ok');
+    elements.timeIndicator.textContent = `Le tournoi rentre dans le créneau disponible (marge d’environ ${deltaLabel}).`;
+  } else {
+    elements.timeIndicator.classList.add('alert');
+    elements.timeIndicator.textContent = `Le tournoi dépasse le créneau d’environ ${deltaLabel}.`;
+  }
+  elements.timeIndicator.classList.remove('hidden');
+}
+
+function updateMatchInsight(schedule) {
+  if (!elements.matchInsight) return;
+  if (!schedule || !schedule.meta) {
+    elements.matchInsight.textContent = '';
+    elements.matchInsight.classList.add('hidden');
+    return;
+  }
+  const info = getMatchLoadInfo(schedule);
+  if (!info) {
+    elements.matchInsight.textContent = '';
+    elements.matchInsight.classList.add('hidden');
+    return;
+  }
+  const lines = [...info.lines];
+  const summary = schedule.meta.timeSummary;
+  if (summary && info.perTeam > 0) {
+    const approxMinutes = Math.max(1, Math.round(summary.totalMinutes / info.perTeam));
+    lines.push(`Temps moyen entre deux matchs : environ ${humanizeDuration(approxMinutes)}.`);
+  }
+  elements.matchInsight.innerHTML = lines.join('<br />');
+  elements.matchInsight.classList.remove('hidden');
+}
+
+function getMatchLoadInfo(schedule) {
+  if (!schedule) return null;
+  const format = schedule.format || 'round-robin';
+  if (!schedule.groups || !schedule.groups.length || format === 'round-robin') {
+    const teamCount = schedule.meta ? schedule.meta.teamCount : state.participants;
+    const perTeam = Math.max(teamCount - 1, 0);
+    const lines = [`Chaque équipe jouera ${formatMatchCount(perTeam)}.`];
+    return { lines, perTeam: Math.max(perTeam, 1) };
+  }
+  const counts = schedule.groups.map(group => Math.max(group.teams.length - 1, 0));
+  const minCount = Math.min(...counts);
+  const maxCount = Math.max(...counts);
+  const uniform = minCount === maxCount;
+  if (format === 'groups-finals') {
+    const perTeamBase = uniform ? Math.max(minCount, 0) : Math.max((minCount + maxCount) / 2, 0);
+    const lines = [];
+    if (uniform) {
+      lines.push(`Chaque équipe jouera au moins ${formatMatchCount(perTeamBase)} pendant la phase de groupes.`);
+    } else {
+      lines.push(`Chaque équipe jouera entre ${minCount} et ${maxCount} matchs pendant la phase de groupes.`);
+    }
+    lines.push('Les équipes qualifiées disputeront ensuite la phase finale.');
+    return { lines, perTeam: Math.max(perTeamBase, 1) };
+  }
+  if (uniform) {
+    const perTeam = Math.max(minCount, 0);
+    const lines = [`Chaque équipe jouera ${formatMatchCount(perTeam)} dans sa phase de groupe.`];
+    return { lines, perTeam: Math.max(perTeam, 1) };
+  }
+  const lines = [`Chaque équipe jouera entre ${minCount} et ${maxCount} matchs selon son groupe.`];
+  const avg = (minCount + maxCount) / 2 || 1;
+  return { lines, perTeam: Math.max(avg, 1) };
+}
+
+function handleSimulationRequest() {
+  if (!elements.simulationResult) return;
+  const teams = getFinalTeamNames();
+  if (teams.length < 2) {
+    renderSimulationResult({ error: 'Ajoutez au moins deux équipes pour lancer la simulation.' });
+    return;
+  }
+  try {
+    const preview = generateSchedule(teams, state.options);
+    if (!preview || !preview.meta) {
+      renderSimulationResult({ error: 'Simulation impossible avec les paramètres actuels.' });
+      return;
+    }
+    const summary = computeTimeSummary(preview, state.options);
+    renderSimulationResult({ meta: preview.meta, summary });
+  } catch (error) {
+    console.error('Impossible de simuler le tournoi', error);
+    renderSimulationResult({ error: 'Impossible de simuler le tournoi. Vérifiez vos paramètres.' });
+  }
+}
+
+function renderSimulationResult(payload) {
+  if (!elements.simulationResult) return;
+  const { error, meta, summary } = payload;
+  if (error) {
+    elements.simulationResult.innerHTML = `<h4>Simulation du tournoi</h4><p>${error}</p>`;
+    elements.simulationResult.classList.remove('hidden');
+    return;
+  }
+  if (!meta) {
+    elements.simulationResult.innerHTML = `<h4>Simulation du tournoi</h4><p>Simulation indisponible pour le moment.</p>`;
+    elements.simulationResult.classList.remove('hidden');
+    return;
+  }
+  const matchCountValue = Number.isFinite(meta.matchCount) ? meta.matchCount : null;
+  const teamCountValue = Number.isFinite(meta.teamCount) ? meta.teamCount : null;
+  const fieldCountValue = Number.isFinite(meta.fieldCount) ? meta.fieldCount : null;
+  const matchCount = matchCountValue ?? '-';
+  const totalRotations = Number.isFinite(meta.rotationCount) ? meta.rotationCount : null;
+  const rotationCount = totalRotations ?? '-';
+  const durationLabel = summary ? humanizeDuration(summary.totalMinutes) : '-';
+  const durationMinutesLabel = summary ? `${Math.round(summary.totalMinutes)} min` : '-';
+  const endLabel = summary?.estimatedEnd ?? '—';
+  const perTeamNumber =
+    Number.isFinite(matchCountValue) && Number.isFinite(teamCountValue) && teamCountValue > 0
+      ? Math.round((matchCountValue * 2) / teamCountValue)
+      : null;
+  const perFieldNumber =
+    Number.isFinite(matchCountValue) && Number.isFinite(fieldCountValue) && fieldCountValue > 0
+      ? Math.round(matchCountValue / fieldCountValue)
+      : null;
+  const perTeamLabel = formatMatchesDisplay(perTeamNumber);
+  const perFieldLabel = formatMatchesDisplay(perFieldNumber);
+  const perTeamSentence = formatMatchesSentence(perTeamNumber) || 'un volume variable';
+  const perFieldSentence = formatMatchesSentence(perFieldNumber);
+  const perFieldLine = perFieldSentence ? `<p>Chaque terrain accueillera environ ${perFieldSentence}.</p>` : '';
+  const analysisMetrics = buildPedagogyMetrics(meta, summary, state.options);
+  const timePerTeamLabel = analysisMetrics ? formatMinutesLabel(analysisMetrics.timePerTeam) : '—';
+  let statusMarkup = '<p class="simulation-status">Simulation disponible.</p>';
+  let detailMarkup = '';
+  let suggestionsHtml = '';
+  if (summary) {
+    if (summary.feasibility) {
+      const deltaLabel = summary.feasibility.delta != null ? humanizeDuration(Math.abs(summary.feasibility.delta)) : '';
+      if (summary.feasibility.ok) {
+        statusMarkup = `<p class="simulation-status ok">✓ Le tournoi tient dans le créneau.</p>`;
+        detailMarkup = `
+          <p>Chaque équipe jouera environ ${perTeamSentence}.</p>
+          ${perFieldLine}
+          <p>Temps de jeu moyen par équipe : ${timePerTeamLabel}.</p>
+          <p>Durée totale estimée : ${durationMinutesLabel}.</p>
+        `;
+      } else {
+        statusMarkup = `<p class="simulation-status alert">⚠ Le tournoi dépasse de ${deltaLabel}.</p>`;
+        detailMarkup = `
+          <p>Chaque équipe jouera environ ${perTeamSentence}.</p>
+          ${perFieldLine}
+          <p>Temps de jeu moyen par équipe : ${timePerTeamLabel}.</p>
+        `;
+        suggestionsHtml = `
+          <div class="simulation-suggestions">
+            <p>Solutions possibles :</p>
+            <ul>
+              <li>Réduire la durée des matchs</li>
+              <li>Ajouter un terrain</li>
+              <li>Réduire le nombre d’équipes</li>
+              <li>Réduire la pause globale</li>
+            </ul>
+          </div>
+        `;
+      }
+    } else {
+      statusMarkup = `<p class="simulation-status">Ajoutez un créneau disponible ou une heure de fin pour vérifier la faisabilité.</p>`;
+    }
+  } else {
+    statusMarkup = `<p class="simulation-status">Simulation partielle : précisez la durée des matchs et des rotations.</p>`;
+  }
+  elements.simulationResult.innerHTML = `
+    <h4 class="panel-title"><span class="panel-icon cold">🔍</span><span>Simulation du tournoi</span></h4>
+    <div class="simulation-grid">
+      <div class="simulation-metric">
+        <span>Matchs au total</span>
+        <strong>${matchCount}</strong>
+      </div>
+      <div class="simulation-metric">
+        <span>Tours de jeu</span>
+        <strong>${rotationCount}</strong>
+      </div>
+      <div class="simulation-metric">
+        <span>Durée du tournoi</span>
+        <strong>${durationLabel}</strong>
+      </div>
+      <div class="simulation-metric">
+        <span>Fin prévue</span>
+        <strong>${endLabel}</strong>
+      </div>
+      <div class="simulation-metric">
+        <span>Matchs par équipe</span>
+        <strong>${perTeamLabel}</strong>
+      </div>
+      <div class="simulation-metric">
+        <span>Matchs par terrain</span>
+        <strong>${perFieldLabel}</strong>
+      </div>
+    </div>
+    ${statusMarkup}
+    ${detailMarkup}
+    ${suggestionsHtml}
+    <div class="simulation-analysis">
+      <h5>Analyse pédagogique</h5>
+      ${buildAnalysisListHTML(analysisMetrics)}
+      ${buildAnalysisTagHTML(analysisMetrics)}
+    </div>
+  `;
+  elements.simulationResult.classList.remove('hidden');
+}
+
+function handleRecommendationRequest() {
+  if (!elements.recommendationResult) return;
+  const teams = getFinalTeamNames();
+  if (teams.length < 2) {
+    renderRecommendationResult({ error: 'Ajoutez au moins deux équipes pour analyser une configuration.' });
+    latestRecommendation = null;
+    recommendationApplied = false;
+    return;
+  }
+  const recommendation = computeRecommendedConfiguration(teams);
+  if (!recommendation) {
+    renderRecommendationResult({ error: 'Impossible de proposer une configuration. Vérifiez vos paramètres.' });
+     latestRecommendation = null;
+     recommendationApplied = false;
+    return;
+  }
+  latestRecommendation = recommendation;
+  recommendationApplied = false;
+  renderRecommendationResult(recommendation);
+}
+
+function formatMatchCount(value) {
+  const amount = Math.max(0, Number(value) || 0);
+  const unit = amount > 1 ? 'matchs' : 'match';
+  return `${amount} ${unit}`;
+}
+
+function roundMatchesValue(value) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.max(0, Math.round(value));
+}
+
+function formatMatchesDisplay(value) {
+  const rounded = roundMatchesValue(value);
+  return rounded === null ? '—' : `${rounded}`;
+}
+
+function formatMatchesSentence(value) {
+  const rounded = roundMatchesValue(value);
+  if (rounded === null) return null;
+  const plural = rounded > 1 ? 'matchs' : 'match';
+  return `${rounded} ${plural}`;
+}
+
+function buildPedagogyMetrics(meta, summary, options) {
+  if (!meta) return null;
+  const matchCount = Number(meta.matchCount);
+  const teamCount = Number(meta.teamCount);
+  const duration = Number(options?.duration);
+  if (!Number.isFinite(matchCount) || !Number.isFinite(teamCount) || teamCount <= 0 || !Number.isFinite(duration) || duration <= 0) {
+    return null;
+  }
+  const matchesPerTeam = (matchCount * 2) / teamCount;
+  const timePerTeam = matchesPerTeam * duration;
+  const totalMinutes = Number(summary?.totalMinutes);
+  let waitTime = null;
+  if (Number.isFinite(totalMinutes) && matchesPerTeam > 0) {
+    waitTime = Math.max(totalMinutes / matchesPerTeam - duration, 0);
+  }
+  let engagement = null;
+  if (Number.isFinite(totalMinutes) && totalMinutes > 0) {
+    engagement = (timePerTeam / totalMinutes) * 100;
+  }
+  const indicator = classifyEngagementLevel(engagement);
+  return { matchesPerTeam, timePerTeam, waitTime, engagement, indicator };
+}
+
+function classifyEngagementLevel(value) {
+  if (!Number.isFinite(value)) {
+    return { label: 'Engagement non évalué', level: 'neutral' };
+  }
+  if (value > 40) {
+    return { label: 'Engagement moteur élevé', level: 'high' };
+  }
+  if (value >= 25) {
+    return { label: 'Engagement moteur correct', level: 'medium' };
+  }
+  return { label: 'Engagement moteur faible', level: 'low' };
+}
+
+function formatMinutesLabel(value) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  return humanizeDuration(Math.round(value));
+}
+
+function formatEngagementPercent(value) {
+  if (!Number.isFinite(value)) return '—';
+  return `${Math.round(value)}%`;
+}
+
+function buildAnalysisListHTML(metrics) {
+  if (!metrics) return '<ul class="analysis-list"><li>Données insuffisantes.</li></ul>';
+  const matchValue = formatMatchesDisplay(metrics.matchesPerTeam);
+  const matchLabel = `Matchs par équipe : ${matchValue}`;
+  const playLabel =
+    metrics.timePerTeam != null
+      ? `Temps de jeu par équipe : ${formatMinutesLabel(metrics.timePerTeam)}`
+      : 'Temps de jeu par équipe : —';
+  const waitLabel =
+    metrics.waitTime != null ? `Temps moyen d’attente : ${formatMinutesLabel(metrics.waitTime)}` : 'Temps moyen d’attente : —';
+  const engagementLabel =
+    metrics.engagement != null
+      ? `Engagement moteur estimé : ${formatEngagementPercent(metrics.engagement)}`
+      : 'Engagement moteur estimé : —';
+  return `
+    <ul class="analysis-list">
+      <li>${matchLabel}</li>
+      <li>${playLabel}</li>
+      <li>${waitLabel}</li>
+      <li>${engagementLabel}</li>
+    </ul>
+  `;
+}
+
+function buildAnalysisTagHTML(metrics) {
+  if (!metrics || !metrics.indicator) {
+    return '<p class="analysis-tag neutral">Engagement non évalué</p>';
+  }
+  return `<p class="analysis-tag ${metrics.indicator.level}">${metrics.indicator.label}</p>`;
+}
+
+function applyRecommendedConfiguration() {
+  if (!latestRecommendation || !latestRecommendation.options) return;
+  const { duration, turnaround, breakMinutes } = latestRecommendation.options;
+  let hasChange = false;
+  if (Number.isFinite(duration)) {
+    state.options.duration = clampNumber(duration, 1, 180, duration);
+    elements.matchDuration.value = state.options.duration;
+    timerState.baseSeconds = state.options.duration * 60;
+    hasChange = true;
+  }
+  if (Number.isFinite(turnaround)) {
+    state.options.turnaround = clampNumber(turnaround, 0, 60, turnaround);
+    elements.rotationBuffer.value = state.options.turnaround;
+    hasChange = true;
+  }
+  if (Number.isFinite(breakMinutes)) {
+    state.options.breakMinutes = clampNumber(breakMinutes, 0, 600, breakMinutes);
+    elements.breakDuration.value = state.options.breakMinutes;
+    hasChange = true;
+  }
+  if (hasChange) {
+    persistState();
+    recommendationApplied = true;
+    renderRecommendationResult(latestRecommendation);
+  }
+}
+
+function handleOptionsReset() {
+  const defaults = createDefaultState().options;
+  state.options.fields = defaults.fields;
+  state.options.duration = defaults.duration;
+  state.options.turnaround = defaults.turnaround;
+  state.options.breakMinutes = defaults.breakMinutes;
+  state.options.availableDuration = defaults.availableDuration;
+  state.options.startTime = defaults.startTime;
+  state.options.endTime = defaults.endTime;
+  timerState.baseSeconds = state.options.duration * 60;
+  if (elements.fieldCount) elements.fieldCount.value = state.options.fields;
+  if (elements.matchDuration) elements.matchDuration.value = state.options.duration;
+  if (elements.rotationBuffer) elements.rotationBuffer.value = state.options.turnaround;
+  if (elements.breakDuration) elements.breakDuration.value = state.options.breakMinutes;
+  if (elements.availableDuration) elements.availableDuration.value = state.options.availableDuration ?? '';
+  if (elements.startTime) elements.startTime.value = state.options.startTime;
+  if (elements.endTime) elements.endTime.value = state.options.endTime || '';
+  persistState();
+  hideAnalysisPanels();
+  showResetFeedback();
+}
+
+function hideAnalysisPanels() {
+  if (elements.simulationResult) {
+    elements.simulationResult.innerHTML = '';
+    elements.simulationResult.classList.add('hidden');
+  }
+  if (elements.recommendationResult) {
+    elements.recommendationResult.innerHTML = '';
+    elements.recommendationResult.classList.add('hidden');
+  }
+  latestRecommendation = null;
+  recommendationApplied = false;
+}
+
+function showResetFeedback() {
+  if (!elements.resetFeedback) return;
+  elements.resetFeedback.classList.remove('hidden');
+  if (resetFeedbackTimeout) clearTimeout(resetFeedbackTimeout);
+  resetFeedbackTimeout = setTimeout(() => {
+    elements.resetFeedback.classList.add('hidden');
+  }, 2500);
+}
+
+function computeRecommendedConfiguration(teams) {
+  const durations = [4, 5, 6, 7, 8, 9, 10, 12];
+  const recommendedRotation = clampNumber(
+    state.options.turnaround && state.options.turnaround > 0 ? state.options.turnaround : 1,
+    1,
+    3,
+    1
+  );
+  const recommendedPause =
+    state.options.breakMinutes && state.options.breakMinutes > 0
+      ? Math.min(state.options.breakMinutes, 15)
+      : 5;
+  let bestFeasible = null;
+  let bestFallback = null;
+  for (const duration of durations) {
+    const candidateOptions = {
+      ...state.options,
+      duration,
+      turnaround: recommendedRotation,
+      breakMinutes: recommendedPause,
+    };
+    let schedule;
+    try {
+      schedule = generateSchedule(teams, candidateOptions);
+    } catch (error) {
+      console.warn('Simulation recommandée impossible', error);
+      continue;
+    }
+    if (!schedule || !schedule.meta) continue;
+    const summary = computeTimeSummary(schedule, candidateOptions);
+    const metrics = buildPedagogyMetrics(schedule.meta, summary, candidateOptions);
+    const feasible = Boolean(summary?.feasibility && summary.feasibility.ok);
+    if (feasible) {
+      bestFeasible = {
+        options: candidateOptions,
+        summary,
+        metrics,
+        feasible: true,
+      };
+      break;
+    }
+    const totalMinutes = summary?.totalMinutes ?? Number.POSITIVE_INFINITY;
+    if (!bestFallback || totalMinutes < (bestFallback.summary?.totalMinutes ?? Number.POSITIVE_INFINITY)) {
+      bestFallback = {
+        options: candidateOptions,
+        summary,
+        metrics,
+        feasible: false,
+      };
+    }
+  }
+  return bestFeasible || bestFallback;
+}
+
+function renderRecommendationResult(payload) {
+  if (!elements.recommendationResult) return;
+  if (payload.error) {
+    elements.recommendationResult.innerHTML = `<h4>Configuration recommandée</h4><p>${payload.error}</p>`;
+    elements.recommendationResult.classList.remove('hidden');
+    return;
+  }
+  const { options, summary, metrics, feasible } = payload;
+  const durationLabel = `${options.duration} min`;
+  const rotationLabel = `${options.turnaround ?? 0} min`;
+  const pauseLabel = `${options.breakMinutes ?? 0} min`;
+  const durationTotalLabel = summary ? humanizeDuration(summary.totalMinutes) : '—';
+  const endLabel = summary?.estimatedEnd ?? '—';
+  let statusLine = 'Analyse partielle : paramètres incomplets.';
+  if (summary?.feasibility) {
+    const deltaLabel = humanizeDuration(Math.abs(summary.feasibility.delta || 0));
+    if (feasible) {
+      statusLine = summary.feasibility.delta != null ? `✓ Le tournoi tient dans le créneau (marge ${deltaLabel}).` : `✓ Le tournoi tient dans le créneau.`;
+    } else if (summary.feasibility.delta != null) {
+      statusLine = `⚠ Le tournoi dépasse de ${deltaLabel}.`;
+    }
+  } else if (summary) {
+    statusLine = 'Configuration basée sur la durée totale estimée.';
+  }
+  const analysisHtml = `
+    <div class="simulation-analysis">
+      <h5>Analyse pédagogique</h5>
+      ${buildAnalysisListHTML(metrics)}
+      ${buildAnalysisTagHTML(metrics)}
+    </div>
+  `;
+  const feedbackClass = recommendationApplied ? 'show' : '';
+  elements.recommendationResult.innerHTML = `
+    <h4 class="panel-title warm"><span class="panel-icon warm">🛠</span><span>Configuration recommandée</span></h4>
+    <div class="recommendation-grid">
+      <div class="metric">
+        <span>Matchs</span>
+        <strong>${durationLabel}</strong>
+      </div>
+      <div class="metric">
+        <span>Rotation</span>
+        <strong>${rotationLabel}</strong>
+      </div>
+      <div class="metric">
+        <span>Pause globale</span>
+        <strong>${pauseLabel}</strong>
+      </div>
+    </div>
+    <p class="recommendation-note">${statusLine}</p>
+    <p class="recommendation-note">Durée estimée : ${durationTotalLabel} · Fin prévue : ${endLabel}</p>
+    ${analysisHtml}
+    <div class="recommendation-actions">
+      <button class="btn primary" data-action="apply-recommendation">Appliquer cette configuration</button>
+      <span class="recommendation-feedback ${feedbackClass}">Configuration appliquée</span>
+    </div>
+  `;
+  elements.recommendationResult.classList.remove('hidden');
 }
 
 function buildMatchListHTML(rotation) {
   return rotation.matches
     .map(match => {
-      const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+      const participants = resolveMatchParticipants(match, state.schedule);
+      const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
       match.id = matchId;
+      const groupTag = match.groupLabel ? `<span class="match-group-label">${match.groupLabel}</span>` : '';
       return `
       <li>
         <div class="match-label">
-          <span>${match.home} - ${match.away}</span>
+          <span>${participants.home} - ${participants.away}</span>
+          ${groupTag}
           <span class="field-label">Terrain ${match.field}${match.order > 1 ? ` · slot ${match.order}` : ''}</span>
         </div>
-        <div class="score-inputs" aria-label="Score ${match.home} ${match.away}">
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${match.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" />
+        <div class="score-inputs" aria-label="Score ${participants.home} ${participants.away}">
+          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" />
           <span>:</span>
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${match.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" />
+          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" />
         </div>
       </li>`;
     })
@@ -761,7 +1451,13 @@ function buildFieldsGridHTML(rotation) {
   return rotation.fieldAssignments
     .map(field => {
       const items = field.matches.length
-        ? field.matches.map(m => `<li>${m.home} - ${m.away}${m.order > 1 ? ` (slot ${m.order})` : ''}</li>`).join('')
+        ? field.matches
+            .map(m => {
+              const participants = resolveMatchParticipants(m, state.schedule);
+              const groupTag = m.groupLabel ? `<span class="match-group-inline">${m.groupLabel}</span>` : '';
+              return `<li>${participants.home} - ${participants.away}${m.order > 1 ? ` (slot ${m.order})` : ''} ${groupTag}</li>`;
+            })
+            .join('')
         : '<li>Aucun match</li>';
       return `<div class="field-card"><h4>${field.label}</h4><ul>${items}</ul></div>`;
     })
@@ -786,7 +1482,11 @@ function renderRotationView(rotations) {
       return `
         <article class="rotation-card" data-rotation="${rotation.number}">
           <div class="rotation-header">
-            <h3>ROTATION N° ${rotation.number}</h3>
+            <div>
+              <p class="eyebrow">Rotation ${rotation.number}</p>
+              <h3>${rotation.title || `Rotation ${rotation.number}`}</h3>
+            </div>
+            ${rotation.groupLabel ? `<span class="pill subtle">${rotation.groupLabel}</span>` : ''}
             ${timing}
           </div>
           ${byes}
@@ -798,6 +1498,50 @@ function renderRotationView(rotations) {
     .join('');
 }
 
+function buildTeamEntriesFromSchedule(schedule) {
+  if (!schedule || !Array.isArray(schedule.rotations)) return [];
+  const map = new Map();
+  const register = name => {
+    if (!map.has(name)) map.set(name, []);
+    return map.get(name);
+  };
+  const baseNames = schedule.teams && schedule.teams.length ? schedule.teams.map(team => team.name) : getFinalTeamNames();
+  baseNames.forEach(name => register(name));
+  schedule.rotations.forEach(rotation => {
+    rotation.matches.forEach(match => {
+      const participants = resolveMatchParticipants(match, schedule);
+      if (!participants.home || !participants.away) return;
+      const entryBase = {
+        rotation: rotation.number,
+        field: match.field,
+        start: rotation.startLabel,
+        group: match.groupLabel || rotation.groupLabel,
+        phase: rotation.phase,
+        title: rotation.title,
+        matchId: match.id,
+      };
+      register(participants.home).push({ ...entryBase, opponent: participants.away });
+      register(participants.away).push({ ...entryBase, opponent: participants.home });
+    });
+    rotation.byes.forEach(teamName => {
+      register(teamName).push({
+        bye: true,
+        rotation: rotation.number,
+        start: rotation.startLabel,
+        group: rotation.groupLabel,
+        phase: rotation.phase,
+        title: rotation.title,
+      });
+    });
+  });
+  return Array.from(map.entries())
+    .map(([name, matches]) => ({
+      name,
+      matches: matches.sort((a, b) => a.rotation - b.rotation),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function renderTeamView(teams) {
   elements.teamView.innerHTML = teams
     .map(team => {
@@ -805,10 +1549,11 @@ function renderTeamView(teams) {
         .map(entry => {
           const isBye = entry.bye;
           const label = isBye ? 'Repos' : entry.opponent;
+          const badge = entry.group ? `${entry.group}` : entry.phase === 'finals' ? 'Phase finale' : 'Rotation';
           const details = isBye
-            ? `Rotation ${entry.rotation}`
-            : `Rotation ${entry.rotation}${entry.field ? ` · Terrain ${entry.field}` : ''}${
-                entry.start != null ? ` · ${formatTime(entry.start)}` : ''
+            ? `${badge} ${entry.rotation}`
+            : `${badge} ${entry.rotation}${entry.field ? ` · Terrain ${entry.field}` : ''}${
+                entry.start != null ? ` · ${entry.start}` : ''
               }`;
           const byeClass = isBye ? ' class="bye"' : '';
           return `<li${byeClass}><span>${label}</span><span class="rotation-meta">${details}</span></li>`;
@@ -827,6 +1572,10 @@ function renderTeamView(teams) {
 function renderRankingView(schedule) {
   if (!schedule) {
     elements.rankingView.innerHTML = '';
+    return;
+  }
+  if (schedule.format && schedule.format !== 'round-robin') {
+    renderGroupRankingCards(schedule);
     return;
   }
   const cards = schedule.rotations
@@ -875,6 +1624,116 @@ function renderRankingView(schedule) {
     })
     .join('');
   elements.rankingView.innerHTML = cards;
+}
+
+function renderGroupRankingCards(schedule) {
+  if (!elements.rankingView) return;
+  if (!schedule.groups || !schedule.groups.length) {
+    elements.rankingView.innerHTML = '<p>Aucun groupe configuré.</p>';
+    return;
+  }
+  const standings = getGroupStandings(schedule);
+  const cards = schedule.groups
+    .map(group => {
+      const table = (standings && standings.byGroup.get(group.id)) || group.teams.map(name => createBaseStat(name));
+      const expected = (group.teams.length * (group.teams.length - 1)) / 2;
+      const played = countCompletedGroupMatches(schedule, group.id);
+      const complete = played >= expected && expected > 0;
+      const rows = table
+        .map(
+          (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.points}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.draws}</td>
+          <td>${row.losses}</td>
+          <td>${row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff}</td>
+        </tr>`
+        )
+        .join('');
+      return `
+        <article class="ranking-card">
+          <header>
+            <h3>${group.label}</h3>
+            <span class="ranking-status">${complete ? 'Phase terminée' : `${played}/${expected} match(s)`}</span>
+          </header>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Équipe</th>
+                <th>Pts</th>
+                <th>J</th>
+                <th>G</th>
+                <th>N</th>
+                <th>P</th>
+                <th>Diff</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </article>
+      `;
+    })
+    .join('');
+  let finalsCard = '';
+  if (schedule.format === 'groups-finals') {
+    finalsCard = buildFinalsSnapshotCard(schedule);
+  }
+  elements.rankingView.innerHTML = cards + finalsCard;
+}
+
+function countCompletedGroupMatches(schedule, groupId) {
+  if (!schedule || !schedule.rotations) return 0;
+  let count = 0;
+  schedule.rotations.forEach(rotation => {
+    rotation.matches.forEach(match => {
+      if (match.groupId !== groupId) return;
+      const record = state.scores && state.scores[match.id];
+      if (record && Number.isFinite(record.home) && Number.isFinite(record.away)) {
+        count += 1;
+      }
+    });
+  });
+  return count;
+}
+
+function buildFinalsSnapshotCard(schedule) {
+  if (!schedule.rotations) return '';
+  const finals = schedule.rotations.filter(rotation => rotation.phase === 'finals');
+  if (!finals.length) return '';
+  const matches = finals
+    .map(rotation => {
+      if (!rotation.matches.length) return '';
+      const match = rotation.matches[0];
+      const participants = resolveMatchParticipants(match, schedule);
+      const record = state.scores && state.scores[match.id];
+      const played = record && Number.isFinite(record.home) && Number.isFinite(record.away);
+      const score =
+        played && record ? `${record.home} - ${record.away}` : '<span class="live-badge info">À jouer</span>';
+      return `
+        <li>
+          <div>
+            <strong>${rotation.title}</strong>
+            <p>${participants.home} vs ${participants.away}</p>
+          </div>
+          <span class="final-score">${score}</span>
+        </li>
+      `;
+    })
+    .join('');
+  return `
+    <article class="ranking-card finals-card">
+      <header>
+        <h3>Phase finale</h3>
+        <span class="ranking-status">Suivi en direct</span>
+      </header>
+      <ul class="finals-list">${matches}</ul>
+    </article>
+  `;
 }
 
 function renderLiveRankingPanel(uptoRotation) {
@@ -1058,23 +1917,6 @@ function closeHelpModal() {
   syncBodyModalState();
 }
 
-function handleFaqClick(event) {
-  const question = event.target.closest('.faq-question');
-  if (!question || !elements.helpFaq) return;
-  const item = question.closest('.faq-item');
-  if (!item) return;
-  const isActive = item.classList.contains('active');
-  elements.helpFaq.querySelectorAll('.faq-item').forEach(node => {
-    node.classList.remove('active');
-    const btn = node.querySelector('.faq-question');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  });
-  if (!isActive) {
-    item.classList.add('active');
-    question.setAttribute('aria-expanded', 'true');
-  }
-}
-
 function syncBodyModalState() {
   const finalOpen = elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden');
   const helpOpen = elements.helpModal && !elements.helpModal.classList.contains('hidden');
@@ -1157,6 +1999,7 @@ function renderLiveRotation() {
   setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
   if (!state.schedule) {
     elements.liveRotationTitle.textContent = 'Rotation';
+    renderLiveMeta(null);
     elements.liveRotationContent.innerHTML = '<p>Générez un planning avant de lancer les rotations.</p>';
     if (elements.liveStatus) elements.liveStatus.textContent = '';
     if (elements.liveNextBtn) elements.liveNextBtn.disabled = true;
@@ -1176,7 +2019,9 @@ function renderLiveRotation() {
     return;
   }
   const total = state.schedule.meta.rotationCount;
-  elements.liveRotationTitle.textContent = `Rotation ${rotation.number} / ${total}`;
+  const baseTitle = rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotation.number}` : `Rotation ${rotation.number}`;
+  elements.liveRotationTitle.textContent = `${baseTitle} / ${total}`;
+  renderLiveMeta(state.schedule.meta);
   elements.liveRotationContent.dataset.rotation = rotation.number;
   elements.liveRotationContent.innerHTML = buildLiveMatchCards(rotation);
   renderLiveRest(rotation.byes);
@@ -1191,6 +2036,19 @@ function renderLiveRotation() {
   renderChronoScreen();
 }
 
+function renderLiveMeta(meta) {
+  if (!elements.liveMeta) return;
+  if (!meta) {
+    elements.liveMeta.textContent = '';
+    return;
+  }
+  const parts = [];
+  if (meta.formatLabel) parts.push(meta.formatLabel);
+  if (meta.groupCount) parts.push(`${meta.groupCount} groupe${meta.groupCount > 1 ? 's' : ''}`);
+  if (meta.fieldCount) parts.push(`${meta.fieldCount} terrain${meta.fieldCount > 1 ? 's' : ''}`);
+  elements.liveMeta.textContent = parts.join(' • ');
+}
+
 function buildLiveMatchCards(rotation) {
   if (!rotation.matches.length) {
     return '<p class="live-empty">Aucun match prévu pour cette rotation.</p>';
@@ -1199,7 +2057,8 @@ function buildLiveMatchCards(rotation) {
 }
 
 function buildLiveMatchCard(rotation, match) {
-  const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+  const participants = resolveMatchParticipants(match, state.schedule);
+  const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
   match.id = matchId;
   const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
   const awayScore = formatScoreValue(getScoreValue(matchId, 'away'));
@@ -1218,6 +2077,7 @@ function buildLiveMatchCard(rotation, match) {
   const badge = parts.length ? parts.join(' · ') : `Rotation ${rotation.number}`;
   const statusText = validated ? 'VALIDÉ' : 'EN COURS';
   const badgeClass = validated ? 'success' : 'info';
+  const groupPill = match.groupLabel ? `<span class="group-pill">${match.groupLabel}</span>` : '';
   const actionButtons = `
     <button type="button" class="btn ghost tiny live-validate ${validated ? 'hidden' : ''}" data-validate-match="${matchId}" ${
       complete ? '' : 'disabled'
@@ -1227,12 +2087,15 @@ function buildLiveMatchCard(rotation, match) {
   return `
     <article class="${cardClasses.join(' ')}${complete || validated ? '' : ' incomplete'}" data-match-id="${matchId}">
       <header>
-        <span>${badge}</span>
+        <div class="live-card-meta">
+          ${groupPill}
+          <span>${badge}</span>
+        </div>
         <span class="live-badge ${badgeClass}">${statusText}</span>
       </header>
       <div class="teams">
-        ${buildLiveTeamColumn('home', match.home, homeScore, matchId, { disabled: validated })}
-        ${buildLiveTeamColumn('away', match.away, awayScore, matchId, { disabled: validated })}
+        ${buildLiveTeamColumn('home', participants.home, homeScore, matchId, { disabled: validated })}
+        ${buildLiveTeamColumn('away', participants.away, awayScore, matchId, { disabled: validated })}
       </div>
       <div class="live-card-actions">
         ${actionButtons}
@@ -1289,21 +2152,27 @@ function renderNextRotationPreview() {
       ? state.schedule.meta.rotationCount
       : state.schedule.rotations.length;
   if (elements.liveNextLabel) {
-    elements.liveNextLabel.textContent = `Rotation ${nextRotation.number} / ${total}`;
+    const nextLabel = nextRotation.groupLabel
+      ? `${nextRotation.groupLabel} · Rotation ${nextRotation.number}`
+      : `Rotation ${nextRotation.number}`;
+    elements.liveNextLabel.textContent = `${nextLabel} / ${total}`;
   }
   const cards = nextRotation.matches.length
     ? nextRotation.matches
         .map(match => {
+          const participants = resolveMatchParticipants(match, state.schedule);
           const metaParts = [];
           if (match.field) metaParts.push(`Terrain ${match.field}`);
           if (match.order > 1) metaParts.push(`Vague ${match.order}`);
           const meta = metaParts.length ? metaParts.join(' · ') : 'Organisation en cours';
+          const groupLabel = match.groupLabel || nextRotation.groupLabel;
           return `
             <article class="live-next-card">
+              ${groupLabel ? `<span class="eyebrow">${groupLabel}</span>` : ''}
               <span class="meta">${meta}</span>
-              <strong>${match.home}</strong>
+              <strong>${participants.home}</strong>
               <span class="vs">vs</span>
-              <strong>${match.away}</strong>
+              <strong>${participants.away}</strong>
             </article>
           `;
         })
@@ -1341,7 +2210,8 @@ function renderChronoScreen() {
     state.schedule.meta && state.schedule.meta.rotationCount
       ? state.schedule.meta.rotationCount
       : state.schedule.rotations.length;
-  elements.chronoRotationLabel.textContent = `Rotation ${rotation.number} / ${total}`;
+  const labelBase = rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotation.number}` : `Rotation ${rotation.number}`;
+  elements.chronoRotationLabel.textContent = `${labelBase} / ${total}`;
   const missing = countMissingScores(rotation.number);
   const isComplete = rotation.matches.length > 0 && missing === 0;
   const isLast = rotation.number === total;
@@ -1372,7 +2242,8 @@ function renderChronoScreen() {
 }
 
 function buildChronoMatchSnapshot(rotation, match) {
-  const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+  const participants = resolveMatchParticipants(match, state.schedule);
+  const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
   match.id = matchId;
   const homeScore = getScoreValue(matchId, 'home');
   const awayScore = getScoreValue(matchId, 'away');
@@ -1381,14 +2252,15 @@ function buildChronoMatchSnapshot(rotation, match) {
   const details = [];
   if (match.field) details.push(`Terrain ${match.field}`);
   if (match.order > 1) details.push(`Vague ${match.order}`);
-  const label = details.length ? details.join(' · ') : `Rotation ${rotation.number}`;
+  const groupLabel = match.groupLabel ? `${match.groupLabel} · ` : '';
+  const label = `${groupLabel}${details.length ? details.join(' · ') : `Rotation ${rotation.number}`}`;
   return `
     <article class="chrono-match-card">
       <span class="label">${label}</span>
       <div class="teams">
-        <strong>${match.home}</strong>
+        <strong>${participants.home}</strong>
         <span class="chrono-score">${score}</span>
-        <strong>${match.away}</strong>
+        <strong>${participants.away}</strong>
       </div>
     </article>
   `;
@@ -1454,9 +2326,10 @@ function updateLiveControls() {
     elements.liveFinishBtn.disabled = !isComplete;
   }
   if (elements.liveStatus) {
+    const rotationLabel = rotation && rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotationNumber}` : `Rotation ${rotationNumber}`;
     const status = isComplete
-      ? `Rotation ${rotationNumber} / ${total} validée`
-      : `Rotation ${rotationNumber} / ${total} · ${missing} score(s) à saisir`;
+      ? `${rotationLabel} / ${total} validée`
+      : `${rotationLabel} / ${total} · ${missing} score(s) à saisir`;
     elements.liveStatus.textContent = status;
   }
   setChronoNextAvailability(Boolean(state.schedule && !isLast && isComplete));
@@ -1489,37 +2362,38 @@ function isRotationComplete(rotationNumber) {
   const rotation = state.schedule.rotations.find(r => r.number === rotationNumber);
   if (!rotation) return false;
   return rotation.matches.every(match => {
-    const key = match.id || buildMatchKey(rotation.number, match.home, match.away);
+    const participants = resolveMatchParticipants(match, state.schedule);
+    const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     return isMatchCompleteById(key);
   });
 }
 
 function computeRankingSnapshot(schedule, uptoRotation) {
   const stats = new Map();
-  schedule.teams.forEach(team => stats.set(team.name, createBaseStat(team.name)));
+  (schedule.teams || []).forEach(team => stats.set(team.name, createBaseStat(team.name)));
   let complete = true;
   schedule.rotations.forEach(rotation => {
     if (rotation.number > uptoRotation) return;
     rotation.matches.forEach(match => {
-      const key = match.id || buildMatchKey(rotation.number, match.home, match.away);
+      const participants = resolveMatchParticipants(match, schedule);
+      if (!participants.home || !participants.away) {
+        complete = false;
+        return;
+      }
+      const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
       const record = state.scores && state.scores[key];
       if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) {
         complete = false;
         return;
       }
-      applyMatchStats(stats, match.home, match.away, record.home, record.away);
+      applyMatchStats(stats, participants.home, participants.away, record.home, record.away);
     });
   });
   const table = Array.from(stats.values()).map(entry => ({
     ...entry,
     goalDiff: entry.goalsFor - entry.goalsAgainst,
   }));
-  table.sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.goalDiff !== a.goalDiff) return b.goalDiff - a.goalDiff;
-    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-    return a.name.localeCompare(b.name);
-  });
+  table.sort(compareStatsRows);
   return { table, complete };
 }
 
@@ -1554,6 +2428,120 @@ function applyMatchStats(map, homeName, awayName, homeScore, awayScore) {
   }
 }
 
+function compareStatsRows(a, b) {
+  if (b.points !== a.points) return b.points - a.points;
+  if (b.goalDiff !== a.goalDiff) return b.goalDiff - a.goalDiff;
+  if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+  return a.name.localeCompare(b.name);
+}
+
+function invalidateStandingsCache() {
+  standingsCache = null;
+}
+
+function getGroupStandings(schedule) {
+  if (!schedule || !schedule.groups || !schedule.groups.length) return null;
+  if (!standingsCache) {
+    standingsCache = computeGroupStandings(schedule);
+  }
+  return standingsCache;
+}
+
+function computeGroupStandings(schedule) {
+  const byGroup = new Map();
+  const runnerUps = [];
+  schedule.groups.forEach(group => {
+    const stats = new Map();
+    group.teams.forEach(name => stats.set(name, createBaseStat(name)));
+    schedule.rotations.forEach(rotation => {
+      rotation.matches.forEach(match => {
+        if (match.groupId !== group.id) return;
+        const record = state.scores && state.scores[match.id];
+        if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) return;
+        applyMatchStats(stats, match.home, match.away, record.home, record.away);
+      });
+    });
+    const table = Array.from(stats.values()).map(entry => ({
+      ...entry,
+      goalDiff: entry.goalsFor - entry.goalsAgainst,
+    }));
+    table.sort(compareStatsRows);
+    byGroup.set(group.id, table);
+    if (table[1]) {
+      runnerUps.push({ groupId: group.id, ...table[1] });
+    }
+  });
+  runnerUps.forEach(entry => {
+    entry.goalDiff = entry.goalsFor - entry.goalsAgainst;
+  });
+  runnerUps.sort(compareStatsRows);
+  return {
+    byGroup,
+    runnerUps,
+    bestRunnerUp: runnerUps[0] || null,
+  };
+}
+
+function findMatchById(schedule, matchId) {
+  if (!schedule || !matchId) return null;
+  for (const rotation of schedule.rotations) {
+    const found = rotation.matches.find(match => match.id === matchId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function resolveSeedName(seed, schedule) {
+  if (!seed || !schedule) return null;
+  if (seed.type === 'group') {
+    const standings = getGroupStandings(schedule);
+    if (!standings) return null;
+    const table = standings.byGroup.get(seed.groupId);
+    if (!table) return null;
+    const target = table[seed.position - 1];
+    return target ? target.name : null;
+  }
+  if (seed.type === 'bestRunnerUp') {
+    const standings = getGroupStandings(schedule);
+    if (!standings || !standings.bestRunnerUp) return null;
+    return standings.bestRunnerUp.name;
+  }
+  if (seed.type === 'matchWinner' || seed.type === 'matchLoser') {
+    const targetMatch = findMatchById(schedule, seed.matchId);
+    if (!targetMatch) return null;
+    const record = state.scores && state.scores[seed.matchId];
+    if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) return null;
+    if (record.home === record.away) return null;
+    const participants = resolveMatchParticipants(targetMatch, schedule);
+    if (!participants.home || !participants.away) return null;
+    const homeWins = record.home > record.away;
+    if (seed.type === 'matchWinner') {
+      return homeWins ? participants.home : participants.away;
+    }
+    return homeWins ? participants.away : participants.home;
+  }
+  return null;
+}
+
+function resolveMatchParticipants(match, schedule) {
+  if (!match) return { home: '', away: '' };
+  const fallbackGroups = schedule ? schedule.groups : [];
+  let home = match.home;
+  let away = match.away;
+  if (match.seedHome) {
+    home =
+      resolveSeedName(match.seedHome, schedule) ||
+      match.placeholderHome ||
+      describeSeed(match.seedHome, fallbackGroups);
+  }
+  if (match.seedAway) {
+    away =
+      resolveSeedName(match.seedAway, schedule) ||
+      match.placeholderAway ||
+      describeSeed(match.seedAway, fallbackGroups);
+  }
+  return { home, away };
+}
 function setActiveView(view) {
   elements.tabButtons.forEach(btn => {
     const isActive = btn.dataset.view === view;
@@ -1687,6 +2675,7 @@ function applyScoreChange(matchId, side, value) {
   if (!isMatchCompleteById(matchId) && isMatchValidated(matchId)) {
     setMatchValidated(matchId, false);
   }
+  invalidateStandingsCache();
   syncScoreInputs(matchId, side, value);
   persistState();
   if (state.schedule) {
@@ -1694,6 +2683,9 @@ function applyScoreChange(matchId, side, value) {
     renderLiveRankingPanel();
     updateLiveControls();
     renderChronoScreen();
+    const teamsView = buildTeamEntriesFromSchedule(state.schedule);
+    state.schedule.teams = teamsView;
+    renderTeamView(teamsView);
   }
 }
 
@@ -1751,7 +2743,8 @@ function countMissingScores(rotationNumber) {
   const rotation = state.schedule.rotations.find(r => r.number === rotationNumber);
   if (!rotation) return 0;
   return rotation.matches.reduce((acc, match) => {
-    const key = match.id || buildMatchKey(rotation.number, match.home, match.away);
+    const participants = resolveMatchParticipants(match, state.schedule);
+    const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     return acc + (isMatchCompleteById(key) ? 0 : 1);
   }, 0);
 }
@@ -1850,93 +2843,509 @@ function playBeep() {
 }
 
 function generateSchedule(teams, options) {
-  const list = [...teams];
-  const teamCount = list.length;
-  let working = [...list];
-  const isOdd = working.length % 2 === 1;
-  if (isOdd) {
-    working.push('Exempt');
+  const format = getTournamentType();
+  if (format === 'round-robin') {
+    return buildSinglePoolSchedule(teams, options);
   }
-  const rotationCount = working.length - 1;
-  const matchesPerRotation = working.length / 2;
-  const rotations = [];
+  const groups = distributeIntoGroups(teams, { finals: format === 'groups-finals' });
+  if (!groups.length || groups.length === 1) {
+    return buildSinglePoolSchedule(teams, options);
+  }
+  return buildGroupedSchedule(groups, teams, options, { finals: format === 'groups-finals' });
+}
+
+function buildSinglePoolSchedule(teams, options) {
+  const rounds = createRoundRobinPairs(teams);
+  const entries = rounds.map((round, index) => ({
+    phase: 'single',
+    matches: round.matches.map(match => ({ ...match })),
+    byes: [...round.byes],
+    title: `Rotation ${index + 1}`,
+  }));
+  return assembleSchedule(entries, teams, options, {
+    format: 'round-robin',
+    formatLabel: TOURNAMENT_MODES['round-robin'].label,
+    groups: [],
+  });
+}
+
+function buildGroupedSchedule(groups, allTeams, options, extras = {}) {
+  const groupedRounds = groups.map(group => ({
+    ...group,
+    rounds: createRoundRobinPairs(group.teams),
+  }));
+  const groupEntries = buildParallelEntries(groupedRounds, options);
+  let finalEntries = [];
+  if (extras.finals && groups.length >= 2) {
+    finalEntries = buildFinalEntries(groups);
+  }
+  return assembleSchedule([...groupEntries, ...finalEntries], allTeams, options, {
+    format: extras.finals ? 'groups-finals' : 'groups',
+    formatLabel: extras.finals ? TOURNAMENT_MODES['groups-finals'].label : TOURNAMENT_MODES.groups.label,
+    groups,
+    finals: finalEntries.length ? { matches: finalEntries.length } : null,
+  });
+}
+
+function assembleSchedule(entries, teams, options, metaExtras) {
   const teamMap = new Map();
-  list.forEach(name => teamMap.set(name, []));
+  teams.forEach(name => teamMap.set(name, []));
+  const fieldCount = clampNumber(options.fields, 1, 16, 2);
+  const rotations = [];
   let clock = parseTime(options.startTime);
   const rotationDuration = options.duration;
   let totalMatches = 0;
+  entries.forEach((entry, rotationIndex) => {
+    const number = rotationIndex + 1;
+    const matches = entry.matches.map((match, index) => {
+      const copy = { ...match };
+      if (!copy.id) {
+        const fallbackHome = copy.home || describeSeed(copy.seedHome, metaExtras.groups);
+        const fallbackAway = copy.away || describeSeed(copy.seedAway, metaExtras.groups);
+        copy.id = buildMatchKey(number, fallbackHome || `Equipe${index + 1}`, fallbackAway || `Equipe${index + 2}`);
+      }
+      return copy;
+    });
+    const fieldAssignments = Array.from({ length: fieldCount }, (_, fieldIndex) => ({
+      label: `Terrain ${fieldIndex + 1}`,
+      matches: [],
+    }));
+    matches.forEach((match, matchIndex) => {
+      const fieldIndex = matchIndex % fieldCount;
+      const slot = Math.floor(matchIndex / fieldCount) + 1;
+      match.field = fieldIndex + 1;
+      match.order = slot;
+      fieldAssignments[fieldIndex].matches.push(match);
+      if (match.home && match.away) {
+        const homeList = teamMap.get(match.home);
+        const awayList = teamMap.get(match.away);
+        const payload = {
+          opponent: match.away,
+          rotation: number,
+          field: match.field,
+          start: clock,
+          group: match.groupLabel || entry.groupLabel,
+          phase: match.phase || entry.phase,
+        };
+        if (homeList) homeList.push(payload);
+        if (awayList) {
+          awayList.push({
+            opponent: match.home,
+            rotation: number,
+            field: match.field,
+            start: clock,
+            group: match.groupLabel || entry.groupLabel,
+            phase: match.phase || entry.phase,
+          });
+        }
+      }
+      totalMatches += 1;
+    });
+    (entry.byes || []).forEach(teamName => {
+      const ref = teamMap.get(teamName);
+      if (ref) {
+        ref.push({
+          bye: true,
+          rotation: number,
+          start: clock,
+          group: entry.groupLabel,
+          phase: entry.phase,
+        });
+      }
+    });
+    const startLabel = clock != null ? formatTime(clock) : null;
+    const endLabel = clock != null ? formatTime(clock + rotationDuration) : null;
+    rotations.push({
+      number,
+      phase: entry.phase || 'single',
+      groupId: entry.groupId || null,
+      groupLabel: entry.groupLabel || null,
+      title: entry.title || `Rotation ${number}`,
+      matches,
+      byes: entry.byes || [],
+      startLabel,
+      durationLabel: `${rotationDuration} min${endLabel ? ` · fin ${endLabel}` : ''}`,
+      fieldAssignments,
+    });
+    if (clock != null) clock += rotationDuration;
+  });
+  const meta = {
+    teamCount: teams.length,
+    rotationCount: entries.length,
+    matchCount: totalMatches,
+    fieldCount,
+    estimatedDuration: null,
+    endTime: null,
+    formatLabel: metaExtras.formatLabel,
+    groupCount: metaExtras.groups ? metaExtras.groups.length : 0,
+  };
+  return {
+    format: metaExtras.format,
+    rotations,
+    teams: Array.from(teamMap.entries()).map(([name, matches]) => ({ name, matches })),
+    meta,
+    groups: metaExtras.groups || [],
+    finals: metaExtras.finals || null,
+  };
+}
 
+function distributeIntoGroups(teamNames, options = {}) {
+  if (!Array.isArray(teamNames) || !teamNames.length) return [];
+  const teams = [...teamNames];
+  const minGroups = options.finals
+    ? Math.min(2, teams.length)
+    : teams.length >= 4
+    ? Math.min(2, teams.length)
+    : 1;
+  const maxGroups = options.finals ? Math.min(4, teams.length) : Math.min(6, teams.length);
+  const preferSize = 4;
+  const candidates = [];
+  for (let groupCount = minGroups; groupCount <= Math.max(minGroups, maxGroups); groupCount += 1) {
+    if (!groupCount) continue;
+    const base = Math.floor(teams.length / groupCount);
+    if (options.finals && groupCount < 2) continue;
+    if (!base) continue;
+    const remainder = teams.length % groupCount;
+    const sizes = Array(groupCount).fill(base);
+    for (let i = 0; i < remainder; i += 1) {
+      sizes[i] += 1;
+    }
+    if (sizes.some(size => size < 2)) {
+      continue;
+    }
+    const maxSize = Math.max(...sizes);
+    const minSize = Math.min(...sizes);
+    const imbalance = maxSize - minSize;
+    const penalty =
+      sizes.reduce((acc, size) => acc + Math.abs(size - preferSize), 0) + imbalance * (imbalance > 1 ? 3 : 1);
+    candidates.push({ groupCount, sizes, imbalance, penalty });
+  }
+  if (!candidates.length) {
+    return [
+      {
+        id: 'group-0',
+        label: 'Groupe A',
+        teams,
+      },
+    ];
+  }
+  const balanced = candidates.filter(entry => entry.imbalance <= 1);
+  const pool = balanced.length ? balanced : candidates;
+  pool.sort((a, b) => {
+    if (a.penalty !== b.penalty) return a.penalty - b.penalty;
+    return a.groupCount - b.groupCount;
+  });
+  const selection = pool[0];
+  const result = [];
+  let cursor = 0;
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  selection.sizes.forEach((size, index) => {
+    const slice = teams.slice(cursor, cursor + size);
+    cursor += size;
+    result.push({
+      id: `group-${index}`,
+      label: `Groupe ${alphabet[index] || String.fromCharCode(65 + index)}`,
+      teams: slice,
+    });
+  });
+  return result;
+}
+
+function buildParallelEntries(groupedRounds, options) {
+  const entries = [];
+  if (!groupedRounds.length) return entries;
+  const fieldCount = clampNumber(options.fields, 1, 16, 2);
+  const maxRounds = Math.max(...groupedRounds.map(group => group.rounds.length));
+  let rotationCounter = 0;
+  for (let roundIndex = 0; roundIndex < maxRounds; roundIndex += 1) {
+    const combinedMatches = [];
+    const combinedByes = [];
+    let slotMax = 0;
+    groupedRounds.forEach(group => {
+      const round = group.rounds[roundIndex];
+      if (!round) return;
+      slotMax = Math.max(slotMax, round.matches.length);
+      round.byes.forEach(team => combinedByes.push(team));
+    });
+    for (let slot = 0; slot < slotMax; slot += 1) {
+      groupedRounds.forEach(group => {
+        const round = group.rounds[roundIndex];
+        if (!round) return;
+        const match = round.matches[slot];
+        if (!match) return;
+        combinedMatches.push({
+          ...match,
+          groupId: group.id,
+          groupLabel: group.label,
+          phase: 'groups',
+        });
+      });
+    }
+    if (!combinedMatches.length && !combinedByes.length) continue;
+    if (!combinedMatches.length && combinedByes.length) {
+      rotationCounter += 1;
+      entries.push({
+        phase: 'groups',
+        title: `Rotation ${rotationCounter}`,
+        matches: [],
+        byes: combinedByes,
+        groupId: null,
+        groupLabel: null,
+      });
+      continue;
+    }
+    let chunkIndex = 0;
+    while (chunkIndex < combinedMatches.length) {
+      rotationCounter += 1;
+      const slice = combinedMatches.slice(chunkIndex, chunkIndex + fieldCount);
+      entries.push({
+        phase: 'groups',
+        title: `Rotation ${rotationCounter}`,
+        matches: slice,
+        byes: combinedByes,
+        groupId: null,
+        groupLabel: null,
+      });
+      chunkIndex += fieldCount;
+    }
+  }
+  return entries;
+}
+
+function buildFinalEntries(groups) {
+  const entries = [];
+  if (groups.length === 2) {
+    entries.push({
+      phase: 'finals',
+      title: 'Demi-finale 1',
+      matches: [
+        {
+          id: 'sf1',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[0].id, position: 1 },
+          seedAway: { type: 'group', groupId: groups[1].id, position: 2 },
+          placeholderHome: `1er ${groups[0].label}`,
+          placeholderAway: `2e ${groups[1].label}`,
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Demi-finale 2',
+      matches: [
+        {
+          id: 'sf2',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[1].id, position: 1 },
+          seedAway: { type: 'group', groupId: groups[0].id, position: 2 },
+          placeholderHome: `1er ${groups[1].label}`,
+          placeholderAway: `2e ${groups[0].label}`,
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Match pour la 3e place',
+      matches: [
+        {
+          id: 'small-final',
+          phase: 'finals',
+          seedHome: { type: 'matchLoser', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchLoser', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Perdant demi-finale 1',
+          placeholderAway: 'Perdant demi-finale 2',
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Finale',
+      matches: [
+        {
+          id: 'final',
+          phase: 'finals',
+          seedHome: { type: 'matchWinner', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchWinner', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Vainqueur demi-finale 1',
+          placeholderAway: 'Vainqueur demi-finale 2',
+        },
+      ],
+    });
+    return entries;
+  }
+  if (groups.length === 3) {
+    entries.push({
+      phase: 'finals',
+      title: 'Demi-finale 1',
+      matches: [
+        {
+          id: 'sf1',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[0].id, position: 1 },
+          seedAway: { type: 'bestRunnerUp', position: 2 },
+          placeholderHome: `1er ${groups[0].label}`,
+          placeholderAway: 'Meilleur 2e',
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Demi-finale 2',
+      matches: [
+        {
+          id: 'sf2',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[1].id, position: 1 },
+          seedAway: { type: 'group', groupId: groups[2].id, position: 1 },
+          placeholderHome: `1er ${groups[1].label}`,
+          placeholderAway: `1er ${groups[2].label}`,
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Match pour la 3e place',
+      matches: [
+        {
+          id: 'small-final',
+          phase: 'finals',
+          seedHome: { type: 'matchLoser', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchLoser', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Perdant demi-finale 1',
+          placeholderAway: 'Perdant demi-finale 2',
+        },
+      ],
+    });
+    entries.push({
+      phase: 'finals',
+      title: 'Finale',
+      matches: [
+        {
+          id: 'final',
+          phase: 'finals',
+          seedHome: { type: 'matchWinner', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchWinner', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Vainqueur demi-finale 1',
+          placeholderAway: 'Vainqueur demi-finale 2',
+        },
+      ],
+    });
+    return entries;
+  }
+  entries.push({
+    phase: 'finals',
+    title: 'Demi-finale 1',
+    matches: [
+      {
+          id: 'sf1',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[0].id, position: 1 },
+          seedAway: { type: 'group', groupId: groups[3].id, position: 1 },
+          placeholderHome: `1er ${groups[0].label}`,
+          placeholderAway: `1er ${groups[3].label}`,
+      },
+    ],
+  });
+  entries.push({
+    phase: 'finals',
+    title: 'Demi-finale 2',
+    matches: [
+      {
+          id: 'sf2',
+          phase: 'finals',
+          seedHome: { type: 'group', groupId: groups[1].id, position: 1 },
+          seedAway: { type: 'group', groupId: groups[2].id, position: 1 },
+          placeholderHome: `1er ${groups[1].label}`,
+          placeholderAway: `1er ${groups[2].label}`,
+      },
+    ],
+  });
+  entries.push({
+    phase: 'finals',
+    title: 'Match pour la 3e place',
+    matches: [
+      {
+          id: 'small-final',
+          phase: 'finals',
+          seedHome: { type: 'matchLoser', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchLoser', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Perdant demi-finale 1',
+          placeholderAway: 'Perdant demi-finale 2',
+      },
+    ],
+  });
+  entries.push({
+    phase: 'finals',
+    title: 'Finale',
+    matches: [
+      {
+          id: 'final',
+          phase: 'finals',
+          seedHome: { type: 'matchWinner', matchId: 'sf1', label: 'Demi-finale 1' },
+          seedAway: { type: 'matchWinner', matchId: 'sf2', label: 'Demi-finale 2' },
+          placeholderHome: 'Vainqueur demi-finale 1',
+          placeholderAway: 'Vainqueur demi-finale 2',
+      },
+    ],
+  });
+  return entries.map(entry => ({
+    ...entry,
+    matches: entry.matches.map(match => ({ ...match, groupLabel: 'Phase finale' })),
+  }));
+}
+
+function createRoundRobinPairs(list) {
+  if (!list.length) return [];
+  let working = [...list];
+  if (working.length % 2 === 1) {
+    working.push('Exempt');
+  }
+  const rounds = [];
+  const rotationCount = working.length - 1;
+  const matchesPerRotation = working.length / 2;
   for (let round = 0; round < rotationCount; round += 1) {
     const matches = [];
     const byes = [];
     for (let i = 0; i < matchesPerRotation; i += 1) {
       const home = working[i];
       const away = working[working.length - 1 - i];
+      if (home === 'Exempt' && away === 'Exempt') continue;
       if (home === 'Exempt') {
         if (away !== 'Exempt') byes.push(away);
-      } else if (away === 'Exempt') {
-        byes.push(home);
-      } else {
-        const matchId = buildMatchKey(round + 1, home, away);
-        matches.push({ home, away, id: matchId });
+        continue;
       }
+      if (away === 'Exempt') {
+        byes.push(home);
+        continue;
+      }
+      matches.push({ home, away });
     }
-
-    const fieldAssignments = Array.from({ length: options.fields }, (_, index) => ({
-      label: `Terrain ${index + 1}`,
-      matches: [],
-    }));
-
-    matches.forEach((match, index) => {
-      const fieldIndex = index % options.fields;
-      const slot = Math.floor(index / options.fields) + 1;
-      match.field = fieldIndex + 1;
-      match.order = slot;
-      fieldAssignments[fieldIndex].matches.push(match);
-      teamMap.get(match.home).push({ opponent: match.away, rotation: round + 1, field: match.field, start: clock });
-      teamMap.get(match.away).push({ opponent: match.home, rotation: round + 1, field: match.field, start: clock });
-      totalMatches += 1;
-    });
-
-    byes.forEach(team => {
-      teamMap.get(team).push({ bye: true, rotation: round + 1, start: clock });
-    });
-
-    const startLabel = clock != null ? formatTime(clock) : null;
-    const endLabel = clock != null ? formatTime(clock + rotationDuration) : null;
-
-    rotations.push({
-      number: round + 1,
-      matches,
-      byes,
-      startLabel,
-      durationLabel: `${rotationDuration} min${endLabel ? ` · fin ${endLabel}` : ''}`,
-      fieldAssignments,
-    });
-
+    rounds.push({ matches, byes });
     const pivot = working[0];
     const rest = working.slice(1);
     rest.unshift(rest.pop());
     working = [pivot, ...rest];
-    if (clock != null) clock += rotationDuration;
   }
+  return rounds;
+}
 
-  const estimatedDuration = rotationDuration * rotationCount;
-  const meta = {
-    teamCount,
-    rotationCount,
-    matchCount: totalMatches,
-    fieldCount: options.fields,
-    estimatedDuration: estimatedDuration ? humanizeDuration(estimatedDuration) : null,
-    endTime: parseTime(options.startTime) != null ? formatTime(parseTime(options.startTime) + estimatedDuration) : null,
-  };
-
-  const teamsView = list.map(name => ({
-    name,
-    matches: teamMap.get(name) || [],
-  }));
-
-  return { rotations, teams: teamsView, meta };
+function describeSeed(seed, groups = []) {
+  if (!seed) return '';
+  if (seed.type === 'group') {
+    const group = groups.find(item => item.id === seed.groupId);
+    const ordinal = seed.position === 1 ? '1er' : `${seed.position}e`;
+    return `${ordinal} ${group ? group.label : 'groupe'}`;
+  }
+  if (seed.type === 'bestRunnerUp') {
+    return 'Meilleur 2e';
+  }
+  if (seed.type === 'matchWinner') {
+    return `Vainqueur ${seed.label || ''}`.trim();
+  }
+  if (seed.type === 'matchLoser') {
+    return `Perdant ${seed.label || ''}`.trim();
+  }
+  return '';
 }
 
 function parseTime(value) {
@@ -1959,6 +3368,43 @@ function humanizeDuration(minutes) {
   if (!hours) return `${mins} min`;
   if (!mins) return `${hours} h`;
   return `${hours} h ${mins} min`;
+}
+
+function computeTimeSummary(schedule, options) {
+  if (!schedule || !options) return null;
+  const rotations = Array.isArray(schedule.rotations) ? schedule.rotations.length : 0;
+  const matchCount = schedule.meta ? schedule.meta.matchCount : 0;
+  const matchVolume = matchCount * options.duration;
+  const rotationBlock = rotations * options.duration;
+  const rotationGaps = Math.max(rotations - 1, 0) * options.turnaround;
+  const pauseMinutes = Math.max(0, options.breakMinutes || 0);
+  const totalMinutes = rotationBlock + rotationGaps + pauseMinutes;
+  const startMinutes = parseTime(options.startTime);
+  const estimatedEnd = startMinutes != null ? formatTime(startMinutes + totalMinutes) : null;
+  let available = null;
+  if (Number.isFinite(options.availableDuration) && options.availableDuration > 0) {
+    available = options.availableDuration;
+  } else if (options.endTime && startMinutes != null) {
+    const desiredEnd = parseTime(options.endTime);
+    if (desiredEnd != null) {
+      let diff = desiredEnd - startMinutes;
+      if (diff < 0) diff += 24 * 60;
+      available = diff;
+    }
+  }
+  let feasibility = null;
+  if (available != null) {
+    const delta = available - totalMinutes;
+    feasibility = { ok: delta >= 0, delta };
+  }
+  return {
+    matchVolume,
+    rotationGaps,
+    pauseMinutes,
+    totalMinutes,
+    estimatedEnd,
+    feasibility,
+  };
 }
 
 function formatSeconds(totalSeconds) {
@@ -2038,6 +3484,10 @@ function createDefaultState() {
       fields: 2,
       duration: 12,
       startTime: '09:00',
+      turnaround: 2,
+      breakMinutes: 0,
+      availableDuration: null,
+      endTime: '',
       timer: false,
       sound: true,
       vibration: true,
@@ -2068,11 +3518,20 @@ function sanitizeState(raw) {
     ...base,
     ...source,
   };
+  const allowedModes = Object.keys(TOURNAMENT_MODES);
+  merged.tournamentType = allowedModes.includes(source.tournamentType) ? source.tournamentType : base.tournamentType;
   merged.participants = clampNumber(Number(merged.participants), 2, 32, base.participants);
   const optionSource = { ...base.options, ...(source.options || {}) };
   optionSource.fields = clampNumber(Number(optionSource.fields), 1, 16, base.options.fields);
   optionSource.duration = clampNumber(Number(optionSource.duration), 1, 180, base.options.duration);
   optionSource.startTime = optionSource.startTime || base.options.startTime;
+  optionSource.turnaround = clampNumber(Number(optionSource.turnaround), 0, 60, base.options.turnaround);
+  optionSource.breakMinutes = clampNumber(Number(optionSource.breakMinutes), 0, 600, base.options.breakMinutes);
+  optionSource.availableDuration =
+    Number.isFinite(optionSource.availableDuration) && optionSource.availableDuration > 0
+      ? clampNumber(Number(optionSource.availableDuration), 0, 1440, optionSource.availableDuration)
+      : null;
+  optionSource.endTime = optionSource.endTime || '';
   optionSource.timer = Boolean(optionSource.timer);
   optionSource.sound = optionSource.sound !== undefined ? Boolean(optionSource.sound) : base.options.sound;
   optionSource.vibration =
@@ -2131,6 +3590,7 @@ function resetApplication() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  syncModeSelection();
   elements.summaryGrid.innerHTML = '';
   elements.rotationView.innerHTML = '';
   elements.teamView.innerHTML = '';
@@ -2138,10 +3598,13 @@ function resetApplication() {
   elements.resultSubtitle.textContent = 'Aucun planning pour le moment.';
   updatePrintHeader(null);
   setActiveView('rotations');
+  renderTimeIndicator(null);
+  updateMatchInsight(null);
   setLiveModeAvailability(false);
   elements.regenerateBtn.disabled = true;
   timerController.hide();
   hideFinalRankingModal();
+  invalidateStandingsCache();
   goTo('landing');
 }
 
@@ -2174,3 +3637,8 @@ function setLiveModeAvailability(enabled) {
     elements.liveChronoBtn.disabled = !enabled;
   }
 }
+  const perFieldNumber =
+    Number.isFinite(totalMatches) && Number.isFinite(totalFields) && totalFields > 0
+      ? totalMatches / totalFields
+      : null;
+  const perFieldLabel = formatMatchesDisplay(perFieldNumber);
