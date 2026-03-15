@@ -211,6 +211,14 @@
                   <input type="number" id="fieldCount" min="1" max="16" value="2" />
                 </label>
                 <label class="field">
+                  <span>Organisation des matchs</span>
+                  <select id="schedulingMode">
+                    <option value="pedagogique">Répartition pédagogique</option>
+                    <option value="optimise_terrains">Optimiser l’utilisation des terrains</option>
+                  </select>
+                  <small class="field-hint">Choisissez une répartition avec plus de repos ou un tournoi plus dense avec terrains occupés au maximum.</small>
+                </label>
+                <label class="field">
                   <span>Format de match</span>
                   <select id="matchMode">
                     <option value="time">Au temps</option>
@@ -240,14 +248,6 @@
                 <label class="field">
                   <span>Temps de rotation entre matchs (minutes)</span>
                   <input type="number" id="rotationBuffer" min="0" max="30" value="2" />
-                </label>
-                <label class="field">
-                  <span>Mode de planification</span>
-                  <select id="schedulingMode">
-                    <option value="pedagogique">Pédagogique (répartition par rounds)</option>
-                    <option value="optimise_terrains">Optimiser l'occupation des terrains</option>
-                  </select>
-                  <small class="field-hint">Le mode optimisé remplit les terrains au maximum tout en respectant les temps de repos.</small>
                 </label>
                 <label class="field">
                   <span>Pause globale (hydratation / regroupement)</span>
@@ -518,13 +518,13 @@
           <button class="btn ghost small" id="finalRankingCloseBtn" aria-label="Fermer">Fermer</button>
         </header>
         <div id="finalRankingTable" class="final-ranking-table"></div>
-            <div class="modal-actions">
-              <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
-              <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
-              <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
-            </div>
-          </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
+          <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
+          <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
         </div>
+      </div>
+    </div>
 
     <button class="help-fab" id="helpBtn" aria-label="Aide rapide">❓</button>
 
@@ -548,10 +548,26 @@
             </div>
             <ul class="help-list">
               <li>Saisissez participants, terrains, durée de match, heure de début et pratique.</li>
-              <li>Activez directement Arbitre / Table si besoin, puis « Générer rapidement ».</li>
+              <li>Activez directement Arbitre / Table si besoin, puis « Générer rapidement ».</li>
               <li>Vous pouvez affiner ensuite dans les options avancées (chrono, pauses, simulation).</li>
             </ul>
           </article>
+
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">🧭</span>
+              <div>
+                <p class="help-section-eyebrow">Organisation des matchs</p>
+                <h4>Choisir le bon mode</h4>
+              </div>
+            </div>
+            <ul class="help-list">
+              <li><strong>Répartition pédagogique</strong> : les équipes alternent davantage entre match et repos pour garder une organisation plus lisible.</li>
+              <li><strong>Optimiser l’utilisation des terrains</strong> : le système remplit les terrains au maximum pour réduire la durée totale du tournoi.</li>
+              <li>Ce réglage se trouve dans les paramètres terrain, juste à côté du nombre de terrains.</li>
+            </ul>
+          </article>
+
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">🏅</span>
@@ -561,11 +577,12 @@
               </div>
             </div>
             <ul class="help-list">
-              <li>Choisissez « Sport collectif » ou « Sport de raquette » dans les options Essentiel.</li>
+              <li>Choisissez « Sport collectif » ou « Sport de raquette » dans les options Essentiel.</li>
               <li>L’app ajuste automatiquement les libellés (équipes/participants) et les tableaux.</li>
-              <li>Au format raquette, vous pouvez passer en match « au score cible » (11, 15 pts…).</li>
+              <li>Au format raquette, vous pouvez passer en match « au score cible » (11, 15 pts…).</li>
             </ul>
           </article>
+
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">🎯</span>
@@ -575,11 +592,12 @@
               </div>
             </div>
             <ul class="help-list">
-              <li>Activez les rôles dans les options (ou via le mode rapide pour Arbitre / Table de marque) puis cochez ceux qui vous intéressent.</li>
-              <li>Par défaut, aucun rôle n’est activé. Dans le mode EPS rapide, seuls Arbitre et Table de marque sont proposés ; Coach reste disponible uniquement dans les options avancées.</li>
+              <li>Activez les rôles dans les options avancées, ou via le mode rapide pour Arbitre / Table de marque, puis cochez ceux qui vous intéressent.</li>
+              <li>Par défaut, aucun rôle n’est activé. Dans le mode EPS rapide, seuls Arbitre et Table de marque sont proposés ; Coach reste disponible uniquement dans les options avancées.</li>
               <li>Les équipes/participants disponibles sont affectés automatiquement et les rôles s’affichent sous chaque terrain.</li>
             </ul>
           </article>
+
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">🎮</span>
@@ -589,21 +607,22 @@
               </div>
             </div>
             <ul class="help-list">
-              <li>Saisissez/validez les scores, suivez la rotation active/la suivante et les rôles affichés sur chaque terrain.</li>
-              <li>Le bouton « Terminer le tournoi » reste accessible : confirmation, puis classement final immédiat.</li>
-              <li>Le chrono intégré peut passer en plein écran pour afficher temps restant et matches en cours.</li>
+              <li>Saisissez/validez les scores, suivez la rotation active, la suivante et les rôles affichés sur chaque terrain.</li>
+              <li>Le bouton « Terminer le tournoi » reste accessible : confirmation, puis classement final immédiat.</li>
+              <li>Le chrono intégré peut passer en plein écran pour afficher le temps restant et les matchs en cours.</li>
             </ul>
           </article>
+
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">📺</span>
               <div>
                 <p class="help-section-eyebrow">Projection & impression</p>
-              <h4>Informer élèves et arbitres</h4>
+                <h4>Informer élèves et arbitres</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
+              <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
               <li>Le bouton Imprimer génère un PDF noir & blanc (résumé, rotations, rôles, classements) prêt à distribuer.</li>
               <li>Utilisez cette fiche pour briefer arbitres et table de marque avant la séance.</li>
             </ul>
