@@ -30,7 +30,7 @@
         </div>
         <div class="step" data-step="count">
           <span class="step-index">2</span>
-          <span class="step-label">Équipes</span>
+          <span class="step-label">Équipes / participants</span>
         </div>
         <div class="step" data-step="teams">
           <span class="step-index">3</span>
@@ -48,30 +48,67 @@
 
       <main class="screen-stack" id="screens">
         <section class="screen active" data-screen="landing">
-        <div class="hero-card">
+          <div class="landing-card">
+            <p class="landing-eyebrow">EPS · Terrain</p>
             <h1>PouleManager</h1>
-            <div class="hero-benefits" aria-label="Bénéfices principaux">
-              <article>
-                <h3>Créer</h3>
-                <p>Configurer un tournoi complet en moins d’une minute.</p>
-              </article>
-              <article>
-                <h3>Gérer</h3>
-                <p>Rotations claires, répartition terrain et mode live.</p>
-              </article>
-              <article>
-                <h3>Suivre</h3>
-                <p>Saisir les scores, voir le classement et lancer le chrono.</p>
-              </article>
-              <article>
-                <h3>Partager</h3>
-                <p>Imprimer un planning propre ou diffuser en PDF.</p>
-              </article>
+            <p class="landing-subtitle">Organiser un tournoi EPS en moins d’une minute</p>
+            <div class="landing-actions">
+              <button class="btn primary" id="startFlow">Créer un tournoi</button>
+              <button class="btn secondary" id="resumeFlow">Reprendre</button>
+              <button class="btn ghost" id="quickModeBtn">Mode EPS rapide</button>
             </div>
-            <div class="cta-group">
-              <button class="btn primary" id="startFlow">Commencer</button>
-              <button class="btn secondary" id="resumeFlow">Reprendre la dernière configuration</button>
+            <p class="landing-hint">Besoin d’aide&nbsp;? Ouvrez l’aide rapide ou basculez en mode projection depuis les résultats.</p>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="quick">
+          <header class="screen-header">
+            <p class="eyebrow">Mode EPS rapide</p>
+            <h2>Configuration express terrain</h2>
+            <p>Renseignez les infos essentielles pour lancer tout de suite votre tournoi.</p>
+          </header>
+          <form class="quick-grid" id="quickForm">
+            <label class="field">
+              <span>Nombre d’équipes / participants</span>
+              <input type="number" id="quickParticipants" min="2" max="32" value="8" />
+            </label>
+            <label class="field">
+              <span>Nombre de terrains</span>
+              <input type="number" id="quickFields" min="1" max="16" value="2" />
+            </label>
+            <label class="field">
+              <span>Durée d’un match (minutes)</span>
+              <input type="number" id="quickDuration" min="1" max="60" value="7" />
+            </label>
+            <label class="field">
+              <span>Heure de début (optionnel)</span>
+              <input type="time" id="quickStartTime" />
+            </label>
+            <label class="field">
+              <span>Type d’activité</span>
+              <select id="quickPractice">
+                <option value="sport-co">Sport collectif</option>
+                <option value="raquette">Sport de raquette</option>
+              </select>
+            </label>
+          </form>
+          <div class="quick-roles" aria-labelledby="quickRolesTitle">
+            <p class="quick-roles-title" id="quickRolesTitle">Rôles EPS (optionnel)</p>
+            <p class="quick-roles-hint">Activez uniquement les rôles nécessaires pour la rotation en cours.</p>
+            <div class="quick-roles-grid">
+              <label class="quick-role-option">
+                <input type="checkbox" id="quickRoleReferee" />
+                <span>Arbitre</span>
+              </label>
+              <label class="quick-role-option">
+                <input type="checkbox" id="quickRoleTable" />
+                <span>Table de marque</span>
+              </label>
             </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn ghost" data-nav="landing">Retour</button>
+            <button class="btn primary" id="quickGenerateBtn">Générer rapidement</button>
           </div>
         </section>
 
@@ -112,12 +149,12 @@
         <section class="screen" data-screen="count">
           <header class="screen-header">
             <p class="eyebrow">Étape 2</p>
-            <h2>Nombre d'équipes</h2>
+            <h2 id="countTitle">Nombre d’équipes / participants</h2>
           </header>
           <div class="counter-card">
-            <button class="circle" id="countMinus" aria-label="Moins d'équipes">−</button>
+            <button class="circle" id="countMinus" aria-label="Moins d’équipes / participants">−</button>
             <div class="counter-value" id="teamCountDisplay">8</div>
-            <button class="circle" id="countPlus" aria-label="Plus d'équipes">+</button>
+            <button class="circle" id="countPlus" aria-label="Plus d’équipes / participants">+</button>
           </div>
           <label class="slider-field">
             <span>Ajuster avec le slider</span>
@@ -132,14 +169,14 @@
         <section class="screen" data-screen="teams">
           <header class="screen-header">
             <p class="eyebrow">Étape 3</p>
-            <h2>Noms des équipes</h2>
-            <p>Personnalisez chaque équipe. Laissez vide pour garder un nom par défaut.</p>
+            <h2 id="teamTitle">Noms des équipes</h2>
+            <p id="teamSubtitle">Personnalisez chaque équipe. Laissez vide pour garder un nom par défaut.</p>
           </header>
           <div class="team-tools">
             <button class="btn secondary" id="autoFillTeams">Remplissage automatique</button>
             <div class="bulk-import">
               <label for="teamBulkInput">Coller une liste de noms (un par ligne)</label>
-              <textarea id="teamBulkInput" rows="4" placeholder="Équipe A&#10;Équipe B&#10;Équipe C"></textarea>
+              <textarea id="teamBulkInput" rows="4" placeholder="Équipe A&#10;Équipe B&#10;Participant C"></textarea>
               <button class="btn primary" id="applyBulkNames">Appliquer la liste</button>
             </div>
           </div>
@@ -156,25 +193,61 @@
             <h2>Options d'organisation</h2>
           </header>
           <div class="options-layout">
-            <div class="options-group">
+            <section class="options-essential">
+              <header>
+                <p class="eyebrow">Essentiel</p>
+                <h3>Paramètres terrain</h3>
+              </header>
               <div class="form-grid compact">
                 <label class="field">
-                  <span>Nombre de terrains / tables</span>
+                  <span>Type de pratique</span>
+                  <select id="practiceType">
+                    <option value="sport-co">Sport collectif</option>
+                    <option value="raquette">Sport de raquette</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Nombre de terrains</span>
                   <input type="number" id="fieldCount" min="1" max="16" value="2" />
                 </label>
                 <label class="field">
+                  <span>Format de match</span>
+                  <select id="matchMode">
+                    <option value="time">Au temps</option>
+                    <option value="score">Au score cible</option>
+                  </select>
+                </label>
+                <label class="field" id="matchDurationField">
                   <span>Durée moyenne d'un match (minutes)</span>
                   <input type="number" id="matchDuration" min="1" max="180" value="12" />
+                </label>
+                <label class="field hidden" id="scoreTargetField">
+                  <span>Score cible (points)</span>
+                  <input type="number" id="scoreTarget" min="1" max="50" value="11" />
                 </label>
                 <label class="field">
                   <span>Heure de début</span>
                   <input type="time" id="startTime" value="09:00" />
                 </label>
               </div>
+            </section>
+            <details class="options-advanced" id="optionsAdvanced">
+              <summary>
+                <span>Options avancées</span>
+                <small>Temps tampon, créneaux et préférences</small>
+              </summary>
               <div class="form-grid compact">
                 <label class="field">
                   <span>Temps de rotation entre matchs (minutes)</span>
                   <input type="number" id="rotationBuffer" min="0" max="30" value="2" />
+                </label>
+                <label class="field">
+                  <span>Mode de planification</span>
+                  <select id="schedulingMode">
+                    <option value="pedagogique">Pédagogique (répartition par rounds)</option>
+                    <option value="optimise_terrains">Optimiser l'occupation des terrains</option>
+                  </select>
+                  <small class="field-hint">Le mode optimisé remplit les terrains au maximum tout en respectant les temps de repos.</small>
                 </label>
                 <label class="field">
                   <span>Pause globale (hydratation / regroupement)</span>
@@ -189,21 +262,10 @@
                   <span>Heure de fin souhaitée</span>
                   <input type="time" id="endTime" />
                 </label>
-              </div>
-              <div class="options-inline">
-                <label class="field switch emphasis">
+                <label class="field switch">
                   <span>Activer le chronomètre</span>
                   <input type="checkbox" id="timerToggle" />
                 </label>
-                <p class="inline-hint">Le chrono reste disponible en live et dans le widget flottant.</p>
-              </div>
-            </div>
-            <details class="options-advanced" id="optionsAdvanced">
-              <summary>
-                <span>Options avancées</span>
-                <small>Son, vibration et préférences live</small>
-              </summary>
-              <div class="form-grid compact">
                 <label class="field switch">
                   <span>Son</span>
                   <input type="checkbox" id="soundToggle" checked />
@@ -212,6 +274,40 @@
                   <span>Vibration</span>
                   <input type="checkbox" id="vibrationToggle" checked />
                 </label>
+                <div class="field roles-field">
+                  <div class="roles-field-head">
+                    <div>
+                      <span>Rôles EPS</span>
+                      <small class="field-hint">Arbitre et table de marque sont attribués automatiquement aux équipes / participants au repos. Coach reste optionnel.</small>
+                    </div>
+                    <label class="switch inline">
+                      <span>Afficher</span>
+                      <input type="checkbox" id="roleToggle" />
+                    </label>
+                  </div>
+                  <div class="roles-options disabled" id="roleOptions">
+                    <label class="role-option">
+                      <input type="checkbox" value="arbitre" data-role-choice />
+                      <span>Arbitre</span>
+                    </label>
+                    <label class="role-option">
+                      <input type="checkbox" value="table" data-role-choice />
+                      <span>Table de marque</span>
+                    </label>
+                    <label class="role-option">
+                      <input type="checkbox" value="coach" data-role-choice />
+                      <span>Coach</span>
+                    </label>
+                  </div>
+                  <div class="coach-mode disabled" id="coachModeRow">
+                    <label for="coachRoleMode">Mode coach</label>
+                    <select id="coachRoleMode">
+                      <option value="disabled">Désactivé</option>
+                      <option value="self">Dans sa propre équipe</option>
+                      <option value="rest">Attribué à une équipe au repos</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </details>
           </div>
@@ -263,7 +359,7 @@
           </div>
           <div class="view-toggle" role="tablist">
             <button class="tab active" data-view="rotations" role="tab" aria-controls="rotationView">Rotations</button>
-            <button class="tab" data-view="teams" role="tab" aria-controls="teamView">Par équipe</button>
+            <button class="tab" data-view="teams" role="tab" aria-controls="teamView" id="teamTabButton">Par équipe</button>
             <button class="tab" data-view="rankings" role="tab" aria-controls="rankingView">Classement</button>
           </div>
           <section class="view" id="rotationView"></section>
@@ -275,7 +371,7 @@
           <div class="live-shell" id="liveShell">
             <header class="live-header">
               <div class="live-header-block">
-                <p class="eyebrow">Mode live premium</p>
+                <p class="eyebrow">Mode live terrain</p>
                 <h2 id="liveRotationTitle">Rotation</h2>
                 <p id="liveMeta" class="live-meta"></p>
                 <p id="liveStatus" class="live-status"></p>
@@ -283,7 +379,7 @@
               <div class="live-header-actions">
                 <button class="btn ghost small" id="liveActionsToggle" aria-expanded="false" aria-controls="liveActionsPanel">Options live</button>
                 <div class="live-actions-panel hidden" id="liveActionsPanel">
-                  <button class="btn ghost small" id="liveModeToggle">Mode écran</button>
+                  <button class="btn ghost small" id="liveModeToggle">Mode projection</button>
                   <button class="btn ghost small" id="liveChronoBtn">Mode chrono</button>
                   <button class="btn ghost small" id="liveBackBtn">Retour au planning</button>
                 </div>
@@ -308,6 +404,11 @@
                 </div>
               </section>
               <section class="live-matches">
+                <header class="live-now-header">
+                  <p class="eyebrow">Rotation en cours</p>
+                  <h3 id="liveNowLabel">Terrains en jeu</h3>
+                </header>
+                <div class="live-field-board" id="liveFieldBoard"></div>
                 <div id="liveRotationContent" aria-live="polite"></div>
                 <section class="live-next hidden" id="liveNextRotation" aria-live="polite">
                   <header>
@@ -321,7 +422,7 @@
                 <header>
                   <div>
                     <p class="eyebrow">Classement live</p>
-                    <h3>Pos · Équipe · Pts</h3>
+                    <h3 id="liveRankingTitle">Pos · Équipe · Pts</h3>
                   </div>
                   <button class="btn ghost small" id="liveRankingPanelBtn">Vue complète</button>
                 </header>
@@ -333,6 +434,24 @@
               <div class="control-group primary">
                 <button class="btn secondary xl" id="liveFinishBtn">Terminer le tournoi</button>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen projection-screen" data-screen="projection">
+          <div class="projection-shell">
+            <header>
+              <div>
+                <p class="eyebrow">Affichage projection</p>
+                <h2 id="projectionRotation">Rotation -- / --</h2>
+              </div>
+              <button class="btn ghost" id="projectionBackBtn">Retour live</button>
+            </header>
+            <div class="projection-body">
+              <div class="projection-timer" id="projectionTimer">--:--</div>
+              <div class="projection-fields" id="projectionFields"></div>
+              <section class="projection-next" id="projectionNext"></section>
+              <section class="projection-rest" id="projectionRest"></section>
             </div>
           </div>
         </section>
@@ -356,7 +475,7 @@
               <p class="chrono-state" id="chronoStateLabel">Inactif</p>
               <p class="chrono-meta" id="chronoMatchMeta">Activez le chronomètre dans les options pour commencer.</p>
               <div class="chrono-matches" id="chronoMatches"></div>
-              <p class="chrono-rest hidden" id="chronoRest"></p>
+              <div class="chrono-rest hidden" id="chronoRest"></div>
               <div class="chrono-controls">
                 <button class="btn secondary xl" id="chronoStartBtn">Start</button>
                 <button class="btn secondary xl" id="chronoPauseBtn">Pause</button>
@@ -421,72 +540,72 @@
         <div class="help-grid" id="helpContent">
           <article class="help-section">
             <div class="help-section-head">
-              <span class="help-icon" aria-hidden="true">🏆</span>
+              <span class="help-icon" aria-hidden="true">⚡️</span>
               <div>
-                <p class="help-section-eyebrow">Formats de tournoi</p>
-                <h4>Choisir la bonne formule</h4>
+                <p class="help-section-eyebrow">Mode EPS rapide</p>
+                <h4>Démarrer en moins d’une minute</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li><strong>Poule unique :</strong> toutes les équipes s’affrontent, classement unique.</li>
-              <li><strong>Groupes :</strong> plusieurs poules en parallèle avec classement par groupe.</li>
-              <li><strong>Groupes + finales :</strong> phase de groupes puis demi-finales / finale automatiques.</li>
+              <li>Saisissez participants, terrains, durée de match, heure de début et pratique.</li>
+              <li>Activez directement Arbitre / Table si besoin, puis « Générer rapidement ».</li>
+              <li>Vous pouvez affiner ensuite dans les options avancées (chrono, pauses, simulation).</li>
             </ul>
           </article>
           <article class="help-section">
             <div class="help-section-head">
-              <span class="help-icon" aria-hidden="true">⏱</span>
+              <span class="help-icon" aria-hidden="true">🏅</span>
               <div>
-                <p class="help-section-eyebrow">Organisation</p>
-                <h4>Paramétrer son tournoi</h4>
+                <p class="help-section-eyebrow">Sport collectif / raquette</p>
+                <h4>Adapter les libellés</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Indiquez les terrains disponibles et la durée d’un match.</li>
-              <li>Prévoyez un temps de rotation entre matchs + une pause globale.</li>
-              <li>Fixez une heure de début et, si besoin, un créneau disponible.</li>
+              <li>Choisissez « Sport collectif » ou « Sport de raquette » dans les options Essentiel.</li>
+              <li>L’app ajuste automatiquement les libellés (équipes/participants) et les tableaux.</li>
+              <li>Au format raquette, vous pouvez passer en match « au score cible » (11, 15 pts…).</li>
             </ul>
           </article>
           <article class="help-section">
             <div class="help-section-head">
-              <span class="help-icon" aria-hidden="true">📊</span>
+              <span class="help-icon" aria-hidden="true">🎯</span>
               <div>
-                <p class="help-section-eyebrow">Simulation</p>
-                <h4>Vérifier la faisabilité</h4>
+                <p class="help-section-eyebrow">Rôles EPS</p>
+                <h4>Arbitre · Table de marque · Coach</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Le bouton « Simuler » estime matchs, temps total et fin prévue.</li>
-              <li>Analyse pédagogique automatique : matchs/équipe, temps de jeu, engagement.</li>
-              <li>Adaptez la durée, le nombre d’équipes ou les terrains si besoin.</li>
+              <li>Activez les rôles dans les options (ou via le mode rapide pour Arbitre / Table de marque) puis cochez ceux qui vous intéressent.</li>
+              <li>Par défaut, aucun rôle n’est activé. Dans le mode EPS rapide, seuls Arbitre et Table de marque sont proposés ; Coach reste disponible uniquement dans les options avancées.</li>
+              <li>Les équipes/participants disponibles sont affectés automatiquement et les rôles s’affichent sous chaque terrain.</li>
             </ul>
           </article>
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">🎮</span>
               <div>
-                <p class="help-section-eyebrow">Mode live</p>
+                <p class="help-section-eyebrow">Live & clôture</p>
                 <h4>Piloter sur le terrain</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Saisissez les scores en direct et validez les matchs.</li>
-              <li>Suivez la rotation active, la suivante et les équipes au repos.</li>
-              <li>Contrôlez le chronomètre ou passez en mode chrono plein écran.</li>
+              <li>Saisissez/validez les scores, suivez la rotation active/la suivante et les rôles affichés sur chaque terrain.</li>
+              <li>Le bouton « Terminer le tournoi » reste accessible : confirmation, puis classement final immédiat.</li>
+              <li>Le chrono intégré peut passer en plein écran pour afficher temps restant et matches en cours.</li>
             </ul>
           </article>
           <article class="help-section">
             <div class="help-section-head">
               <span class="help-icon" aria-hidden="true">📺</span>
               <div>
-                <p class="help-section-eyebrow">Projection écran</p>
-                <h4>Partager les infos</h4>
+                <p class="help-section-eyebrow">Projection & impression</p>
+              <h4>Informer élèves et arbitres</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Utilisez le mode live ou le mode chrono pour diffuser sur TV / vidéoprojecteur.</li>
-              <li>Le planning et le classement restent lisibles à distance.</li>
-              <li>Le bouton Imprimer génère un PDF propre à distribuer.</li>
+              <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
+              <li>Le bouton Imprimer génère un PDF noir & blanc (résumé, rotations, rôles, classements) prêt à distribuer.</li>
+              <li>Utilisez cette fiche pour briefer arbitres et table de marque avant la séance.</li>
             </ul>
           </article>
         </div>
