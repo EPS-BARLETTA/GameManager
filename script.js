@@ -63,6 +63,181 @@ function getPracticeTypeFromMeta(meta) {
   return state.practiceType || 'sport-co';
 }
 
+const LETTER_REGEX = /\p{L}/u;
+const COMMON_FIRST_NAMES = new Set(
+  [
+    'leo',
+    'léo',
+    'lea',
+    'léa',
+    'ines',
+    'inès',
+    'emma',
+    'noah',
+    'lena',
+    'léna',
+    'luna',
+    'maelys',
+    'maëlys',
+    'marie',
+    'julie',
+    'julien',
+    'camille',
+    'manon',
+    'romain',
+    'paul',
+    'arthur',
+    'nathan',
+    'theo',
+    'théo',
+    'hugo',
+    'maxime',
+    'antoine',
+    'alexandre',
+    'anais',
+    'anaïs',
+    'chloe',
+    'chloé',
+    'jean',
+    'louis',
+    'baptiste',
+    'emilie',
+    'émilie',
+    'clara',
+    'juliette',
+    'axel',
+    'lou',
+    'maël',
+    'mael',
+    'enzo',
+    'nina',
+    'gael',
+    'gaël',
+    'sarah',
+    'eva',
+    'éva',
+    'tom',
+    'lise',
+    'romane',
+    'justine',
+    'quentin',
+    'lucas',
+    'luca',
+    'ines',
+  ].map(name => name.toLowerCase())
+);
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function removeDiacritics(value) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function isAllCapsWord(word) {
+  if (!word) return false;
+  const letters = removeDiacritics(word).replace(/[^A-Za-z]/g, '');
+  if (!letters) return false;
+  return letters === letters.toUpperCase();
+}
+
+function capitalizeComposite(value) {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .split(/([\s\-'])/u)
+    .map(segment => {
+      if (!segment) return '';
+      if (/^[\s\-']$/u.test(segment)) return segment;
+      return segment.charAt(0).toUpperCase() + segment.slice(1);
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasLetters(value) {
+  return LETTER_REGEX.test(value || '');
+}
+
+function computeFirstNameScore(token) {
+  if (!token) return 0;
+  const normalized = token.toLowerCase();
+  let score = 0;
+  if (COMMON_FIRST_NAMES.has(normalized)) score += 2.5;
+  if (token.includes('-')) score += 0.75;
+  if (/[àáâäãåçéèêëîïôöùûüÿ]/i.test(token)) score += 0.6;
+  if (/[aeiouy]$/i.test(normalized)) score += 0.4;
+  if (normalized.length <= 4) score += 0.3;
+  if (isAllCapsWord(token)) score -= 1;
+  return score;
+}
+
+function determineNameOrder(firstToken, lastToken) {
+  const firstUpper = isAllCapsWord(firstToken);
+  const lastUpper = isAllCapsWord(lastToken);
+  if (firstUpper && !lastUpper) return 'last-first';
+  if (!firstUpper && lastUpper) return 'first-last';
+  const firstScore = computeFirstNameScore(firstToken);
+  const lastScore = computeFirstNameScore(lastToken);
+  if (lastScore - firstScore >= 0.4) return 'last-first';
+  return 'first-last';
+}
+
+function formatRaquetteDisplayName(raw) {
+  if (!raw) return '';
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  const shortPattern = /^([\p{L}\-'\s]+)\s+([\p{L}])\.$/u;
+  const shortMatch = cleaned.match(shortPattern);
+  if (shortMatch) {
+    const prettyFirst = capitalizeComposite(shortMatch[1]);
+    const initial = shortMatch[2].toUpperCase();
+    return `${prettyFirst} ${initial}.`;
+  }
+  const tokens = cleaned.split(' ').filter(Boolean);
+  const alphaTokens = tokens.filter(hasLetters);
+  if (alphaTokens.length < 2) {
+    return capitalizeComposite(cleaned);
+  }
+  let order = 'first-last';
+  if (tokens.length >= 2) {
+    order = determineNameOrder(tokens[0], tokens[tokens.length - 1]);
+  }
+  let firstParts;
+  let lastPart;
+  if (order === 'last-first') {
+    lastPart = tokens[0];
+    firstParts = tokens.slice(1);
+  } else {
+    lastPart = tokens[tokens.length - 1];
+    firstParts = tokens.slice(0, -1);
+  }
+  if (!firstParts.length) {
+    firstParts = [lastPart];
+    lastPart = tokens[0];
+  }
+  const firstName = capitalizeComposite(firstParts.join(' '));
+  const normalizedLast = capitalizeComposite(lastPart);
+  const lastInitialMatch = normalizedLast.match(/\p{L}/u);
+  if (!lastInitialMatch) return firstName;
+  const lastInitial = removeDiacritics(lastInitialMatch[0]).charAt(0).toUpperCase();
+  return `${firstName} ${lastInitial}.`;
+}
+
+function formatNameForPractice(name, practiceType, index, fallbackLabel) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return '';
+  if (practiceType === 'raquette') {
+    const fallbackPattern = new RegExp(`^${escapeRegExp(fallbackLabel)}\\s+\\d+$`, 'i');
+    if (fallbackPattern.test(trimmed)) return trimmed;
+    const formatted = formatRaquetteDisplayName(trimmed);
+    return formatted || trimmed;
+  }
+  return trimmed;
+}
+
 function getRoleSettings() {
   const source = state.options && state.options.roleSettings ? state.options.roleSettings : DEFAULT_ROLE_SETTINGS;
   return {
@@ -82,6 +257,30 @@ function getActiveRestRoles() {
   if (settings.table) roles.push('table');
   if (settings.coach && settings.coachMode === 'rest') roles.push('coach');
   return roles;
+}
+
+const AUTO_SELECT_IDS = [
+  'quickParticipants',
+  'quickFields',
+  'quickDuration',
+  'fieldCount',
+  'matchDuration',
+  'scoreTarget',
+  'rotationBuffer',
+  'breakDuration',
+  'availableDuration',
+];
+
+function setupAutoSelectInputs() {
+  AUTO_SELECT_IDS.forEach(id => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('focus', () => {
+      requestAnimationFrame(() => {
+        input.select();
+      });
+    });
+  });
 }
 
 function formatRestRole(roleKey) {
@@ -131,7 +330,7 @@ const elements = {
   breakDuration: document.getElementById('breakDuration'),
   availableDuration: document.getElementById('availableDuration'),
   endTime: document.getElementById('endTime'),
-  schedulingMode: document.getElementById('schedulingMode'),
+  schedulingModeInputs: document.querySelectorAll('input[name="schedulingMode"]'),
   practiceTypeSelect: document.getElementById('practiceType'),
   matchModeSelect: document.getElementById('matchMode'),
   scoreTargetInput: document.getElementById('scoreTarget'),
@@ -140,6 +339,8 @@ const elements = {
   simulateBtn: document.getElementById('simulateBtn'),
   simulationResult: document.getElementById('simulationResult'),
   resetOptionsBtn: document.getElementById('resetOptionsBtn'),
+  resultsProjectionBtn: document.getElementById('resultsProjectionBtn'),
+  resultsChronoBtn: document.getElementById('resultsChronoBtn'),
   resetFeedback: document.getElementById('resetFeedback'),
   timerToggle: document.getElementById('timerToggle'),
   soundToggle: document.getElementById('soundToggle'),
@@ -357,6 +558,7 @@ function init() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  setupAutoSelectInputs();
   syncModeSelection();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
@@ -403,6 +605,20 @@ function bindNavigation() {
     state.teamNames[idx] = event.target.value;
     persistState();
   });
+  elements.teamFields.addEventListener(
+    'blur',
+    event => {
+      if (!event.target.matches('input[data-index]')) return;
+      if (state.practiceType !== 'raquette') return;
+      const idx = Number(event.target.dataset.index);
+      const fallbackLabel = formatParticipantLabel({ practiceType: state.practiceType, capitalized: true });
+      const formatted = formatNameForPractice(event.target.value, state.practiceType, idx, fallbackLabel);
+      state.teamNames[idx] = formatted;
+      event.target.value = formatted;
+      persistState();
+    },
+    true
+  );
   if (elements.quickGenerateBtn) {
     elements.quickGenerateBtn.addEventListener('click', handleQuickGenerate);
   }
@@ -450,11 +666,14 @@ function bindNavigation() {
     event.target.value = state.options.turnaround;
     persistState();
   });
-  if (elements.schedulingMode) {
-    elements.schedulingMode.addEventListener('change', event => {
-      const value = event.target.value === 'optimise_terrains' ? 'optimise_terrains' : 'pedagogique';
-      state.options.schedulingMode = value;
-      persistState();
+  if (elements.schedulingModeInputs && elements.schedulingModeInputs.length) {
+    elements.schedulingModeInputs.forEach(input => {
+      input.addEventListener('change', event => {
+        if (!event.target.checked) return;
+        const value = event.target.value === 'optimise_terrains' ? 'optimise_terrains' : 'pedagogique';
+        state.options.schedulingMode = value;
+        persistState();
+      });
     });
   }
 
@@ -706,6 +925,19 @@ function bindNavigation() {
   if (elements.resetOptionsBtn) {
     elements.resetOptionsBtn.addEventListener('click', handleOptionsReset);
   }
+  if (elements.resultsProjectionBtn) {
+    elements.resultsProjectionBtn.addEventListener('click', () => {
+      if (!state.schedule) return;
+      openProjectionScreen();
+    });
+  }
+  if (elements.resultsChronoBtn) {
+    elements.resultsChronoBtn.addEventListener('click', () => {
+      if (!state.schedule) return;
+      goTo('chrono');
+      renderChronoScreen();
+    });
+  }
   if (elements.recommendBtn) {
     elements.recommendBtn.addEventListener('click', handleRecommendationRequest);
   }
@@ -912,8 +1144,11 @@ function syncOptionInputs() {
   elements.timerToggle.checked = state.options.timer;
   elements.soundToggle.checked = state.options.sound;
   elements.vibrationToggle.checked = state.options.vibration;
-  if (elements.schedulingMode) {
-    elements.schedulingMode.value = state.options.schedulingMode || 'pedagogique';
+  if (elements.schedulingModeInputs && elements.schedulingModeInputs.length) {
+    const mode = state.options.schedulingMode || 'pedagogique';
+    elements.schedulingModeInputs.forEach(input => {
+      input.checked = input.value === mode;
+    });
   }
   if (elements.practiceTypeSelect) {
     elements.practiceTypeSelect.value = state.practiceType || 'sport-co';
@@ -1030,39 +1265,85 @@ function renderResults(schedule, options = {}) {
 }
 
 function renderSummary(meta) {
-  const cards = [];
   const practiceType = getPracticeTypeFromMeta(meta);
-  cards.push({ label: 'Format', value: meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label });
-  const participantLabel = formatParticipantLabel({ practiceType, plural: true, capitalized: true });
-  cards.push({ label: participantLabel, value: meta.teamCount });
-  if (meta.groupCount) cards.push({ label: 'Groupes', value: meta.groupCount });
-  cards.push({ label: 'Tours de jeu', value: meta.rotationCount });
-  cards.push({ label: 'Matchs au total', value: meta.matchCount });
-  const fieldLabel = formatFieldLabel({ practiceType, plural: true, capitalized: true });
-  cards.push({ label: fieldLabel, value: meta.fieldCount });
+  const participantLabel = formatParticipantLabel({
+    practiceType,
+    plural: true,
+    capitalized: true,
+  });
+  const fieldLabel = formatFieldLabel({
+    practiceType,
+    plural: true,
+    capitalized: true,
+  });
   const summary = meta.timeSummary;
-  if (summary) {
-    cards.push({ label: 'Volume total de jeu', value: humanizeDuration(summary.matchVolume) });
-    cards.push({ label: 'Temps de transition', value: humanizeDuration(summary.rotationGaps) });
-    cards.push({ label: 'Temps des pauses', value: humanizeDuration(summary.pauseMinutes) });
-    cards.push({ label: 'Durée réelle du tournoi', value: humanizeDuration(summary.totalMinutes) });
-    if (summary.estimatedEnd) {
-      cards.push({ label: 'Fin prévue', value: summary.estimatedEnd });
-    }
-  } else {
-    cards.push({ label: 'Volume total de jeu', value: '-' });
-    cards.push({ label: 'Durée réelle du tournoi', value: '-' });
+  const primaryCards = [
+    { label: participantLabel, value: meta.teamCount },
+    { label: fieldLabel, value: meta.fieldCount },
+    { label: 'Durée tournoi', value: summary ? humanizeDuration(summary.totalMinutes) : '-' },
+    { label: 'Fin prévue', value: summary?.estimatedEnd || '-' },
+  ];
+  const detailItems = [
+    { label: 'Format', value: meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label },
+    { label: 'Matchs', value: meta.matchCount },
+  ];
+  if (meta.groupCount && meta.groupCount > 1) {
+    const teamsPerGroup = meta.teamCount && meta.groupCount ? Math.ceil(meta.teamCount / meta.groupCount) : 0;
+    detailItems.push({
+      label: 'Organisation',
+      value: `${meta.groupCount} groupe${meta.groupCount > 1 ? 's' : ''} d’environ ${teamsPerGroup || '-'}`,
+    });
   }
-  const cardsHtml = cards
-    .map(item => `<article class="summary-card"><span>${item.label}</span><strong>${item.value}</strong></article>`)
+  if (summary) {
+    detailItems.push(
+      { label: 'Volume de jeu', value: humanizeDuration(summary.matchVolume) },
+      { label: 'Transitions', value: humanizeDuration(summary.rotationGaps) },
+      { label: 'Pauses', value: humanizeDuration(summary.pauseMinutes) }
+    );
+  }
+  const primaryHtml = primaryCards
+    .map(
+      item => `
+        <article class="summary-card summary-card-primary">
+          <span>${item.label}</span>
+          <strong>${item.value ?? '-'}</strong>
+        </article>
+      `
+    )
     .join('');
+  const detailsHtml = detailItems
+    .map(
+      item => `
+        <li>
+          <span>${item.label}</span>
+          <strong>${item.value ?? '-'}</strong>
+        </li>
+      `
+    )
+    .join('');
+  const detailsCard = `
+    <details class="summary-details-card">
+      <summary>Détails du tournoi</summary>
+      <ul class="summary-details-list">
+        ${detailsHtml}
+      </ul>
+    </details>
+  `;
   const analysisMetrics = buildPedagogyMetrics(meta, summary, meta.optionsSnapshot || state.options);
-  const analysisCard = `<article class="summary-card analysis-card">
-        <span>Analyse pédagogique</span>
-        ${buildAnalysisListHTML(analysisMetrics)}
-        ${buildAnalysisTagHTML(analysisMetrics)}
-      </article>`;
-  elements.summaryGrid.innerHTML = cardsHtml + analysisCard;
+  const analysisCard = `
+    <article class="summary-card analysis-card">
+      <span>Analyse pédagogique</span>
+      ${buildAnalysisListHTML(analysisMetrics)}
+      ${buildAnalysisTagHTML(analysisMetrics)}
+    </article>
+  `;
+  elements.summaryGrid.innerHTML = `
+    <div class="summary-primary-grid">
+      ${primaryHtml}
+    </div>
+    ${detailsCard}
+    ${analysisCard}
+  `;
   renderTimeIndicator(summary);
 }
 
@@ -1639,7 +1920,11 @@ function handleOptionsReset() {
   if (elements.availableDuration) elements.availableDuration.value = state.options.availableDuration ?? '';
   if (elements.startTime) elements.startTime.value = state.options.startTime;
   if (elements.endTime) elements.endTime.value = state.options.endTime || '';
-  if (elements.schedulingMode) elements.schedulingMode.value = state.options.schedulingMode;
+  if (elements.schedulingModeInputs && elements.schedulingModeInputs.length) {
+    elements.schedulingModeInputs.forEach(input => {
+      input.checked = input.value === state.options.schedulingMode;
+    });
+  }
   updateRoleControlsState();
   persistState();
   hideAnalysisPanels();
@@ -4394,7 +4679,11 @@ function ensureTeamListLength(list, length, practiceType = 'sport-co') {
   while (current.length < length) {
     current.push(`${fallbackLabel} ${current.length + 1}`);
   }
-  return current.slice(0, length);
+  const slice = current.slice(0, length);
+  return slice.map((name, index) => {
+    const base = (typeof name === 'string' && name.trim()) || `${fallbackLabel} ${index + 1}`;
+    return formatNameForPractice(base, practiceType, index, fallbackLabel);
+  });
 }
 
 function isPlainObject(value) {
