@@ -46,7 +46,9 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 ## Mode Défi tactile
 - Après génération, une seule page « Classement Défi » reste visible : aucune zone de saisie fixe, juste la liste des joueurs classés.
 - Tap/clic simple = fenêtre ±5 places pendant 3 s (effet valable en projection) ; retaper sur soi ou utiliser le bouton **Défi** déclenche la saisie.
-- Toute saisie se fait dans une modale plein centre (`.modal-overlay`) ; le classement reste visible derrière, légèrement atténué.
+- La sélection touche → modale = joueur strictement identique : la fenêtre ±5 et les adversaires proposés sont recalculés depuis le classement courant.
+- Toute saisie se fait dans une modale plein centre (`.modal-overlay`) au design compact (adversaire, scores, actions alignés) ; le classement reste visible derrière, légèrement atténué.
+- Un bandeau discret ajoute un bouton **Quitter** (retour direct vers les paramètres) et trois raccourcis (Résultats, Projection, Paramètres) pour changer de contexte sans quitter le terrain des yeux.
 - Les scores s’affichent dans la modale avec l’adversaire prérempli et focus direct sur la saisie tactile. Le double clic desktop reste supporté.
 - Un encart « Dernier défi » permanent affiche le duel le plus récent avec un bouton **Modifier** qui rouvre la modale préremplie. La correction remplace automatiquement le duel précédent sans casser le classement.
 - La logique EPS reste inchangée : victoire sur un joueur mieux classé ⇒ échange immédiat des positions, sinon classement intact. Les joueurs marqués « Indisponible » restent gris et non interactifs.
@@ -68,6 +70,7 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 ## Planification, estimation et impression
 - Résumés pédagogiques conservés : volume de jeu, transitions, pauses, durée réelle, fin prévue, matches par terrain, temps d’attente moyen, engagement moteur.
 - Simulation et configuration recommandée restent accessibles via les boutons dédiés pour valider la faisabilité du créneau EPS.
+- La recommandation calcule désormais le créneau réel (début/fin) et propose jusqu’à trois profils (Optimisé pratique, Équilibré, Confort terrain) en privilégiant le temps de jeu effectif et l’engagement moteur.
 - Le mode **Impression/PDF** masque la navigation, garde le thème adapté à l’univers et reste pensé pour une distribution terrain (rôles, terrains, classements visibles, noir & blanc lisible).
 
 ## Identité visuelle et thèmes

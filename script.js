@@ -581,8 +581,16 @@ let latestRecommendation = null;
 let recommendationApplied = false;
 let resetFeedbackTimeout = null;
 let challengeHighlightTimeout = null;
-let challengeSelection = { index: null, allowed: [] };
+let challengeSelection = { playerId: null, allowedIds: [] };
 let challengeEditContext = null;
+const MIN_TURNAROUND_MINUTES = 1;
+const IDEAL_TURNAROUND_MINUTES = 2;
+let challengeIdSeed = 0;
+
+function generateChallengePlayerId() {
+  challengeIdSeed += 1;
+  return challengeIdSeed;
+}
 
 const timerController = {
   prepare() {
@@ -1213,7 +1221,7 @@ function bindNavigation() {
     elements.recommendationResult.addEventListener('click', event => {
       const applyBtn = event.target.closest('[data-action="apply-recommendation"]');
       if (applyBtn) {
-        applyRecommendedConfiguration();
+        applyRecommendedConfiguration(applyBtn.dataset.strategyId);
       }
     });
   }
@@ -2371,9 +2379,14 @@ function buildAnalysisTagHTML(metrics) {
   return `<p class="analysis-tag ${metrics.indicator.level}">${metrics.indicator.label}</p>`;
 }
 
-function applyRecommendedConfiguration() {
-  if (!latestRecommendation || !latestRecommendation.options) return;
-  const { duration, turnaround, breakMinutes } = latestRecommendation.options;
+function applyRecommendedConfiguration(strategyId = null) {
+  if (!latestRecommendation || !latestRecommendation.strategies) return;
+  let target =
+    (strategyId && latestRecommendation.strategies.find(entry => entry.id === strategyId)) ||
+    latestRecommendation.strategies.find(entry => entry.id === latestRecommendation.bestStrategyId) ||
+    latestRecommendation.strategies[0];
+  if (!target) return;
+  const { duration, turnaround, breakMinutes } = target.options;
   let hasChange = false;
   if (Number.isFinite(duration)) {
     state.options.duration = clampNumber(duration, 1, 180, duration);
@@ -2382,12 +2395,12 @@ function applyRecommendedConfiguration() {
     hasChange = true;
   }
   if (Number.isFinite(turnaround)) {
-    state.options.turnaround = clampNumber(turnaround, 0, 60, turnaround);
+    state.options.turnaround = clampNumber(turnaround, MIN_RECOMMENDED_TURNAROUND, 60, MIN_RECOMMENDED_TURNAROUND);
     elements.rotationBuffer.value = state.options.turnaround;
     hasChange = true;
   }
   if (Number.isFinite(breakMinutes)) {
-    state.options.breakMinutes = clampNumber(breakMinutes, 0, 600, breakMinutes);
+    state.options.breakMinutes = clampNumber(breakMinutes, MIN_RECOMMENDED_BREAK, 600, MIN_RECOMMENDED_BREAK);
     elements.breakDuration.value = state.options.breakMinutes;
     hasChange = true;
   }
@@ -2484,58 +2497,237 @@ function showResetFeedback() {
   }, 2500);
 }
 
-function computeRecommendedConfiguration(teams) {
-  const durations = [4, 5, 6, 7, 8, 9, 10, 12];
-  const recommendedRotation = clampNumber(
-    state.options.turnaround && state.options.turnaround > 0 ? state.options.turnaround : 1,
-    1,
-    3,
-    1
-  );
-  const recommendedPause =
-    state.options.breakMinutes && state.options.breakMinutes > 0
-      ? Math.min(state.options.breakMinutes, 15)
-      : 5;
-  let bestFeasible = null;
-  let bestFallback = null;
-  for (const duration of durations) {
-    const candidateOptions = {
-      ...state.options,
-      duration,
-      turnaround: recommendedRotation,
-      breakMinutes: recommendedPause,
-    };
-    let schedule;
-    try {
-      schedule = generateSchedule(teams, candidateOptions);
-    } catch (error) {
-      console.warn('Simulation recommandée impossible', error);
-      continue;
-    }
-    if (!schedule || !schedule.meta) continue;
-    const summary = computeTimeSummary(schedule, candidateOptions);
-    const metrics = buildPedagogyMetrics(schedule.meta, summary, candidateOptions);
-    const feasible = Boolean(summary?.feasibility && summary.feasibility.ok);
-    if (feasible) {
-      bestFeasible = {
-        options: candidateOptions,
-        summary,
-        metrics,
-        feasible: true,
-      };
-      break;
-    }
-    const totalMinutes = summary?.totalMinutes ?? Number.POSITIVE_INFINITY;
-    if (!bestFallback || totalMinutes < (bestFallback.summary?.totalMinutes ?? Number.POSITIVE_INFINITY)) {
-      bestFallback = {
-        options: candidateOptions,
-        summary,
-        metrics,
-        feasible: false,
-      };
+const RECOMMENDATION_PROFILES = [
+  {
+    id: 'practice',
+    label: 'Optimisé pratique',
+    description: 'Maximise le temps de jeu et l’engagement moteur.',
+    weights: { engagement: 0.5, practice: 0.3, wait: 0.1, margin: 0.1 },
+    bias: 'lowTurnaround',
+  },
+  {
+    id: 'balanced',
+    label: 'Équilibré',
+    description: 'Compromis entre intensité et respiration.',
+    weights: { engagement: 0.4, practice: 0.25, wait: 0.2, margin: 0.15 },
+    bias: 'balanced',
+  },
+  {
+    id: 'comfort',
+    label: 'Confort terrain',
+    description: 'Plus de rotation/pause pour encadrer sereinement.',
+    weights: { engagement: 0.3, practice: 0.2, wait: 0.3, margin: 0.2 },
+    bias: 'highTurnaround',
+  },
+];
+
+const MIN_RECOMMENDED_TURNAROUND = 1;
+const IDEAL_RECOMMENDED_TURNAROUND = 2;
+const MAX_RECOMMENDED_TURNAROUND = 5;
+const MIN_RECOMMENDED_BREAK = 0;
+const DEFAULT_RECOMMENDED_BREAK = 5;
+
+function clamp01(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function getAvailableWindow(options) {
+  const startMinutes = parseTime(options.startTime);
+  const availableDurationInput =
+    Number.isFinite(options.availableDuration) && options.availableDuration > 0 ? options.availableDuration : null;
+  let availableMinutes = availableDurationInput;
+  let endMinutes = null;
+  if (availableMinutes == null && options.endTime && startMinutes != null) {
+    const parsedEnd = parseTime(options.endTime);
+    if (parsedEnd != null) {
+      endMinutes = parsedEnd;
+      let diff = parsedEnd - startMinutes;
+      if (diff <= 0) diff += 24 * 60;
+      availableMinutes = diff;
     }
   }
-  return bestFeasible || bestFallback;
+  const label = availableMinutes != null ? humanizeDuration(availableMinutes) : 'Non renseigné';
+  return { availableMinutes, startMinutes, endMinutes, label };
+}
+
+function buildDurationCandidates(availableMinutes) {
+  const base = [4, 5, 6, 7, 8, 9, 10, 12, 15];
+  if (availableMinutes && availableMinutes < 60) {
+    return base.filter(value => value <= 10);
+  }
+  if (availableMinutes && availableMinutes > 140) {
+    return [...base, 18];
+  }
+  return base;
+}
+
+function buildTurnaroundCandidates(availableMinutes) {
+  if (availableMinutes && availableMinutes < 60) return [MIN_RECOMMENDED_TURNAROUND, IDEAL_RECOMMENDED_TURNAROUND];
+  if (availableMinutes && availableMinutes > 140) return [1, 2, 3, 4, MAX_RECOMMENDED_TURNAROUND];
+  if (availableMinutes && availableMinutes > 100) return [1, 2, 3, 4];
+  return [1, 2, 3];
+}
+
+function buildBreakCandidates(availableMinutes) {
+  if (!availableMinutes || availableMinutes < 55) return [0, 3, 5];
+  if (availableMinutes < 90) return [0, 5, 8];
+  if (availableMinutes < 130) return [0, 5, 10];
+  return [0, 5, 10, 15];
+}
+
+function buildPracticeStats(meta, summary, metrics, availableInfo, options) {
+  const matchCount = Number(meta?.matchCount);
+  const duration = Number(options?.duration);
+  const practiceTotal =
+    Number.isFinite(matchCount) && Number.isFinite(duration) ? Math.max(matchCount * duration, 0) : null;
+  const practicePerTeam = metrics?.timePerTeam ?? null;
+  const waitTime = metrics?.waitTime ?? null;
+  const engagement = metrics?.engagement ?? null;
+  const margin = summary?.feasibility ? summary.feasibility.delta : null;
+  const durationEstimate = summary?.totalMinutes ?? null;
+  return {
+    practiceTotal,
+    practicePerTeam,
+    waitTime,
+    engagement,
+    margin,
+    durationEstimate,
+    availableMinutes: availableInfo.availableMinutes,
+    availableLabel: availableInfo.label,
+    matchCount,
+  };
+}
+
+function scoreRecommendationCandidate(profile, context) {
+  const { summary, metrics, practiceStats, options } = context;
+  const feasible = summary?.feasibility ? summary.feasibility.ok : true;
+  const engagement = clamp01((metrics?.engagement ?? 0) / 100);
+  const practicePerTeam = practiceStats.practicePerTeam ?? 0;
+  const availableMinutes = practiceStats.availableMinutes;
+  const rotationMinutes = Math.max(Number(options.turnaround) || MIN_RECOMMENDED_TURNAROUND, MIN_RECOMMENDED_TURNAROUND);
+  const breakMinutes = Math.max(Number(options.breakMinutes) || 0, MIN_RECOMMENDED_BREAK);
+  const practiceNorm = availableMinutes
+    ? clamp01(practicePerTeam / Math.max(availableMinutes * 0.65, 1))
+    : clamp01(practicePerTeam / 45);
+  const wait = practiceStats.waitTime ?? 0;
+  const waitNorm = 1 - clamp01(wait / (profile.id === 'comfort' ? 18 : 12));
+  const margin = practiceStats.margin;
+  let marginNorm = 0.5;
+  if (margin != null && availableMinutes) {
+    if (margin >= 0) {
+      marginNorm = 1 - clamp01(margin / Math.max(availableMinutes * 0.5, 1));
+    } else {
+      marginNorm = Math.max(0, 1 + margin / Math.max(availableMinutes * 0.3, 1));
+    }
+  }
+  const utilization =
+    availableMinutes && Number.isFinite(practiceStats.durationEstimate)
+      ? clamp01(practiceStats.durationEstimate / Math.max(availableMinutes, 1))
+      : 0;
+  const rotationCloseness = 1 - clamp01(Math.abs(rotationMinutes - IDEAL_RECOMMENDED_TURNAROUND) / MAX_RECOMMENDED_TURNAROUND);
+  const zeroBreakPenalty =
+    breakMinutes === 0 && availableMinutes && margin != null && margin > 5
+      ? 0.05 + clamp01(margin / Math.max(availableMinutes, 1)) * 0.05
+      : 0;
+  const rotationFloorPenalty = rotationMinutes <= MIN_RECOMMENDED_TURNAROUND ? 0.05 : 0;
+  const rotationBonus = rotationCloseness * 0.03;
+  const utilizationBonus = utilization * 0.05;
+  const breakBonus = breakMinutes >= DEFAULT_RECOMMENDED_BREAK && margin != null && margin >= 5 ? 0.02 : 0;
+  let score =
+    profile.weights.engagement * engagement +
+    profile.weights.practice * practiceNorm +
+    profile.weights.wait * waitNorm +
+    profile.weights.margin * marginNorm;
+  if (profile.bias === 'lowTurnaround') {
+    score += clamp01(1 - rotationMinutes / 4) * 0.05;
+  } else if (profile.bias === 'highTurnaround') {
+    score += clamp01(rotationMinutes / 4) * 0.05;
+  }
+  score += utilizationBonus + rotationBonus + breakBonus;
+  score -= zeroBreakPenalty + rotationFloorPenalty;
+  if (!feasible) {
+    score -= 0.5;
+  }
+  return score;
+}
+
+function formatMarginLabel(margin) {
+  if (margin == null) return '—';
+  const prefix = margin >= 0 ? '+' : '−';
+  return `${prefix}${humanizeDuration(Math.abs(margin))}`;
+}
+
+function computeRecommendedConfiguration(teams) {
+  const availableInfo = getAvailableWindow(state.options);
+  const durationCandidates = buildDurationCandidates(availableInfo.availableMinutes);
+  const turnaroundCandidates = buildTurnaroundCandidates(availableInfo.availableMinutes);
+  const breakCandidates = buildBreakCandidates(availableInfo.availableMinutes);
+  const profileResults = new Map();
+  let candidateFound = false;
+  for (const duration of durationCandidates) {
+    for (const turnaround of turnaroundCandidates) {
+      for (const breakMinutes of breakCandidates) {
+        const candidateOptions = {
+          ...state.options,
+          duration,
+          turnaround: Math.max(turnaround, MIN_RECOMMENDED_TURNAROUND),
+          breakMinutes: Math.max(breakMinutes, MIN_RECOMMENDED_BREAK),
+        };
+        let schedule;
+        try {
+          schedule = generateSchedule(teams, candidateOptions);
+        } catch (error) {
+          console.warn('Simulation recommandée impossible', error);
+          continue;
+        }
+        if (!schedule || !schedule.meta) continue;
+        candidateFound = true;
+        const summary = computeTimeSummary(schedule, candidateOptions);
+        const metrics = buildPedagogyMetrics(schedule.meta, summary, candidateOptions);
+        const practiceStats = buildPracticeStats(schedule.meta, summary, metrics, availableInfo, candidateOptions);
+        const feasible = Boolean(summary?.feasibility ? summary.feasibility.ok : true);
+        const context = { summary, metrics, practiceStats, options: candidateOptions };
+        RECOMMENDATION_PROFILES.forEach(profile => {
+          const score = scoreRecommendationCandidate(profile, context);
+          const current = profileResults.get(profile.id);
+          const shouldReplace =
+            !current ||
+            (!current.feasible && feasible) ||
+            (current.feasible === feasible && score > current.score);
+          if (shouldReplace) {
+            profileResults.set(profile.id, {
+              id: profile.id,
+              label: profile.label,
+              description: profile.description,
+              options: candidateOptions,
+              summary,
+              metrics,
+              practiceStats,
+              feasible,
+              score,
+            });
+          }
+        });
+      }
+    }
+  }
+  if (!candidateFound) return null;
+  const strategies = RECOMMENDATION_PROFILES.map(profile => profileResults.get(profile.id)).filter(Boolean);
+  if (!strategies.length) return null;
+  const feasibleStrategies = strategies.filter(entry => entry.feasible);
+  let bestStrategy =
+    feasibleStrategies.find(entry => entry.id === 'practice') ||
+    feasibleStrategies.sort((a, b) => b.score - a.score)[0] ||
+    strategies.find(entry => entry.id === 'practice');
+  if (!bestStrategy) {
+    bestStrategy = strategies.sort((a, b) => b.score - a.score)[0];
+  }
+  return {
+    available: availableInfo,
+    bestStrategyId: bestStrategy.id,
+    strategies,
+  };
 }
 
 function renderRecommendationResult(payload) {
@@ -2545,54 +2737,97 @@ function renderRecommendationResult(payload) {
     elements.recommendationResult.classList.remove('hidden');
     return;
   }
-  const { options, summary, metrics, feasible } = payload;
-  const durationLabel = `${options.duration} min`;
-  const rotationLabel = `${options.turnaround ?? 0} min`;
-  const pauseLabel = `${options.breakMinutes ?? 0} min`;
-  const durationTotalLabel = summary ? humanizeDuration(summary.totalMinutes) : '—';
-  const endLabel = summary?.estimatedEnd ?? '—';
-  let statusLine = 'Analyse partielle : paramètres incomplets.';
-  if (summary?.feasibility) {
-    const deltaLabel = humanizeDuration(Math.abs(summary.feasibility.delta || 0));
-    if (feasible) {
-      statusLine = summary.feasibility.delta != null ? `✓ Le tournoi tient dans le créneau (marge ${deltaLabel}).` : `✓ Le tournoi tient dans le créneau.`;
-    } else if (summary.feasibility.delta != null) {
-      statusLine = `⚠ Le tournoi dépasse de ${deltaLabel}.`;
-    }
-  } else if (summary) {
-    statusLine = 'Configuration basée sur la durée totale estimée.';
+  const strategies = payload.strategies || [];
+  if (!strategies.length) {
+    elements.recommendationResult.innerHTML = `<h4>Configuration recommandée</h4><p>Aucune combinaison exploitable.</p>`;
+    elements.recommendationResult.classList.remove('hidden');
+    return;
   }
-  const analysisHtml = `
-    <div class="simulation-analysis">
-      <h5>Analyse pédagogique</h5>
-      ${buildAnalysisListHTML(metrics)}
-      ${buildAnalysisTagHTML(metrics)}
-    </div>
-  `;
+  const primary = strategies.find(entry => entry.id === payload.bestStrategyId) || strategies[0];
+  const secondary = strategies.filter(entry => entry.id !== primary.id);
+  const primaryOptions = primary.options;
+  const availableLabel = payload.available?.label ?? 'Non renseigné';
+  const durationTotalLabel = primary.summary ? humanizeDuration(primary.summary.totalMinutes) : '—';
+  const endLabel = primary.summary?.estimatedEnd ?? '—';
+  const marginLabel = formatMarginLabel(primary.practiceStats.margin);
+  const practiceTotalLabel = primary.practiceStats.practiceTotal != null ? `${humanizeDuration(primary.practiceStats.practiceTotal)} (cumulées)` : '—';
+  const practicePerTeamLabel = primary.practiceStats.practicePerTeam != null ? formatMinutesLabel(primary.practiceStats.practicePerTeam) : '—';
+  const waitLabel = primary.practiceStats.waitTime != null ? formatMinutesLabel(primary.practiceStats.waitTime) : '—';
+  const engagementLabel = primary.practiceStats.engagement != null ? formatEngagementPercent(primary.practiceStats.engagement) : '—';
+  const statusLine = primary.feasible
+    ? `✓ Profil ${primary.label} : ajusté au créneau`
+    : `⚠ Profil ${primary.label} dépasse le créneau (${marginLabel}).`;
   const feedbackClass = recommendationApplied ? 'show' : '';
+  const practiceStatsList = `
+    <ul class="practice-stats">
+      <li><span>Temps de pratique total</span><strong>${practiceTotalLabel}</strong></li>
+      <li><span>Temps moyen par équipe</span><strong>${practicePerTeamLabel}</strong></li>
+      <li><span>Attente moyenne</span><strong>${waitLabel}</strong></li>
+      <li><span>Engagement moteur</span><strong>${engagementLabel}</strong></li>
+      <li><span>Marge restante</span><strong>${marginLabel}</strong></li>
+    </ul>
+  `;
+  const secondaryHtml = secondary.length
+    ? `
+      <div class="recommendation-variants">
+        ${secondary
+          .map(variant => {
+            const variantMargin = formatMarginLabel(variant.practiceStats.margin);
+            const variantEngagement = formatEngagementPercent(variant.practiceStats.engagement);
+            const variantWait = variant.practiceStats.waitTime != null ? formatMinutesLabel(variant.practiceStats.waitTime) : '—';
+            const variantClass = variant.feasible ? 'variant-card' : 'variant-card variant-warning';
+            return `
+              <article class="${variantClass}">
+                <header>
+                  <h5>${variant.label}</h5>
+                  <span>${variant.feasible ? '✓ tient dans le créneau' : '⚠ dépasse légèrement'}</span>
+                </header>
+                <p class="variant-meta">Matchs ${variant.options.duration} min · Rotation ${variant.options.turnaround} min · Pause ${variant.options.breakMinutes} min</p>
+                <p class="variant-meta">Engagement ${variantEngagement} · Attente ${variantWait} · Marge ${variantMargin}</p>
+                <button class="btn ghost small" data-action="apply-recommendation" data-strategy-id="${variant.id}">Appliquer ce profil</button>
+              </article>
+            `;
+          })
+          .join('')}
+      </div>
+    `
+    : '';
   elements.recommendationResult.innerHTML = `
-    <h4 class="panel-title warm"><span class="panel-icon warm">🛠</span><span>Configuration recommandée</span></h4>
+    <h4 class="panel-title warm">
+      <span class="panel-icon warm">🛠</span>
+      <span>Configuration recommandée</span>
+    </h4>
     <div class="recommendation-grid">
       <div class="metric">
         <span>Matchs</span>
-        <strong>${durationLabel}</strong>
+        <strong>${primaryOptions.duration} min</strong>
       </div>
       <div class="metric">
         <span>Rotation</span>
-        <strong>${rotationLabel}</strong>
+        <strong>${primaryOptions.turnaround ?? 0} min</strong>
       </div>
       <div class="metric">
         <span>Pause globale</span>
-        <strong>${pauseLabel}</strong>
+        <strong>${primaryOptions.breakMinutes ?? 0} min</strong>
+      </div>
+      <div class="metric">
+        <span>Créneau dispo</span>
+        <strong>${availableLabel}</strong>
       </div>
     </div>
     <p class="recommendation-note">${statusLine}</p>
     <p class="recommendation-note">Durée estimée : ${durationTotalLabel} · Fin prévue : ${endLabel}</p>
-    ${analysisHtml}
+    ${practiceStatsList}
+    <div class="simulation-analysis">
+      <h5>Analyse pédagogique</h5>
+      ${buildAnalysisListHTML(primary.metrics)}
+      ${buildAnalysisTagHTML(primary.metrics)}
+    </div>
     <div class="recommendation-actions">
-      <button class="btn primary" data-action="apply-recommendation">Appliquer cette configuration</button>
+      <button class="btn primary" data-action="apply-recommendation" data-strategy-id="${primary.id}">Appliquer ce profil</button>
       <span class="recommendation-feedback ${feedbackClass}">Configuration appliquée</span>
     </div>
+    ${secondaryHtml}
   `;
   elements.recommendationResult.classList.remove('hidden');
 }
@@ -2854,9 +3089,11 @@ function renderChallengeRanking(schedule) {
     elements.rankingView.innerHTML = '<p>Aucun classement pour le moment.</p>';
     return;
   }
-  const rows = (challenge.order || []).map((teamIndex, position) => {
-    const name = challenge.names[teamIndex];
-    return `<li><span>${position + 1}</span><span>${name}</span></li>`;
+  ensureChallengeRoster(schedule);
+  const players = getChallengePlayers(schedule);
+  const rows = players.map((player, position) => {
+    if (!player) return '';
+    return `<li><span>${position + 1}</span><span>${player.name}</span></li>`;
   });
   elements.rankingView.innerHTML = `
     <article class="ranking-card">
@@ -2879,22 +3116,24 @@ function renderChallengeBoard(schedule) {
       '<section class="challenge-shell"><p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p></section>';
     return;
   }
-  const order = challenge.order || challenge.names.map((_, index) => index);
+  ensureChallengeRoster(schedule);
+  const players = getChallengePlayers(schedule);
   resetChallengeSelection();
-  const rows = order
-    .map((teamIndex, position) => {
-      const name = challenge.names[teamIndex];
+  const rows = players
+    .map((player, position) => {
+      if (!player) return '';
+      const name = player.name;
       const statusKey = getEntityStatusByName(name);
       const isInactive = isEntityInactive(statusKey);
       const inactiveClass = isInactive ? 'inactive' : '';
       const actionDisabled = isInactive ? 'disabled' : '';
       return `
-        <div class="challenge-row ${inactiveClass}" data-challenge-index="${position}" data-challenge-name="${name}">
+        <div class="challenge-row ${inactiveClass}" data-player-id="${player.id}">
           <span class="challenge-rank">${position + 1}</span>
-          <button type="button" class="challenge-name" data-challenge-index="${position}" data-challenge-name="${name}">
+          <button type="button" class="challenge-name" data-player-id="${player.id}">
             ${decorateNameWithStatus(name)}
           </button>
-          <button type="button" class="challenge-action" data-challenge-open="${position}" ${actionDisabled}>
+          <button type="button" class="challenge-action" data-challenge-open data-player-id="${player.id}" ${actionDisabled}>
             Défi
           </button>
         </div>
@@ -2909,6 +3148,14 @@ function renderChallengeBoard(schedule) {
           <p class="eyebrow">Mode Défi</p>
           <h3>Classement · fenêtre ±5</h3>
           <p class="challenge-shell-hint">Tap = surbrillance (3 s) · Tap à nouveau ou « Défi » = saisie · Joueurs indisponibles grisés.</p>
+        </div>
+        <div class="challenge-shell-actions">
+          <button class="btn ghost small" data-challenge-nav="back">Quitter</button>
+          <div class="challenge-quick-links">
+            <button class="chip-link" data-challenge-nav="results">Résultats</button>
+            <button class="chip-link" data-challenge-nav="projection">Projection</button>
+            <button class="chip-link" data-challenge-nav="options">Paramètres</button>
+          </div>
         </div>
       </header>
       ${historyHtml}
@@ -2960,8 +3207,122 @@ function formatChallengeTimestamp(isoString) {
   }
 }
 
+function ensureChallengeRoster(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'challenge') return;
+  if (!schedule.challenge) return;
+  const challenge = schedule.challenge;
+  const previousRoster = Array.isArray(challenge.roster) ? challenge.roster : [];
+  const maxExistingId = previousRoster.reduce((max, player) => {
+    const value = Number(player?.id);
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, challengeIdSeed);
+  challengeIdSeed = Math.max(challengeIdSeed, maxExistingId);
+  const usedPrevious = new Set();
+  const pickPrevious = (index, name) => {
+    const direct = previousRoster[index];
+    if (direct && Number.isFinite(direct.id) && !usedPrevious.has(direct.id)) {
+      usedPrevious.add(direct.id);
+      return direct.id;
+    }
+    for (let i = 0; i < previousRoster.length; i += 1) {
+      const candidate = previousRoster[i];
+      if (!candidate || !Number.isFinite(candidate.id) || usedPrevious.has(candidate.id)) continue;
+      if (candidate.name === name) {
+        usedPrevious.add(candidate.id);
+        return candidate.id;
+      }
+    }
+    return null;
+  };
+  const nextRoster = (challenge.names || []).map((name, index) => {
+    const reusedId = pickPrevious(index, name);
+    const id = Number.isFinite(reusedId) ? reusedId : generateChallengePlayerId();
+    return { id, name };
+  });
+  challenge.roster = nextRoster;
+  const rosterIds = nextRoster.map(player => player.id);
+  const idSet = new Set(rosterIds);
+  const indexToId = new Map(nextRoster.map((player, index) => [index, player.id]));
+  const normalizeEntry = entry => {
+    if (entry == null) return null;
+    const numeric = Number(entry);
+    if (!Number.isFinite(numeric)) return null;
+    if (idSet.has(numeric)) return numeric;
+    if (indexToId.has(numeric)) return indexToId.get(numeric);
+    return null;
+  };
+  let normalizedOrder = Array.isArray(challenge.order)
+    ? challenge.order.map(normalizeEntry).filter(id => Number.isFinite(id))
+    : [];
+  const seen = new Set();
+  normalizedOrder = normalizedOrder.filter(id => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  rosterIds.forEach(id => {
+    if (!seen.has(id)) {
+      normalizedOrder.push(id);
+      seen.add(id);
+    }
+  });
+  challenge.order = normalizedOrder;
+}
+
+function getChallengeRoster(schedule = state.schedule) {
+  if (!schedule?.challenge || !Array.isArray(schedule.challenge.roster)) return [];
+  return schedule.challenge.roster;
+}
+
+function getChallengePlayerMap(schedule = state.schedule) {
+  const map = new Map();
+  getChallengeRoster(schedule).forEach(player => {
+    if (player && player.id != null) {
+      map.set(player.id, player);
+    }
+  });
+  return map;
+}
+
+function getChallengePlayers(schedule = state.schedule) {
+  ensureChallengeRoster(schedule);
+  const order = schedule?.challenge?.order || [];
+  const map = getChallengePlayerMap(schedule);
+  return order.map(id => map.get(id)).filter(Boolean);
+}
+
+function getChallengePlayerById(playerId, schedule = state.schedule) {
+  const map = getChallengePlayerMap(schedule);
+  return map.get(playerId) || null;
+}
+
+function getChallengePlayerName(playerId, schedule = state.schedule) {
+  return getChallengePlayerById(playerId, schedule)?.name || 'Participant';
+}
+
+function getChallengePlayerLabel(playerId, options = {}) {
+  const schedule = options.schedule || state.schedule;
+  const fallbackPosition = Number.isInteger(options.fallbackPosition) ? options.fallbackPosition : null;
+  const player = getChallengePlayerById(playerId, schedule);
+  if (player && player.name) {
+    return player.name;
+  }
+  if (fallbackPosition != null) {
+    const practiceType = getPracticeTypeFromMeta(schedule?.meta);
+    const fallbackBase = formatParticipantLabel({ practiceType, capitalized: true });
+    return `${fallbackBase} ${fallbackPosition + 1}`;
+  }
+  return 'Participant';
+}
+
 function handleChallengeClick(event) {
   if (!isChallengeModeActive()) return;
+  const navBtn = event.target.closest('[data-challenge-nav]');
+  if (navBtn) {
+    event.preventDefault();
+    handleChallengeNav(navBtn.dataset.challengeNav);
+    return;
+  }
   const editBtn = event.target.closest('[data-challenge-edit-last]');
   if (editBtn) {
     event.preventDefault();
@@ -2971,44 +3332,43 @@ function handleChallengeClick(event) {
   const quickOpen = event.target.closest('[data-challenge-open]');
   if (quickOpen) {
     event.preventDefault();
-    const index = Number(quickOpen.dataset.challengeOpen);
-    if (Number.isInteger(index)) {
-      highlightChallengeWindow(index);
-      openChallengeDialog(index);
+    const playerId = getPlayerIdFromElement(quickOpen);
+    if (Number.isInteger(playerId)) {
+      highlightChallengeWindow(playerId);
+      openChallengeDialog({ playerId });
     }
     return;
   }
-  const target = event.target.closest('[data-challenge-index]');
-  if (!target) return;
-  if (target.closest('.challenge-row.inactive')) return;
+  const row = event.target.closest('.challenge-row');
+  const playerId = getPlayerIdFromElement(event.target);
+  if (!row || !Number.isInteger(playerId) || row.classList.contains('inactive')) return;
   if (event.detail && event.detail > 1) return;
-  const index = Number(target.dataset.challengeIndex);
-  if (!Number.isInteger(index)) return;
   if (!isChallengeSelectionActive()) {
-    highlightChallengeWindow(index);
+    highlightChallengeWindow(playerId);
     return;
   }
-  if (challengeSelection.index === index) {
-    openChallengeDialog(index);
+  if (challengeSelection.playerId === playerId) {
+    openChallengeDialog({ playerId });
     return;
   }
-  if (challengeSelection.allowed.includes(index)) {
-    openChallengeDialog(challengeSelection.index, { presetOpponent: index });
+  if (challengeSelection.allowedIds.includes(playerId)) {
+    openChallengeDialog({
+      playerId: challengeSelection.playerId,
+      presetOpponentTeamIndex: playerId,
+    });
     return;
   }
-  highlightChallengeWindow(index);
+  highlightChallengeWindow(playerId);
 }
 
 function handleChallengeDoubleClick(event) {
   if (!isChallengeModeActive()) return;
-  const target = event.target.closest('[data-challenge-index]');
-  if (!target) return;
-  if (target.closest('.challenge-row.inactive')) return;
+  const row = event.target.closest('.challenge-row');
+  const playerId = getPlayerIdFromElement(event.target);
+  if (!row || !Number.isInteger(playerId) || row.classList.contains('inactive')) return;
   event.preventDefault();
-  const index = Number(target.dataset.challengeIndex);
-  if (!Number.isInteger(index)) return;
-  highlightChallengeWindow(index);
-  openChallengeDialog(index);
+  highlightChallengeWindow(playerId);
+  openChallengeDialog({ playerId });
 }
 
 function startChallengeHistoryEdit() {
@@ -3019,12 +3379,21 @@ function startChallengeHistoryEdit() {
     alert('Aucun défi à modifier pour le moment.');
     return;
   }
+  const challengerId = Number.isInteger(lastEntry.challengerId)
+    ? lastEntry.challengerId
+    : Number(lastEntry.challengerTeamIndex);
+  const opponentId = Number.isInteger(lastEntry.opponentId) ? lastEntry.opponentId : Number(lastEntry.opponentTeamIndex);
+  if (!Number.isInteger(challengerId) || !Number.isInteger(opponentId)) {
+    alert('Impossible de rouvrir le dernier défi.');
+    return;
+  }
   challengeEditContext = {
     ...lastEntry,
     orderBefore: Array.isArray(lastEntry.orderBefore) ? [...lastEntry.orderBefore] : null,
   };
-  openChallengeDialog(lastEntry.challengerPosition, {
-    presetOpponent: lastEntry.opponentPosition,
+  openChallengeDialog({
+    playerId: challengerId,
+    presetOpponentTeamIndex: opponentId,
     presetScores: {
       challenger: lastEntry.challengerScore,
       opponent: lastEntry.opponentScore,
@@ -3033,25 +3402,60 @@ function startChallengeHistoryEdit() {
   });
 }
 
-function highlightChallengeWindow(index) {
+function getChallengeOrder() {
+  ensureChallengeRoster(state.schedule);
+  return state.schedule?.challenge?.order || [];
+}
+
+function getChallengeNames() {
+  return state.schedule?.challenge?.names || [];
+}
+
+function getChallengePosition(teamIndex) {
+  const order = getChallengeOrder();
+  return order.indexOf(teamIndex);
+}
+
+function getChallengePositionMap() {
+  const map = new Map();
+  getChallengeOrder().forEach((teamIndex, position) => map.set(teamIndex, position));
+  return map;
+}
+
+function getPlayerIdFromElement(element) {
+  if (!element) return null;
+  const carrier = element.closest('[data-player-id]');
+  if (!carrier) return null;
+  const teamIndex = Number(carrier.dataset.playerId);
+  return Number.isInteger(teamIndex) ? teamIndex : null;
+}
+
+function highlightChallengeWindow(playerId) {
   const board = document.getElementById('challengeBoard');
   if (!board) return;
-  const rows = Array.from(board.querySelectorAll('.challenge-row'));
-  if (!rows.length || index < 0 || index >= rows.length) return;
+  const order = getChallengeOrder();
+  const position = getChallengePosition(playerId);
+  if (!order.length || position === -1) return;
   if (challengeHighlightTimeout) {
     clearTimeout(challengeHighlightTimeout);
   }
-  const allowedOpponents = getChallengeOpponents(index).map(option => option.position);
-  rows.forEach((row, position) => {
+  const positionMap = getChallengePositionMap();
+  const start = Math.max(0, position - 5);
+  const end = Math.min(order.length - 1, position + 5);
+  const allowedIds = getChallengeOpponents(playerId).map(option => option.teamIndex);
+  board.querySelectorAll('.challenge-row').forEach(row => {
+    const rowId = Number(row.dataset.playerId);
+    const rowPosition = positionMap.get(rowId);
     row.classList.remove('highlight', 'selected');
-    if (Math.abs(position - index) <= 5) {
+    if (rowPosition == null) return;
+    if (rowPosition >= start && rowPosition <= end) {
       row.classList.add('highlight');
     }
-    if (position === index) {
+    if (rowId === playerId) {
       row.classList.add('selected');
     }
   });
-  challengeSelection = { index, allowed: allowedOpponents };
+  challengeSelection = { playerId, allowedIds };
   challengeHighlightTimeout = setTimeout(() => {
     clearChallengeHighlights();
     resetChallengeSelection();
@@ -3069,36 +3473,41 @@ function resetChallengeSelection() {
     clearTimeout(challengeHighlightTimeout);
     challengeHighlightTimeout = null;
   }
-  challengeSelection = { index: null, allowed: [] };
+  challengeSelection = { playerId: null, allowedIds: [] };
 }
 
 function isChallengeSelectionActive() {
-  return Number.isInteger(challengeSelection.index);
+  return Number.isInteger(challengeSelection.playerId);
 }
 
-function openChallengeDialog(position, options = {}) {
+function openChallengeDialog(config = {}) {
   if (!isChallengeModeActive()) return;
   if (!elements.challengeModal || !elements.challengeForm) return;
+  const { playerId, presetOpponentTeamIndex, presetScores, editContext } = config;
+  if (!Number.isInteger(playerId)) return;
   const form = elements.challengeForm;
   const select = form.elements.opponentIndex;
-  const challenge = state.schedule.challenge;
-  const order = challenge.order || [];
-  const editContext = options.editContext || null;
-  const presetScores = options.presetScores || null;
-  let challengerPosition = Number.isInteger(position) ? position : null;
+  const position = getChallengePosition(playerId);
+  if (position === -1) return;
   select.disabled = false;
+  form.dataset.playerId = String(playerId);
+  if (form.elements.challengerIndex) {
+    form.elements.challengerIndex.value = position;
+  }
+  const challengerLabel = getChallengePlayerLabel(playerId, { fallbackPosition: position });
 
   if (editContext) {
-    challengerPosition = resolveChallengePosition(editContext.challengerPosition, editContext.challengerTeamIndex);
-    const opponentPosition = resolveChallengePosition(editContext.opponentPosition, editContext.opponentTeamIndex);
-    if (!Number.isInteger(challengerPosition) || !Number.isInteger(opponentPosition)) {
-      alert('Impossible de rouvrir le dernier défi.'); // fall back gracefully
+    const opponentId = Number.isInteger(editContext.opponentId) ? editContext.opponentId : Number(presetOpponentTeamIndex);
+    const opponentPosition = getChallengePosition(opponentId);
+    if (!Number.isInteger(opponentId) || opponentPosition === -1) {
+      alert('Impossible de rouvrir le dernier défi.');
       clearChallengeEditContext();
       return;
     }
-    form.elements.challengerIndex.value = challengerPosition;
-    select.innerHTML = `<option value="${opponentPosition}">${editContext.opponent}</option>`;
-    select.value = String(opponentPosition);
+    const opponentName =
+      editContext.opponent || getChallengePlayerLabel(opponentId, { fallbackPosition: opponentPosition });
+    select.innerHTML = `<option value="${opponentId}">${opponentName}</option>`;
+    select.value = String(opponentId);
     select.disabled = true;
     form.elements.challengerScore.value = String(
       Number.isFinite(presetScores?.challenger) ? presetScores.challenger : editContext.challengerScore || 0
@@ -3106,27 +3515,27 @@ function openChallengeDialog(position, options = {}) {
     form.elements.opponentScore.value = String(
       Number.isFinite(presetScores?.opponent) ? presetScores.opponent : editContext.opponentScore || 0
     );
-    updateChallengeDialogText(`Corriger ${editContext.challenger}`, 'Mode correction · ce duel remplacera le précédent.');
+    const challengerName = editContext.challenger || challengerLabel;
+    updateChallengeDialogText(`Corriger · ${challengerName}`, 'Mode correction : ce duel remplacera le précédent.');
   } else {
-    if (!Number.isInteger(challengerPosition) || challengerPosition < 0 || challengerPosition >= order.length) return;
-    const opponents = getChallengeOpponents(challengerPosition);
+    const opponents = getChallengeOpponents(playerId);
     if (!opponents.length) {
       alert('Aucun adversaire disponible dans la fenêtre ±5.');
       return;
     }
-    form.elements.challengerIndex.value = challengerPosition;
-    select.innerHTML = opponents.map(option => `<option value="${option.position}">${option.label}</option>`).join('');
+    select.innerHTML = opponents.map(option => `<option value="${option.teamIndex}">${option.label}</option>`).join('');
+    const preset = Number(presetOpponentTeamIndex);
+    if (Number.isInteger(preset) && opponents.some(option => option.teamIndex === preset)) {
+      select.value = String(preset);
+    } else {
+      select.selectedIndex = 0;
+    }
     form.elements.challengerScore.value = '0';
     form.elements.opponentScore.value = '0';
-    const presetOpponent = Number(options.presetOpponent);
-    if (Number.isInteger(presetOpponent)) {
-      const optionExists = select.querySelector(`option[value="${presetOpponent}"]`);
-      if (optionExists) {
-        select.value = String(presetOpponent);
-      }
-    }
-    const name = challenge.names[order[challengerPosition]];
-    updateChallengeDialogText(`Défi · ${name}`, 'Touchez un joueur pour préparer la fenêtre ±5, puis validez ici.');
+    updateChallengeDialogText(
+      `Défi · ${challengerLabel}`,
+      'Choisissez un adversaire dans la fenêtre ±5 puis validez le score.'
+    );
   }
 
   elements.challengeModal.classList.remove('hidden');
@@ -3153,6 +3562,30 @@ function handleChallengeDialogAction(event) {
   }
 }
 
+function handleChallengeNav(action) {
+  switch (action) {
+    case 'back':
+      goTo('options');
+      break;
+    case 'results':
+      goTo('results');
+      setResultsMode('read');
+      break;
+    case 'projection':
+      if (!state.schedule) {
+        alert('Générez un tournoi pour utiliser la projection.');
+        return;
+      }
+      openProjectionScreen();
+      break;
+    case 'options':
+      goTo('options');
+      break;
+    default:
+      break;
+  }
+}
+
 function updateChallengeDialogText(titleText, infoText) {
   if (elements.challengeModal) {
     const titleNode = elements.challengeModal.querySelector('#challengeDialogTitle');
@@ -3162,24 +3595,8 @@ function updateChallengeDialogText(titleText, infoText) {
   }
   if (elements.challengeDialogInfo) {
     elements.challengeDialogInfo.textContent =
-      infoText || 'Touchez un joueur pour préparer la fenêtre ±5, puis validez ici.';
+      infoText || 'Choisissez un adversaire dans la fenêtre ±5 puis saisissez le score.';
   }
-}
-
-function resolveChallengePosition(storedPosition, teamIndex) {
-  if (Number.isInteger(storedPosition)) return storedPosition;
-  return findChallengePositionByTeam(teamIndex);
-}
-
-function findChallengePositionByTeam(teamIndex) {
-  if (!Number.isInteger(teamIndex)) return null;
-  const challenge = state.schedule?.challenge;
-  if (!challenge) return null;
-  const order = challenge.order || [];
-  for (let i = 0; i < order.length; i += 1) {
-    if (order[i] === teamIndex) return i;
-  }
-  return null;
 }
 
 function clearChallengeEditContext() {
@@ -3187,22 +3604,35 @@ function clearChallengeEditContext() {
   if (elements.challengeForm && elements.challengeForm.elements.opponentIndex) {
     elements.challengeForm.elements.opponentIndex.disabled = false;
   }
+  if (elements.challengeForm && elements.challengeForm.dataset) {
+    delete elements.challengeForm.dataset.playerId;
+  }
   updateChallengeDialogText(null, null);
 }
 
-function getChallengeOpponents(position) {
-  const challenge = state.schedule.challenge;
-  const order = challenge.order || [];
-  const names = challenge.names || [];
+function getChallengeOpponents(teamIndex, options = {}) {
+  const includeInactive = Boolean(options.includeInactive);
+  const order = getChallengeOrder();
+  const position = getChallengePosition(teamIndex);
+  if (position === -1) return [];
   const start = Math.max(0, position - 5);
   const end = Math.min(order.length - 1, position + 5);
-  const options = [];
+  const opponents = [];
   for (let pos = start; pos <= end; pos += 1) {
     if (pos === position) continue;
-    const label = `${pos + 1}. ${names[order[pos]]}`;
-    options.push({ position: pos, label });
+    const opponentTeamIndex = order[pos];
+    const opponentPlayer = getChallengePlayerById(opponentTeamIndex);
+    const opponentName =
+      opponentPlayer?.name || getChallengePlayerLabel(opponentTeamIndex, { fallbackPosition: pos });
+    const statusKey = getEntityStatusByName(opponentPlayer?.name || opponentName);
+    if (!includeInactive && isEntityInactive(statusKey)) continue;
+    opponents.push({
+      teamIndex: opponentTeamIndex,
+      label: `${pos + 1}. ${opponentName}`,
+      position: pos,
+    });
   }
-  return options;
+  return opponents;
 }
 
 function handleChallengeFormSubmit(event) {
@@ -3210,25 +3640,36 @@ function handleChallengeFormSubmit(event) {
   if (!event.target.matches('#challengeForm')) return;
   event.preventDefault();
   const form = event.target;
-  const challengerIndex = Number(form.elements.challengerIndex.value);
-  const opponentIndex = Number(form.elements.opponentIndex.value);
+  const challengerId = Number(form.dataset.playerId);
+  const opponentId = Number(form.elements.opponentIndex.value);
+  const challengerIndex = getChallengePosition(challengerId);
+  const opponentIndex = getChallengePosition(opponentId);
+  if (!Number.isInteger(challengerIndex) || !Number.isInteger(opponentIndex)) {
+    alert('Le classement vient de changer. Réessayez en sélectionnant à nouveau le joueur.');
+    closeChallengeDialog();
+    return;
+  }
   const challengerScore = Number(form.elements.challengerScore.value);
   const opponentScore = Number(form.elements.opponentScore.value);
   const editContext = challengeEditContext ? { ...challengeEditContext } : null;
-  applyChallengeResult({ challengerIndex, opponentIndex, challengerScore, opponentScore }, { editContext });
+  applyChallengeResult(
+    { challengerId, opponentId, challengerIndex, opponentIndex, challengerScore, opponentScore },
+    { editContext }
+  );
   closeChallengeDialog();
 }
 
 function applyChallengeResult(payload, options = {}) {
   if (!isChallengeModeActive()) return;
-  const { challengerIndex, opponentIndex, challengerScore, opponentScore } = payload;
-  if (!Number.isInteger(challengerIndex) || !Number.isInteger(opponentIndex)) return;
+  ensureChallengeRoster(state.schedule);
+  const { challengerId, opponentId, challengerIndex, opponentIndex, challengerScore, opponentScore } = payload;
   const challenge = state.schedule.challenge;
   if (!challenge.history) {
     challenge.history = [];
   }
   if (!challenge.order) {
-    challenge.order = challenge.names.map((_, index) => index);
+    const roster = getChallengeRoster(state.schedule);
+    challenge.order = roster.map(player => player.id);
   }
   const editContext = options.editContext || null;
   if (editContext && Array.isArray(editContext.orderBefore) && challenge.history.length) {
@@ -3236,12 +3677,14 @@ function applyChallengeResult(payload, options = {}) {
     challenge.history.pop();
   }
   const order = challenge.order;
+  const resolvedChallengerIndex = Number.isInteger(challengerIndex) ? challengerIndex : getChallengePosition(challengerId);
+  const resolvedOpponentIndex = Number.isInteger(opponentIndex) ? opponentIndex : getChallengePosition(opponentId);
   if (
-    challengerIndex < 0 ||
-    opponentIndex < 0 ||
-    challengerIndex >= order.length ||
-    opponentIndex >= order.length ||
-    challengerIndex === opponentIndex
+    resolvedChallengerIndex < 0 ||
+    resolvedOpponentIndex < 0 ||
+    resolvedChallengerIndex >= order.length ||
+    resolvedOpponentIndex >= order.length ||
+    resolvedChallengerIndex === resolvedOpponentIndex
   ) {
     return;
   }
@@ -3250,30 +3693,28 @@ function applyChallengeResult(payload, options = {}) {
     // Victoire obligatoire pour modifier le classement
     return;
   }
-  if (opponentIndex >= challengerIndex) {
+  if (resolvedOpponentIndex >= resolvedChallengerIndex) {
     // Le challenger bat un joueur moins bien classé : aucune modification
     return;
   }
   challenge.history = challenge.history || [];
-  const names = challenge.names || [];
   const snapshotBefore = order.slice();
-  const challengerTeamIndex = snapshotBefore[challengerIndex];
-  const opponentTeamIndex = snapshotBefore[opponentIndex];
-  const challengerName = names[challengerTeamIndex];
-  const opponentName = names[opponentTeamIndex];
-  const temp = order[opponentIndex];
-  order[opponentIndex] = order[challengerIndex];
-  order[challengerIndex] = temp;
+  const challengerTeamId = snapshotBefore[resolvedChallengerIndex];
+  const opponentTeamId = snapshotBefore[resolvedOpponentIndex];
+  const challengerName = getChallengePlayerLabel(challengerTeamId, { fallbackPosition: resolvedChallengerIndex });
+  const opponentName = getChallengePlayerLabel(opponentTeamId, { fallbackPosition: resolvedOpponentIndex });
+  order[resolvedOpponentIndex] = snapshotBefore[resolvedChallengerIndex];
+  order[resolvedChallengerIndex] = snapshotBefore[resolvedOpponentIndex];
   challenge.history.push({
     challenger: challengerName,
     opponent: opponentName,
     challengerScore,
     opponentScore,
     timestamp: new Date().toISOString(),
-    challengerPosition: challengerIndex,
-    opponentPosition: opponentIndex,
-    challengerTeamIndex,
-    opponentTeamIndex,
+    challengerPosition: resolvedChallengerIndex,
+    opponentPosition: resolvedOpponentIndex,
+    challengerId: challengerTeamId,
+    opponentId: opponentTeamId,
     orderBefore: snapshotBefore,
   });
   challenge.history = challenge.history.slice(-20);
@@ -3709,10 +4150,9 @@ function buildRankingModalRows() {
     }));
   }
   if (state.schedule.format === 'challenge' && state.schedule.challenge) {
-    const names = state.schedule.challenge.names || [];
-    const order = state.schedule.challenge.order || names.map((_, index) => index);
-    return order.map(index => ({
-      name: names[index],
+    const players = getChallengePlayers(state.schedule);
+    return players.map(player => ({
+      name: player?.name || 'Participant',
       points: null,
       played: null,
       wins: null,
@@ -5582,9 +6022,7 @@ function hydrateChallengeBoard(schedule) {
   if (!Array.isArray(challenge.history)) {
     challenge.history = [];
   }
-  if (!challenge.order || challenge.order.length !== challenge.names.length) {
-    challenge.order = challenge.names.map((_, index) => index);
-  }
+  ensureChallengeRoster(schedule);
 }
 
 function selectOptimizedBatch(pending, fieldCount, lastPlayed, rotationNumber, remainingCounts) {
