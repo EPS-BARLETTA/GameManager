@@ -267,7 +267,7 @@
               <div class="mode-field wide" data-mode-field="raquettes-defi">
                 <div class="defi-hint">
                   <strong>Règle ±5</strong>
-                  <p>Un joueur peut défier uniquement les 5 places au-dessus et en dessous. Le clic simple affiche la zone autorisée.</p>
+                  <p>Un clic simple affiche les 5 places au-dessus et au-dessous. La saisie se fait dans une fenêtre centrale.</p>
                 </div>
               </div>
             </section>
@@ -314,7 +314,7 @@
                     <span class="badge arbiter">Arbitré</span>
                     <span class="badge free">Libre</span>
                   </div>
-                  <p class="micro-copy">Les terrains arbitrés garantissent la montée immédiate du vainqueur. Les terrains libres fonctionnent en autonomie, pratique si vous manquez d’adultes.</p>
+                  <p class="micro-copy">Les terrains arbitrés garantissent une lecture plus claire pour l’enseignant. Les terrains libres fonctionnent en autonomie.</p>
                 </div>
               </article>
               <article class="panel-card" data-mode-field="raquettes-defi">
@@ -322,8 +322,8 @@
                   <p class="eyebrow">Mode Défi</p>
                   <h4>Board tactile</h4>
                 </header>
-                <p>Chaque ligne comporte désormais un bouton « Saisir un défi » pour tablette en plus du double clic.</p>
-                <p class="micro-copy">Disponible après génération : accès direct au classement via le bouton « Classement ».</p>
+                <p>Les joueurs autorisés doivent être très visibles et la saisie se fait dans une fenêtre centrale.</p>
+                <p class="micro-copy">Le classement reste accessible à tout moment via le bouton « Classement ».</p>
               </article>
             </section>
             <details class="options-advanced" id="optionsAdvanced">
@@ -448,10 +448,10 @@
                 <p class="view-shortcuts-hint">Projection et chrono accessibles sans quitter la gestion.</p>
               </div>
               <div class="view-shortcuts-buttons">
-                <button class="btn ghost small" data-open-ranking>Classement</button>
-                <button class="btn ghost small" id="resultsProjectionBtn">Projection</button>
-                <button class="btn ghost small" id="resultsChronoBtn">Chrono</button>
-              </div>
+  <button class="btn ghost small" data-open-ranking>Classement</button>
+  <button class="btn ghost small" id="resultsProjectionBtn">Projection</button>
+  <button class="btn ghost small" id="resultsChronoBtn">Chrono</button>
+</div>
             </div>
             <div class="results-tertiary-cta">
               <button class="btn ghost small" id="resultsMoreToggle" aria-expanded="false" aria-controls="resultsMorePanel">Actions avancées</button>
@@ -464,14 +464,16 @@
               </div>
             </div>
           </div>
+
           <div class="view-toggle" role="tablist">
-            <button class="tab active" data-view="rotations" role="tab" aria-controls="rotationView">Rotations</button>
-            <button class="tab" data-view="teams" role="tab" aria-controls="teamView" id="teamTabButton">Par équipe</button>
+            <button class="tab active" data-view="rotations" role="tab" aria-controls="rotationView">Tournoi</button>
+            <button class="tab" data-view="teams" role="tab" aria-controls="teamView" id="teamTabButton">Participants</button>
             <button class="tab" data-view="rankings" role="tab" aria-controls="rankingView">Classement</button>
           </div>
-          <section class="view" id="rotationView"></section>
-          <section class="view hidden" id="teamView"></section>
-          <section class="view hidden" id="rankingView"></section>
+
+          <section class="view tournament-window" id="rotationView"></section>
+          <section class="view hidden tournament-window" id="teamView"></section>
+          <section class="view hidden tournament-window" id="rankingView"></section>
         </section>
 
         <section class="screen" data-screen="live">
@@ -621,6 +623,7 @@
         <button id="timerBackToLive">Retour au live</button>
       </div>
     </aside>
+
     <button class="timer-fab hidden" id="timerFab" aria-label="Ouvrir le chrono">⏱</button>
 
     <div class="modal-overlay hidden" id="finalRankingModal" role="dialog" aria-modal="true" aria-labelledby="finalRankingTitle">
@@ -633,13 +636,14 @@
           <button class="btn ghost small" id="finalRankingCloseBtn" aria-label="Fermer">Fermer</button>
         </header>
         <div id="finalRankingTable" class="final-ranking-table"></div>
-            <div class="modal-actions">
-              <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
-              <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
-              <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
-            </div>
-          </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
+          <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
+          <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
         </div>
+      </div>
+    </div>
+
     <div class="modal-overlay hidden" id="rankingModal" role="dialog" aria-modal="true" aria-labelledby="rankingModalTitle">
       <div class="modal-card ranking-card">
         <header>
@@ -662,8 +666,47 @@
           </div>
           <button class="btn ghost small" id="statusModalClose" aria-label="Fermer la gestion des statuts">Fermer</button>
         </header>
-        <p class="status-hint">Ne supprimez plus votre équipe. Marquez-la « Indisponible » : tous les matchs concernés seront neutralisés proprement.</p>
+        <p class="status-hint">Ne supprimez plus votre équipe. Marquez-la « Indisponible » : tous les matchs concernés seront neutralisés proprement.</p>
         <div class="status-list" id="statusList"></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="challengeModal" role="dialog" aria-modal="true" aria-labelledby="challengeModalTitle">
+      <div class="modal-card challenge-modal-card">
+        <header>
+          <div>
+            <p class="eyebrow">Mode Défi</p>
+            <h3 id="challengeModalTitle">Saisir un défi</h3>
+          </div>
+          <button class="btn ghost small" id="challengeModalClose" aria-label="Fermer la fenêtre de défi">Fermer</button>
+        </header>
+
+        <div class="challenge-modal-body">
+          <p class="challenge-modal-highlight" id="challengeModalRange">
+            Joueurs autorisés : ±5 places autour du joueur sélectionné
+          </p>
+
+          <label class="field">
+            <span>Adversaire autorisé</span>
+            <select id="challengeOpponentSelect"></select>
+          </label>
+
+          <div class="challenge-modal-scores">
+            <label class="field">
+              <span>Score du joueur</span>
+              <input type="number" id="challengePlayerScoreInput" min="0" value="0" />
+            </label>
+            <label class="field">
+              <span>Score adversaire</span>
+              <input type="number" id="challengeOpponentScoreInput" min="0" value="0" />
+            </label>
+          </div>
+
+          <div class="challenge-modal-actions">
+            <button class="btn primary" id="challengeValidateBtn">Valider le défi</button>
+            <button class="btn secondary" id="challengeCancelBtn">Annuler</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -689,7 +732,7 @@
             </div>
             <ul class="help-list">
               <li>Saisissez participants, terrains, durée de match, heure de début et pratique.</li>
-              <li>Activez directement Arbitre / Table si besoin, puis « Générer rapidement ».</li>
+              <li>Activez directement Arbitre / Table si besoin, puis « Générer rapidement ».</li>
               <li>Vous pouvez affiner ensuite dans les options avancées (chrono, pauses, simulation).</li>
             </ul>
           </article>
@@ -702,9 +745,9 @@
               </div>
             </div>
             <ul class="help-list">
-              <li>Choisissez « Sport collectif » ou « Sport de raquette » dans les options Essentiel.</li>
+              <li>Choisissez « Sport collectif » ou « Sport de raquette » dans les options Essentiel.</li>
               <li>L’app ajuste automatiquement les libellés (équipes/participants) et les tableaux.</li>
-              <li>Au format raquette, vous pouvez passer en match « au score cible » (11, 15 pts…).</li>
+              <li>Au format raquette, vous pouvez passer en match « au score cible » (11, 15 pts…).</li>
             </ul>
           </article>
           <article class="help-section">
@@ -717,7 +760,7 @@
             </div>
             <ul class="help-list">
               <li>Activez les rôles dans les options (ou via le mode rapide pour Arbitre / Table de marque) puis cochez ceux qui vous intéressent.</li>
-              <li>Par défaut, aucun rôle n’est activé. Dans le mode EPS rapide, seuls Arbitre et Table de marque sont proposés ; Coach reste disponible uniquement dans les options avancées.</li>
+              <li>Par défaut, aucun rôle n’est activé. Dans le mode EPS rapide, seuls Arbitre et Table de marque sont proposés ; Coach reste disponible uniquement dans les options avancées.</li>
               <li>Les équipes/participants disponibles sont affectés automatiquement et les rôles s’affichent sous chaque terrain.</li>
             </ul>
           </article>
@@ -730,8 +773,8 @@
               </div>
             </div>
             <ul class="help-list">
-              <li><strong>Répartition pédagogique</strong> : les rotations alternent match et repos pour faciliter les rôles EPS (arbitre, table de marque).</li>
-              <li><strong>Optimiser l’utilisation des terrains</strong> : les terrains sont remplis au maximum pour réduire la durée totale du tournoi.</li>
+              <li><strong>Répartition pédagogique</strong> : les rotations alternent match et repos pour faciliter les rôles EPS (arbitre, table de marque).</li>
+              <li><strong>Optimiser l’utilisation des terrains</strong> : les terrains sont remplis au maximum pour réduire la durée totale du tournoi.</li>
               <li>Choisissez le mode adapté selon votre créneau et votre besoin pédagogique.</li>
             </ul>
           </article>
@@ -745,7 +788,7 @@
             </div>
             <ul class="help-list">
               <li>Saisissez/validez les scores, suivez la rotation active/la suivante et les rôles affichés sur chaque terrain.</li>
-              <li>Le bouton « Terminer le tournoi » reste accessible : confirmation, puis classement final immédiat.</li>
+              <li>Le bouton « Terminer le tournoi » reste accessible : confirmation, puis classement final immédiat.</li>
               <li>Le chrono intégré peut passer en plein écran pour afficher temps restant et matches en cours.</li>
             </ul>
           </article>
@@ -754,11 +797,11 @@
               <span class="help-icon" aria-hidden="true">📺</span>
               <div>
                 <p class="help-section-eyebrow">Projection & impression</p>
-              <h4>Informer élèves et arbitres</h4>
+                <h4>Informer élèves et arbitres</h4>
               </div>
             </div>
             <ul class="help-list">
-              <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
+              <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
               <li>Le bouton Imprimer génère un PDF noir & blanc (résumé, rotations, rôles, classements) prêt à distribuer.</li>
               <li>Utilisez cette fiche pour briefer arbitres et table de marque avant la séance.</li>
             </ul>
