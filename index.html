@@ -16,10 +16,20 @@
           <span class="brand-mark"></span>
           <div>
             <p>PouleManager</p>
+            <small>EPS couteau suisse</small>
           </div>
         </div>
+        <div class="mode-badges" aria-live="polite">
+          <span class="mode-pill" id="universeBadge">Univers à choisir</span>
+          <span class="mode-pill subtle" id="modeBadge">Mode non sélectionné</span>
+        </div>
         <div class="topbar-actions">
-          <button class="btn ghost" id="printTopBtn" aria-label="Imprimer le planning">Imprimer</button>
+          <button class="btn ghost small" id="toolsToggle" aria-expanded="false" aria-haspopup="true">Outils</button>
+          <div class="tools-menu hidden" id="toolsMenu" role="menu" aria-label="Outils rapides">
+            <button class="tools-item" data-open-ranking role="menuitem">Classement</button>
+            <button class="tools-item" id="statusBtn" role="menuitem">Statut indisponible</button>
+            <button class="tools-item" id="printTopBtn" role="menuitem">Imprimer</button>
+          </div>
         </div>
       </header>
 
@@ -48,24 +58,34 @@
 
       <main class="screen-stack" id="screens">
         <section class="screen active" data-screen="landing">
-          <div class="landing-card">
-            <p class="landing-eyebrow">EPS · Terrain</p>
+          <div class="landing-card hero">
+            <p class="landing-eyebrow">EPS · Terrain · Projection</p>
             <h1>PouleManager</h1>
-            <p class="landing-subtitle">Organiser un tournoi EPS en moins d’une minute</p>
-            <div class="landing-actions">
-              <div class="landing-highlight">
-                <p class="landing-tag">Recommandé</p>
-                <button class="btn primary hero" id="quickModeBtn">Mode EPS rapide</button>
-                <p class="landing-desc">Réglez participants, terrains et durée en une seule étape pour lancer votre séance.</p>
-              </div>
-              <div class="landing-highlight alt">
-                <p class="landing-tag">Parcours complet</p>
-                <button class="btn secondary hero" id="startFlow">Créer un tournoi détaillé</button>
-                <p class="landing-desc">Configurez chaque étape (format, noms, options avancées) avant de générer.</p>
-              </div>
-              <button class="btn ghost resume-btn" id="resumeFlow">Reprendre ma dernière configuration</button>
+            <p class="landing-subtitle">Choisissez votre univers et pilotez tout le tournoi en six étapes claires.</p>
+            <div class="landing-entry">
+              <button class="mega-card theme-sportco" id="landingSportcoBtn">
+                <div class="mega-card-body">
+                  <p class="mega-eyebrow">Univers 1</p>
+                  <strong>Sports collectifs</strong>
+                  <span>Championnat · Coupe du monde</span>
+                </div>
+                <span aria-hidden="true">→</span>
+              </button>
+              <button class="mega-card theme-raquettes" id="landingRaquettesBtn">
+                <div class="mega-card-body">
+                  <p class="mega-eyebrow">Univers 2</p>
+                  <strong>Raquettes</strong>
+                  <span>Poule · Montée-descente · Défi</span>
+                </div>
+                <span aria-hidden="true">→</span>
+              </button>
             </div>
-            <p class="landing-hint">Besoin d’aide&nbsp;? Ouvrez l’aide rapide ou basculez en mode projection depuis les résultats.</p>
+            <div class="landing-meta">
+              <button class="btn primary hero" id="quickModeBtn">Mode EPS rapide</button>
+              <button class="btn secondary hero" id="resumeFlow">Reprendre ma dernière configuration</button>
+              <button class="btn ghost small" id="openHelpFromLanding">Aide rapide</button>
+            </div>
+            <p class="landing-hint">Simple en façade · puissant derrière · utilisable sur iPad, téléphone et TV.</p>
           </div>
         </section>
 
@@ -121,36 +141,21 @@
         </section>
 
         <section class="screen" data-screen="type">
-          <header class="screen-header">
-            <p class="eyebrow">Étape 1</p>
-            <h2>Choisir le format</h2>
-            <p>Choisissez comment organiser votre tournoi : poule unique, groupes ou groupes avec phase finale.</p>
+          <header class="screen-header mode-header">
+            <div>
+              <p class="eyebrow" id="modeStepEyebrow">Étape 1</p>
+              <h2 id="modeScreenTitle">Choisir un mode</h2>
+              <p id="modeScreenSubtitle">Sélectionnez un format adapté à votre séance EPS.</p>
+            </div>
+            <div class="mode-header-actions">
+              <button class="btn ghost small" data-nav="landing">Changer d’univers</button>
+            </div>
           </header>
-          <div class="cards-grid">
-            <article class="mode-card active" data-mode="round-robin" tabindex="0">
-              <div>
-                <h3>Poule unique</h3>
-                <p>Toutes les équipes se rencontrent une fois.</p>
-              </div>
-              <span class="pill">Standard</span>
-            </article>
-            <article class="mode-card" data-mode="groups" tabindex="0">
-              <div>
-                <h3>Groupes</h3>
-                <p>Plusieurs poules avec classement par groupe.</p>
-              </div>
-            </article>
-            <article class="mode-card" data-mode="groups-finals" tabindex="0">
-              <div>
-                <h3>Groupes + finales</h3>
-                <p>Phase de groupes puis demi-finales et finale.</p>
-              </div>
-              <span class="pill">Complet</span>
-            </article>
-          </div>
-          <div class="nav-actions">
-            <button class="btn ghost" data-nav="landing">Retour</button>
-            <button class="btn primary" data-nav="count">Suivant</button>
+          <div class="mode-grid" id="modeCardsGrid" role="list"></div>
+          <p class="mode-footnote" id="modeFootnote">Choisissez un mode pour continuer vers le paramétrage.</p>
+          <div class="nav-actions wrap">
+            <button class="btn ghost" data-nav="landing">Retour accueil</button>
+            <button class="btn primary" id="modeNextBtn" disabled>Paramétrer ce mode</button>
           </div>
         </section>
 
@@ -198,70 +203,133 @@
         <section class="screen" data-screen="options">
           <header class="screen-header">
             <p class="eyebrow">Étape 4</p>
-            <h2>Options d'organisation</h2>
+            <h2>Paramétrage ciblé</h2>
+            <p>Chaque mode affiche uniquement les réglages qui comptent pour démarrer vite.</p>
           </header>
-          <div class="options-layout">
-            <section class="options-essential">
-              <header>
-                <p class="eyebrow">Essentiel</p>
-                <h3>Paramètres terrain</h3>
-              </header>
-              <div class="form-grid compact essential-grid">
-                <label class="field">
-                  <span>Type de pratique</span>
-                  <select id="practiceType">
-                    <option value="sport-co">Sport collectif</option>
-                    <option value="raquette">Sport de raquette</option>
-                  </select>
-                </label>
-                <label class="field field-inline">
-                  <span>Nombre de terrains</span>
-                  <input type="number" id="fieldCount" min="1" max="16" value="2" />
-                </label>
-                <div class="field scheduling-group">
-                  <span>Organisation des matchs</span>
-                  <div class="scheduling-options">
-                    <label class="radio-card">
-                      <input type="radio" name="schedulingMode" value="pedagogique" checked />
-                      <div>
-                        <strong>Répartition pédagogique</strong>
-                        <p>Les équipes alternent match et repos.</p>
-                      </div>
-                    </label>
-                    <label class="radio-card">
-                      <input type="radio" name="schedulingMode" value="optimise_terrains" />
-                      <div>
-                        <strong>Optimiser l’utilisation des terrains</strong>
-                        <p>Les terrains sont utilisés au maximum pour réduire la durée.</p>
-                      </div>
-                    </label>
-                  </div>
+          <div class="mode-options-shell">
+            <section class="mode-context-card">
+              <div>
+                <p class="eyebrow" id="modeOptionsEyebrow">Sports collectifs</p>
+                <h3 id="modeOptionsTitle">Championnat</h3>
+                <p id="modeOptionsDescription">Toutes les équipes jouent l’une contre l’autre avec estimation du temps réel.</p>
+              </div>
+              <div class="mode-context-actions">
+                <span class="mode-chip" id="modePracticeChip">Univers</span>
+                <button class="btn ghost small" data-nav="type">Changer de mode</button>
+              </div>
+            </section>
+            <section class="mode-primary-grid" aria-label="Réglages prioritaires">
+              <label class="field mode-field" data-mode-field="all">
+                <span id="modeParticipantsLabel">Nombre d’équipes</span>
+                <input type="number" id="modeParticipantsInput" min="2" max="32" value="8" />
+              </label>
+              <label class="field mode-field" data-mode-field="all">
+                <span>Nombre de terrains</span>
+                <input type="number" id="fieldCount" min="1" max="16" value="2" />
+              </label>
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente" id="matchDurationField">
+                <span id="modeDurationLabel">Durée d’un match (minutes)</span>
+                <input type="number" id="matchDuration" min="1" max="180" value="12" />
+              </label>
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente">
+                <span>Durée disponible (optionnel)</span>
+                <input type="number" id="availableDuration" min="0" max="1440" placeholder="Durée totale" />
+              </label>
+              <label class="field mode-field" data-mode-field="all">
+                <span>Heure de début</span>
+                <input type="time" id="startTime" value="09:00" />
+              </label>
+              <label class="field mode-field" data-mode-field="raquettes-montee-descente">
+                <span>Terrains avec arbitre</span>
+                <input type="number" id="ladderRefereeCourts" min="0" value="0" />
+              </label>
+              <label class="field mode-field" data-mode-field="raquettes-montee-descente">
+                <span>Terrains sans arbitre dédié</span>
+                <input type="number" id="ladderFreeCourts" min="0" value="0" />
+              </label>
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi">
+                <span>Prévision de fin (optionnel)</span>
+                <input type="time" id="endTime" />
+              </label>
+              <div class="mode-field wide" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi">
+                <span>Optimisation des rotations</span>
+                <div class="scheduling-chips">
+                  <label class="chip">
+                    <input type="radio" name="schedulingMode" value="pedagogique" checked />
+                    <span>Alternance confort</span>
+                  </label>
+                  <label class="chip">
+                    <input type="radio" name="schedulingMode" value="optimise_terrains" />
+                    <span>Durée minimale</span>
+                  </label>
                 </div>
+              </div>
+              <div class="mode-field wide" data-mode-field="raquettes-defi">
+                <div class="defi-hint">
+                  <strong>Règle ±5</strong>
+                  <p>Un joueur peut défier uniquement les 5 places au-dessus et en dessous. Le clic simple affiche la zone autorisée.</p>
+                </div>
+              </div>
+            </section>
+            <section class="mode-secondary-grid" aria-label="Réglages spécifiques">
+              <article class="panel-card" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule">
+                <header>
+                  <p class="eyebrow">Format de match</p>
+                  <h4>Temps ou points</h4>
+                </header>
                 <label class="field">
-                  <span>Format de match</span>
+                  <span>Mode</span>
                   <select id="matchMode">
                     <option value="time">Au temps</option>
                     <option value="score">Au score cible</option>
                   </select>
                 </label>
-                <label class="field" id="matchDurationField">
-                  <span>Durée moyenne d'un match (minutes)</span>
-                  <input type="number" id="matchDuration" min="1" max="180" value="12" />
-                </label>
                 <label class="field hidden" id="scoreTargetField">
                   <span>Score cible (points)</span>
                   <input type="number" id="scoreTarget" min="1" max="50" value="11" />
                 </label>
+              </article>
+              <article class="panel-card" data-mode-field="sportco-worldcup">
+                <header>
+                  <p class="eyebrow">Coupe du monde</p>
+                  <h4>Structure des poules</h4>
+                </header>
                 <label class="field">
-                  <span>Heure de début</span>
-                  <input type="time" id="startTime" value="09:00" />
+                  <span>Nombre de poules</span>
+                  <select id="worldCupGroupCount">
+                    <option value="2">2 poules</option>
+                    <option value="3">3 poules</option>
+                    <option value="4">4 poules</option>
+                  </select>
                 </label>
-              </div>
+                <p class="micro-copy">Hypothèse EPS : les deux premiers sont qualifiés. Avec 3 poules, le meilleur 2e rejoint les demi-finales.</p>
+              </article>
+              <article class="panel-card" data-mode-field="raquettes-montee-descente">
+                <header>
+                  <p class="eyebrow">Montée-descente</p>
+                  <h4>Terrains arbitrés</h4>
+                </header>
+                <div class="ladder-settings" id="ladderSettings">
+                  <div class="ladder-legend">
+                    <span class="badge arbiter">Arbitré</span>
+                    <span class="badge free">Libre</span>
+                  </div>
+                  <p class="micro-copy">Les terrains arbitrés garantissent la montée immédiate du vainqueur. Les terrains libres fonctionnent en autonomie, pratique si vous manquez d’adultes.</p>
+                </div>
+              </article>
+              <article class="panel-card" data-mode-field="raquettes-defi">
+                <header>
+                  <p class="eyebrow">Mode Défi</p>
+                  <h4>Board tactile</h4>
+                </header>
+                <p>Chaque ligne comporte désormais un bouton « Saisir un défi » pour tablette en plus du double clic.</p>
+                <p class="micro-copy">Disponible après génération : accès direct au classement via le bouton « Classement ».</p>
+              </article>
             </section>
             <details class="options-advanced" id="optionsAdvanced">
               <summary>
                 <span>Options avancées</span>
-                <small>Temps tampon, créneaux et préférences</small>
+                <small>Pauses, chrono, rôles EPS</small>
               </summary>
               <div class="form-grid compact">
                 <label class="field">
@@ -272,14 +340,6 @@
                   <span>Pause globale (hydratation / regroupement)</span>
                   <input type="number" id="breakDuration" min="0" max="180" value="0" />
                   <small class="field-hint">Temps de pause ajouté au tournoi (hydratation, regroupement, explication des règles).</small>
-                </label>
-                <label class="field">
-                  <span>Durée disponible (minutes)</span>
-                  <input type="number" id="availableDuration" min="0" max="1440" placeholder="Optionnel" />
-                </label>
-                <label class="field">
-                  <span>Heure de fin souhaitée</span>
-                  <input type="time" id="endTime" />
                 </label>
                 <label class="field switch">
                   <span>Activer le chronomètre</span>
@@ -297,7 +357,7 @@
                   <div class="roles-field-head">
                     <div>
                       <span>Rôles EPS</span>
-                      <small class="field-hint">Arbitre et table de marque sont attribués automatiquement aux équipes / participants au repos. Coach reste optionnel.</small>
+                      <small class="field-hint">Arbitre, table et coach sont proposés pendant les temps de repos.</small>
                     </div>
                     <label class="switch inline">
                       <span>Afficher</span>
@@ -352,6 +412,23 @@
             <h2>Planning généré</h2>
             <p id="resultSubtitle">Aucun planning pour le moment.</p>
           </header>
+          <div class="view-hub" id="contextTabs">
+            <button class="view-hub-card active" data-context="manage">
+              <span class="eyebrow">Je consulte</span>
+              <strong>Gestion</strong>
+              <small>Planning, options, optimisation</small>
+            </button>
+            <button class="view-hub-card" data-context="live">
+              <span class="eyebrow">Je gère</span>
+              <strong>Live terrain</strong>
+              <small>Scores, chrono, statuts</small>
+            </button>
+            <button class="view-hub-card" data-context="projection">
+              <span class="eyebrow">Je projette</span>
+              <strong>Grand écran</strong>
+              <small>Affichage TV / vidéoprojecteur</small>
+            </button>
+          </div>
           <div class="print-header" id="printHeader" aria-hidden="true"></div>
           <section class="summary-grid" id="summaryGrid"></section>
           <p class="match-insight hidden" id="matchInsight"></p>
@@ -365,14 +442,15 @@
               <button class="btn secondary" data-nav="options">Modifier</button>
               <button class="btn secondary" id="printBtn">Imprimer</button>
             </div>
-            <div class="results-live-modes">
+            <div class="view-shortcuts">
               <div>
-                <p class="eyebrow">Affichages terrain</p>
-                <p class="live-modes-hint">Projetez ou affichez seulement le chronomètre sans quitter les résultats.</p>
+                <p class="eyebrow">Affichages rapides</p>
+                <p class="view-shortcuts-hint">Projection et chrono accessibles sans quitter la gestion.</p>
               </div>
-              <div class="results-mode-buttons">
-                <button class="btn ghost small" id="resultsProjectionBtn">Ouvrir la projection</button>
-                <button class="btn ghost small" id="resultsChronoBtn">Ouvrir le chrono</button>
+              <div class="view-shortcuts-buttons">
+                <button class="btn ghost small" data-open-ranking>Classement</button>
+                <button class="btn ghost small" id="resultsProjectionBtn">Projection</button>
+                <button class="btn ghost small" id="resultsChronoBtn">Chrono</button>
               </div>
             </div>
             <div class="results-tertiary-cta">
@@ -562,6 +640,32 @@
             </div>
           </div>
         </div>
+    <div class="modal-overlay hidden" id="rankingModal" role="dialog" aria-modal="true" aria-labelledby="rankingModalTitle">
+      <div class="modal-card ranking-card">
+        <header>
+          <div>
+            <p class="eyebrow">Classement en direct</p>
+            <h3 id="rankingModalTitle">Positions actuelles</h3>
+          </div>
+          <button class="btn ghost small" id="rankingModalClose" aria-label="Fermer le classement">Fermer</button>
+        </header>
+        <div id="rankingModalBody" class="ranking-modal-body"></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="statusModal" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
+      <div class="modal-card status-card">
+        <header>
+          <div>
+            <p class="eyebrow">Gestion des statuts</p>
+            <h3 id="statusModalTitle">Indisponible</h3>
+          </div>
+          <button class="btn ghost small" id="statusModalClose" aria-label="Fermer la gestion des statuts">Fermer</button>
+        </header>
+        <p class="status-hint">Ne supprimez plus votre équipe. Marquez-la « Indisponible » : tous les matchs concernés seront neutralisés proprement.</p>
+        <div class="status-list" id="statusList"></div>
+      </div>
+    </div>
 
     <button class="help-fab" id="helpBtn" aria-label="Aide rapide">❓</button>
 

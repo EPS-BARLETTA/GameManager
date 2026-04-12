@@ -11,45 +11,65 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 3. Ouvrir [http://localhost:4173/index.html](http://localhost:4173/index.html) dans Chrome, Edge ou Safari (desktop/mobile).
 4. Optionnel : ajouter la page à l’écran d’accueil pour un affichage plein écran.
 
-## Parcours utilisateur
-1. **Landing simplifiée** – trois actions visibles : *Créer un tournoi*, *Reprendre* (recharge le dernier état `localStorage`), *Mode EPS rapide*.
-2. **Mode EPS rapide** – un écran unique pour saisir participants, terrains, durée, heure de début, type d’activité et (optionnellement) activer Arbitre / Table. Le bouton « Générer rapidement » crée un planning complet, tout en conservant l’accès aux options avancées (où le rôle Coach reste disponible).
-3. **Étape 1 – Format** – poule unique, groupes ou groupes + finales.
-4. **Étape 2 – Nombre** – compteur + slider neutres (« Nombre d’équipes / participants »).
-5. **Étape 3 – Noms** – champs confortables, auto-remplissage, collage de liste (placeholders dynamiques selon sport-co / raquette).
-6. **Étape 4 – Options**
-   - **Essentiel** : type de pratique (sport-co ou raquette), nombre de terrains, format de match (au temps / score cible), durée du match, heure de début.
-   - **Avancé** (replié par défaut) : temps de rotation, pause globale, créneau disponible ou heure de fin, chrono + son/vibration, simulation, configuration recommandée et réglages des rôles EPS.
-7. **Étape 5 – Résultats** – résumé pédagogique (volume de jeu, temps de transition, durée réelle, fin prévue, matches par terrain, analyse d’engagement), onglets *Rotations*, *Par …* (équipe/participant) et *Classement*, actions principales (Live, Imprimer, Modifier) et secondaires (Régénérer, Retour, Réinitialiser).
+## Nouveau parcours utilisateur
+1. **Accueil** – deux cartes seulement (*Sports collectifs* et *Raquettes*) + un bouton « Mode EPS rapide » pour générer un tournoi express hors parcours guidé.
+2. **Univers dédié** – après le clic, seules les variantes utiles apparaissent :
+   - Sport co : *Championnat* ou *Coupe du monde* (poules + finales).
+   - Raquettes : *Poule*, *Montée-descente*, *Défi*.
+3. **Étape 2 – Nombre** – compteur + slider adaptés au vocabulaire (équipes ou joueurs).
+4. **Étape 3 – Noms** – auto-remplissage, collage massif, normalisation des patronymes raquettes.
+5. **Étape 4 – Paramétrage ciblé** – carte récap de l’univers + grille d’options prioritaires différentes selon le mode (durées, terrains arbitrés, nombre de poules, etc.) avec options avancées repliées (pauses, chrono, rôles EPS).
+6. **Étape 5 – Résultats** – vue « Gestion » affichée par défaut, carte « Live » et carte « Projection » accessibles via un hub clair « Je consulte / je gère / je projette », raccourcis permanents (Classement, Projection, Chrono) et onglets *Rotations*, *Par équipe* et *Classement*.
 
-## Vocabulaire dynamique & rôles EPS
-- Le vocabulaire bascule automatiquement entre **équipe(s)** et **participant(s)** selon la pratique (sport collectif / raquette). Le terme **terrain** est utilisé partout, même pour les tables de tennis de table.
-- Les rôles EPS disponibles sont **Arbitre**, **Table de marque** et **Coach** (optionnel). Arbitre et Table peuvent être activés dès le mode rapide ; Coach reste configurable dans les options avancées. Aucun rôle n’est activé par défaut.
-- Les équipes / participants au repos reçoivent automatiquement les rôles cochés. L’ordre de priorité est : Arbitre → Table → Coach. Si le nombre d’équipes au repos est insuffisant, seuls les rôles réellement attribués sont affichés.
-- Les rôles apparaissent dans toutes les vues : rotations, grilles terrain, mode live, aperçu de la rotation suivante, mode projection, mode chrono et impression noir & blanc.
+## Univers et modes
+### Sports collectifs
+- **Championnat** : toutes les équipes se rencontrent, estimation automatique du temps total, rôles sociaux proposés pendant les temps de repos, optimisation au choix (alternance pédagogique ou durée minimale).
+- **Coupe du monde** : sélection du nombre de poules (2, 3 ou 4). Hypothèse EPS par défaut : les deux premiers de chaque poule se qualifient (avec meilleur 2ᵉ si 3 poules) pour les demi-finales, match pour la 3ᵉ place et finale.
+
+### Raquettes
+- **Poule** : round-robin intégral avec estimation du temps, libellés adaptés aux joueurs.
+- **Montée-descente** : champs dédiés « Terrains avec arbitre » / « Terrains sans arbitre », badge visuel sur chaque terrain (Arbitré ou Libre) en gestion et en live, rappel dans le panneau d’options.
+- **Défi** : classement vivant avec contrainte ±5. Un clic simple sur un joueur met en surbrillance les cinq places au-dessus et au-dessous (3 s). Un bouton « Saisir un défi » sur chaque ligne ouvre la saisie de score sur iPad/tactile, sans dépendre du double clic.
+
+## Paramétrage ciblé par mode
+- La carte de contexte rappelle l’univers actif, le mode choisi et son descriptif.
+- La grille prioritaire expose uniquement les champs indispensables (équipes/joueurs, terrains, durée ou créneau disponible, heure de début, heure de fin prévue, optimisation et, selon le mode, terrains arbitrés ou structure de poules).
+- Les réglages secondaires regroupent les éléments contextuels : format temps/points, structure de Coupe du monde, légende montée-descente, rappel des interactions du mode Défi.
+- Les **options avancées** restent communes (buffer entre matches, pauses, chrono + son/vibration, rôles EPS) et s’ouvrent seulement si besoin.
+
+## Hub Gestion / Live / Projection
+- Le bandeau d’étape 5 affiche trois cartes « Je consulte », « Je gère », « Je projette ». Chaque carte agit comme un gros bouton (sélection / ouverture du live / ouverture de la projection plein écran).
+- Des **raccourcis persistants** (« Classement », « Projection », « Chrono ») restent visibles dans la zone résultats.
+- L’action principale « Démarrer / reprendre le live » et le duo **Modifier / Imprimer** sont regroupés et lisibles sur iPad.
+
+## Mode Défi tactile
+- Clic simple = fenêtre ±5 places pendant 3 s (effet valable en projection).
+- Bouton **« Saisir un défi »** sur chaque ligne (et double clic toujours disponible sur desktop) pour renseigner le score.
+- La logique EPS reste inchangée : victoire sur un joueur mieux classé ⇒ échange immédiat des positions, sinon classement intact.
+- Le bouton classement (voir ci-dessous) reste accessible même pendant la gestion du Défi.
+
+## Classement et statut *Indisponible*
+- Un bouton « Classement » visible dans la zone résultats et dans le menu `Outils` ouvre le panneau dédié sans casser la navigation. Le bouton reste actif dans les vues live et chrono.
+- Les statuts « Blessé » / « Neutralisé » fusionnent en un unique statut **Indisponible** : l’équipe reste visible mais sa ligne et ses matchs futurs sont neutralisés automatiquement (badge gris, scores désactivés, estimation recalculée). L’action est accessible depuis `Outils` ou le live.
+
+## Montée-descente lisible
+- Les terrains configurés « avec arbitre » / « sans arbitre » sont indiqués directement sur les cartes terrain (résultats et live) via des badges Arbitré / Libre.
+- Une légende intégrée explique la répartition et rappelle le comportement (gain ⇒ montée, perte ⇒ descente, terrains libres autonomes).
 
 ## Live, projection et chrono
-- **Mode live terrain** : rotation en cours + prochaine rotation, tableau des terrains (« Terrain X : A vs B » + rôles), cartes de scores tactiles (boutons ±, validation), chrono intégré (Start/Pause/Reset/Rotation suivante) et bouton *Terminer le tournoi* disponible à tout moment (confirmation + classement final immédiat, même si des scores manquent).
-- **Mode projection** : affichage grand format synchronisé (rotation/chrono, terrains, rôles, prochaine rotation, équipes hors match) avec code couleur (orange « En jeu », bleu « À venir », gris « Attente ») et aucun bouton flottant parasite pour TV/VP.
-- **Mode chrono plein écran** : timer XXL, matches de la rotation (terrains + rôles), bloc « Équipes en attente » cohérent et commandes chrono/retour live dans une interface épurée.
-- **Widget chrono** flottant toujours disponible si le chrono est activé.
+- **Live enseignant** : scores tactiles, rôles EPS, badge terrain (Arbitré/Libre), boutons rapides (classement, chrono, projection), neutralisation automatique en cas d’indisponibilité.
+- **Projection** : plein écran synchronisé (rotation, chrono/reste, terrains, prochaine rotation, élèves au repos). Le raccourci « Projection » accessible dans les résultats ouvre directement cette vue.
+- **Chrono plein écran** : timer XXL avec matchs listés, bouton « Rotation suivante », badges de terrains + rôles, synchronisé avec le live.
+- **Widget chrono** flottant toujours disponible quand le chrono est activé dans les options.
 
-## Planification & impression
-- Le résumé et la simulation affichent clairement : volume total de jeu, temps de transition, temps des pauses, durée réelle du tournoi, fin prévue, matches par terrain, matches par équipe/participant, temps moyen d’attente, engagement moteur.
-- Chaque vague de matchs (slot) devient une rotation visible : avec 2 terrains, une rotation contient donc 2 matchs maximum, ce qui maintient des équipes réellement « au repos » pour attribuer les rôles EPS.
-- La simulation (« Simuler ») et la configuration recommandée proposent une analyse pédagogique et un message de faisabilité (OK ou dépassement avec suggestions).
-- L’impression/PDF masque la navigation, garde le résumé et la vue active, applique un thème noir & blanc lisible (cartes non coupées, titres contrastés, rôles et terrains visibles). Idéal pour distribuer la fiche aux arbitres/table de marque.
+## Planification, estimation et impression
+- Résumés pédagogiques conservés : volume de jeu, transitions, pauses, durée réelle, fin prévue, matches par terrain, temps d’attente moyen, engagement moteur.
+- Simulation et configuration recommandée restent accessibles via les boutons dédiés pour valider la faisabilité du créneau EPS.
+- Le mode **Impression/PDF** masque la navigation, garde le thème adapté à l’univers et reste pensé pour une distribution terrain (rôles, terrains, classements visibles, noir & blanc lisible).
 
-## Formats pris en charge
-- **Poule unique** (round-robin) : 2 à 32 participants avec gestion automatique des exempts.
-- **Groupes** : répartition équilibrée (écart max 1) avec mini round-robin par groupe et classements indépendants.
-- **Groupes + finales** : phase de groupes puis demi-finales, match 3e place et finale générés automatiquement selon les règles annoncées (2, 3 ou 4 groupes).
+## Identité visuelle et thèmes
+- Le choix de l’univers applique un thème global (accent sport co orangé, raquettes bleu) sur badges, boutons principaux, onglets actifs et capsules clés (mode actif, projection, live).
+- La topbar est allégée : badges univers/mode centrés et un bouton `Outils` unique qui regroupe les actions secondaires (Classement, Statut indisponible, Imprimer).
 
-## Terminer le tournoi
-Le bouton « Terminer le tournoi » est accessible depuis le live. Une confirmation s’affiche ; si l’enseignant confirme, le chrono est mis en pause et le classement final apparaît immédiatement (export CSV prévu). Les scores incomplets restent indiqués comme tels.
-
-## Pistes V3
-1. Choix manuel du nombre de groupes, gestion des barrages et consolantes.
-2. Support avancé des sports de raquette (multi-sets, formats 21 pts, etc.).
-3. Synchronisation multi-écran (planning partagé élèves / parents) et export ICS.
-4. Personnalisation poussée des fiches impression (logo établissement, signature arbitre, cases d’observation).
+## Mode EPS rapide
+Toujours disponible depuis l’accueil : renseignez participants, terrains, durée, heure de début et pratique, activez Arbitre / Table si besoin puis « Générer rapidement ». Le tournoi obtenu peut être retravaillé ensuite dans le parcours guidé (paramétrage ciblé, simulation, etc.).

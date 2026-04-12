@@ -7,10 +7,83 @@ const SCREEN_TO_STEP = {
   options: 'options',
   results: 'results',
 };
+const UNIVERSES = {
+  sportco: {
+    id: 'sportco',
+    label: 'Sports collectifs',
+    badge: 'Mode Sports collectifs',
+    baseline: 'Handball · Basket · Futsal · Rugby à toucher',
+    themeClass: 'theme-sportco',
+    practiceType: 'sport-co',
+    modeIds: ['sportco-championnat', 'sportco-worldcup'],
+  },
+  raquettes: {
+    id: 'raquettes',
+    label: 'Raquettes',
+    badge: 'Mode Raquettes',
+    baseline: 'Badminton · Tennis de table · Pickleball',
+    themeClass: 'theme-raquettes',
+    practiceType: 'raquette',
+    modeIds: ['raquettes-poule', 'raquettes-montee-descente', 'raquettes-defi'],
+  },
+};
+const MODE_DEFINITIONS = {
+  'sportco-championnat': {
+    id: 'sportco-championnat',
+    universe: 'sportco',
+    label: 'Championnat',
+    description: 'Toutes les équipes se rencontrent avec estimation du temps et rôles sociaux.',
+    tournamentType: 'round-robin',
+    practiceType: 'sport-co',
+    badge: 'Championnat EPS',
+  },
+  'sportco-worldcup': {
+    id: 'sportco-worldcup',
+    universe: 'sportco',
+    label: 'Coupe du monde',
+    description: 'Phase de poules équilibrées puis phase finale automatique.',
+    tournamentType: 'groups-finals',
+    practiceType: 'sport-co',
+    badge: 'Coupe du monde',
+  },
+  'raquettes-poule': {
+    id: 'raquettes-poule',
+    universe: 'raquettes',
+    label: 'Poule',
+    description: 'Tous les joueurs se rencontrent avec estimation du temps.',
+    tournamentType: 'round-robin',
+    practiceType: 'raquette',
+    badge: 'Poule raquettes',
+  },
+  'raquettes-montee-descente': {
+    id: 'raquettes-montee-descente',
+    universe: 'raquettes',
+    label: 'Montée-descente',
+    description: 'Le gagnant monte, le perdant descend, arbitrage configurable.',
+    tournamentType: 'ladder',
+    practiceType: 'raquette',
+    badge: 'Montée / descente',
+  },
+  'raquettes-defi': {
+    id: 'raquettes-defi',
+    universe: 'raquettes',
+    label: 'Défi',
+    description: 'Classement vivant avec défis dans une fenêtre ±5 places.',
+    tournamentType: 'challenge',
+    practiceType: 'raquette',
+    badge: 'Mode Défi',
+  },
+};
 const TOURNAMENT_MODES = {
   'round-robin': { label: 'Poule unique' },
   groups: { label: 'Groupes' },
   'groups-finals': { label: 'Groupes + finales' },
+  ladder: { label: 'Montée-descente' },
+  challenge: { label: 'Défi' },
+};
+const STATUS_TYPES = {
+  active: { key: 'active', label: 'Actif', cssClass: 'status-active' },
+  unavailable: { key: 'unavailable', label: 'Indisponible', cssClass: 'status-unavailable' },
 };
 
 const screens = {};
@@ -47,8 +120,12 @@ function formatParticipantLabel(options = {}) {
   return capitalized ? base.charAt(0).toUpperCase() + base.slice(1) : base;
 }
 
-function getFieldLabels() {
-  return { singular: 'terrain', plural: 'terrains' };
+function getFieldLabels(practiceType = state.practiceType || 'sport-co') {
+  const map = {
+    'sport-co': { singular: 'terrain', plural: 'terrains' },
+    raquette: { singular: 'terrain', plural: 'terrains' },
+  };
+  return map[practiceType] || map['sport-co'];
 }
 
 function formatFieldLabel(options = {}) {
@@ -61,6 +138,14 @@ function formatFieldLabel(options = {}) {
 function getPracticeTypeFromMeta(meta) {
   if (meta && meta.practiceType) return meta.practiceType;
   return state.practiceType || 'sport-co';
+}
+
+function getUniverseDefinition(universeId) {
+  return UNIVERSES[universeId] || null;
+}
+
+function getModeDefinition(modeId) {
+  return MODE_DEFINITIONS[modeId] || null;
 }
 
 const LETTER_REGEX = /\p{L}/u;
@@ -263,6 +348,7 @@ const AUTO_SELECT_IDS = [
   'quickParticipants',
   'quickFields',
   'quickDuration',
+  'modeParticipantsInput',
   'fieldCount',
   'matchDuration',
   'scoreTarget',
@@ -297,9 +383,11 @@ function buildRestRoleHint() {
 const elements = {
   stepper: document.getElementById('stepper'),
   stepItems: document.querySelectorAll('.step'),
-  startFlow: document.getElementById('startFlow'),
+  landingSportcoBtn: document.getElementById('landingSportcoBtn'),
+  landingRaquettesBtn: document.getElementById('landingRaquettesBtn'),
   resumeFlow: document.getElementById('resumeFlow'),
   quickModeBtn: document.getElementById('quickModeBtn'),
+  openHelpFromLanding: document.getElementById('openHelpFromLanding'),
   quickForm: document.getElementById('quickForm'),
   quickParticipants: document.getElementById('quickParticipants'),
   quickFields: document.getElementById('quickFields'),
@@ -309,9 +397,23 @@ const elements = {
   quickRoleReferee: document.getElementById('quickRoleReferee'),
   quickRoleTable: document.getElementById('quickRoleTable'),
   quickGenerateBtn: document.getElementById('quickGenerateBtn'),
-  modeCards: document.querySelectorAll('.mode-card[data-mode]'),
+  modeCardsGrid: document.getElementById('modeCardsGrid'),
+  modeScreenTitle: document.getElementById('modeScreenTitle'),
+  modeScreenSubtitle: document.getElementById('modeScreenSubtitle'),
+  modeStepEyebrow: document.getElementById('modeStepEyebrow'),
+  modeFootnote: document.getElementById('modeFootnote'),
+  modeNextBtn: document.getElementById('modeNextBtn'),
+  modeOptionsEyebrow: document.getElementById('modeOptionsEyebrow'),
+  modeOptionsTitle: document.getElementById('modeOptionsTitle'),
+  modeOptionsDescription: document.getElementById('modeOptionsDescription'),
+  modePracticeChip: document.getElementById('modePracticeChip'),
+  modeParticipantsInput: document.getElementById('modeParticipantsInput'),
+  modeParticipantsLabel: document.getElementById('modeParticipantsLabel'),
+  modeFieldBlocks: document.querySelectorAll('[data-mode-field]'),
   navButtons: document.querySelectorAll('[data-nav]'),
   printTopBtn: document.getElementById('printTopBtn'),
+  universeBadge: document.getElementById('universeBadge'),
+  modeBadge: document.getElementById('modeBadge'),
   countMinus: document.getElementById('countMinus'),
   countPlus: document.getElementById('countPlus'),
   teamCountDisplay: document.getElementById('teamCountDisplay'),
@@ -336,11 +438,16 @@ const elements = {
   scoreTargetInput: document.getElementById('scoreTarget'),
   matchDurationField: document.getElementById('matchDurationField'),
   scoreTargetField: document.getElementById('scoreTargetField'),
+  worldCupGroupCount: document.getElementById('worldCupGroupCount'),
+  ladderSettings: document.getElementById('ladderSettings'),
+  ladderRefereeCourts: document.getElementById('ladderRefereeCourts'),
+  ladderFreeCourts: document.getElementById('ladderFreeCourts'),
   simulateBtn: document.getElementById('simulateBtn'),
   simulationResult: document.getElementById('simulationResult'),
   resetOptionsBtn: document.getElementById('resetOptionsBtn'),
   resultsProjectionBtn: document.getElementById('resultsProjectionBtn'),
   resultsChronoBtn: document.getElementById('resultsChronoBtn'),
+  contextTabs: document.getElementById('contextTabs'),
   resetFeedback: document.getElementById('resetFeedback'),
   timerToggle: document.getElementById('timerToggle'),
   soundToggle: document.getElementById('soundToggle'),
@@ -414,6 +521,14 @@ const elements = {
   finalRankingCsvBtn: document.getElementById('finalRankingCsvBtn'),
   finalRankingOkBtn: document.getElementById('finalRankingOkBtn'),
   finalRankingLiveBtn: document.getElementById('finalRankingLiveBtn'),
+  rankingButtons: document.querySelectorAll('[data-open-ranking]'),
+  rankingModal: document.getElementById('rankingModal'),
+  rankingModalBody: document.getElementById('rankingModalBody'),
+  rankingModalClose: document.getElementById('rankingModalClose'),
+  statusBtn: document.getElementById('statusBtn'),
+  statusModal: document.getElementById('statusModal'),
+  statusModalClose: document.getElementById('statusModalClose'),
+  statusList: document.getElementById('statusList'),
   helpBtn: document.getElementById('helpBtn'),
   helpModal: document.getElementById('helpModal'),
   helpCloseBtn: document.getElementById('helpCloseBtn'),
@@ -453,6 +568,8 @@ const timerUiState = {
 let latestRecommendation = null;
 let recommendationApplied = false;
 let resetFeedbackTimeout = null;
+let challengeHighlightTimeout = null;
+let challengeDialogContext = null;
 
 const timerController = {
   prepare() {
@@ -559,7 +676,9 @@ function init() {
   buildTeamFields(state.participants);
   syncOptionInputs();
   setupAutoSelectInputs();
-  syncModeSelection();
+  updateTheme(state.universeId);
+  renderModeCards();
+  updateModeScreenCopy();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
   }
@@ -572,20 +691,42 @@ function init() {
 }
 
 function bindNavigation() {
-  elements.startFlow.addEventListener('click', () => goTo('type'));
-  elements.resumeFlow.addEventListener('click', handleResume);
+  if (elements.landingSportcoBtn) {
+    elements.landingSportcoBtn.addEventListener('click', () => enterUniverse('sportco'));
+  }
+  if (elements.landingRaquettesBtn) {
+    elements.landingRaquettesBtn.addEventListener('click', () => enterUniverse('raquettes'));
+  }
+  if (elements.resumeFlow) {
+    elements.resumeFlow.addEventListener('click', handleResume);
+  }
+  if (elements.openHelpFromLanding) {
+    elements.openHelpFromLanding.addEventListener('click', openHelpModal);
+  }
   if (elements.quickModeBtn) {
     elements.quickModeBtn.addEventListener('click', () => goTo('quick'));
   }
 
-  elements.modeCards.forEach(card => {
-    card.addEventListener('click', () => selectTournamentMode(card.dataset.mode));
-    card.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      selectTournamentMode(card.dataset.mode);
+  if (elements.modeCardsGrid) {
+    elements.modeCardsGrid.addEventListener('click', event => {
+      const target = event.target.closest('[data-mode-id]');
+      if (!target) return;
+      handleModeSelection(target.dataset.modeId);
     });
-  });
+    elements.modeCardsGrid.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const target = event.target.closest('[data-mode-id]');
+      if (!target) return;
+      event.preventDefault();
+      handleModeSelection(target.dataset.modeId);
+    });
+  }
+  if (elements.modeNextBtn) {
+    elements.modeNextBtn.addEventListener('click', () => {
+      if (!state.activeModeId) return;
+      goTo('count');
+    });
+  }
 
   elements.navButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -598,6 +739,9 @@ function bindNavigation() {
   elements.countMinus.addEventListener('click', () => adjustParticipants(-1));
   elements.countPlus.addEventListener('click', () => adjustParticipants(1));
   elements.teamCountSlider.addEventListener('input', event => updateParticipants(Number(event.target.value)));
+  if (elements.modeParticipantsInput) {
+    elements.modeParticipantsInput.addEventListener('input', event => updateParticipants(Number(event.target.value)));
+  }
 
   elements.teamFields.addEventListener('input', event => {
     if (!event.target.matches('input[data-index]')) return;
@@ -646,6 +790,21 @@ function bindNavigation() {
   elements.fieldCount.addEventListener('input', event => {
     state.options.fields = clampNumber(Number(event.target.value), 1, 16, state.options.fields);
     event.target.value = state.options.fields;
+    if (state.options.ladder) {
+      state.options.ladder.refereeCourts = clampNumber(
+        Number(state.options.ladder.refereeCourts),
+        0,
+        state.options.fields,
+        0
+      );
+      state.options.ladder.freeCourts = clampNumber(Number(state.options.ladder.freeCourts), 0, state.options.fields, 0);
+    }
+    if (elements.ladderRefereeCourts) {
+      elements.ladderRefereeCourts.value = state.options.ladder.refereeCourts || 0;
+    }
+    if (elements.ladderFreeCourts) {
+      elements.ladderFreeCourts.value = state.options.ladder.freeCourts || 0;
+    }
     persistState();
   });
 
@@ -718,6 +877,32 @@ function bindNavigation() {
     elements.scoreTargetInput.addEventListener('input', event => {
       state.options.scoreTarget = clampNumber(Number(event.target.value), 1, 200, state.options.scoreTarget ?? 11);
       event.target.value = state.options.scoreTarget;
+      persistState();
+    });
+  }
+  if (elements.worldCupGroupCount) {
+    elements.worldCupGroupCount.addEventListener('change', event => {
+      const requested = Number(event.target.value);
+      state.options.worldCupGroupCount = clampNumber(requested, 2, 4, state.options.worldCupGroupCount || 2);
+      event.target.value = state.options.worldCupGroupCount;
+      persistState();
+    });
+  }
+  if (elements.ladderRefereeCourts) {
+    elements.ladderRefereeCourts.addEventListener('input', event => {
+      const value = clampNumber(Number(event.target.value), 0, state.options.fields, 0);
+      state.options.ladder = state.options.ladder || { refereeCourts: 0, freeCourts: 0 };
+      state.options.ladder.refereeCourts = value;
+      event.target.value = value;
+      persistState();
+    });
+  }
+  if (elements.ladderFreeCourts) {
+    elements.ladderFreeCourts.addEventListener('input', event => {
+      const value = clampNumber(Number(event.target.value), 0, state.options.fields, 0);
+      state.options.ladder = state.options.ladder || { refereeCourts: 0, freeCourts: 0 };
+      state.options.ladder.freeCourts = value;
+      event.target.value = value;
       persistState();
     });
   }
@@ -802,8 +987,8 @@ function bindNavigation() {
   });
   if (elements.timerRanking) {
     elements.timerRanking.addEventListener('click', () => {
-      goTo('results');
-      setActiveView('rankings');
+      if (!state.schedule) return;
+      openRankingModal();
     });
   }
   if (elements.timerFab) {
@@ -919,6 +1104,49 @@ function bindNavigation() {
       }
     });
   }
+  if (elements.rankingButtons && elements.rankingButtons.length) {
+    elements.rankingButtons.forEach(btn => {
+      btn.addEventListener('click', toggleRankingModal);
+    });
+  }
+  if (elements.rankingModalClose) {
+    elements.rankingModalClose.addEventListener('click', closeRankingModal);
+  }
+  if (elements.rankingModal) {
+    elements.rankingModal.addEventListener('click', event => {
+      if (event.target === elements.rankingModal) {
+        closeRankingModal();
+      }
+    });
+  }
+  if (elements.statusBtn) {
+    elements.statusBtn.addEventListener('click', openStatusModal);
+  }
+  if (elements.statusModalClose) {
+    elements.statusModalClose.addEventListener('click', closeStatusModal);
+  }
+  if (elements.statusModal) {
+    elements.statusModal.addEventListener('click', event => {
+      if (event.target === elements.statusModal) {
+        closeStatusModal();
+      }
+    });
+  }
+  if (elements.statusList) {
+    elements.statusList.addEventListener('click', event => {
+      const button = event.target.closest('[data-status-index]');
+      if (!button) return;
+      const index = Number(button.dataset.statusIndex);
+      if (!Number.isInteger(index)) return;
+      setEntityStatus(index, button.dataset.statusValue);
+    });
+  }
+  if (elements.rotationView) {
+    elements.rotationView.addEventListener('click', handleChallengeClick);
+    elements.rotationView.addEventListener('dblclick', handleChallengeDoubleClick);
+    elements.rotationView.addEventListener('submit', handleChallengeFormSubmit);
+    elements.rotationView.addEventListener('click', handleChallengeDialogAction);
+  }
   if (elements.simulateBtn) {
     elements.simulateBtn.addEventListener('click', handleSimulationRequest);
   }
@@ -936,6 +1164,13 @@ function bindNavigation() {
       if (!state.schedule) return;
       goTo('chrono');
       renderChronoScreen();
+    });
+  }
+  if (elements.contextTabs) {
+    elements.contextTabs.addEventListener('click', event => {
+      const target = event.target.closest('[data-context]');
+      if (!target) return;
+      handleContextTab(target.dataset.context);
     });
   }
   if (elements.recommendBtn) {
@@ -1008,7 +1243,9 @@ function handleResume() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
-  syncModeSelection();
+  updateTheme(state.universeId);
+  renderModeCards();
+  updateModeScreenCopy();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
     goTo(state.currentScreen && state.currentScreen !== 'landing' ? state.currentScreen : 'results');
@@ -1069,6 +1306,9 @@ function togglePrintButton(visible) {
 function renderParticipants() {
   elements.teamCountDisplay.textContent = state.participants;
   elements.teamCountSlider.value = state.participants;
+  if (elements.modeParticipantsInput) {
+    elements.modeParticipantsInput.value = state.participants;
+  }
 }
 
 function getTournamentType() {
@@ -1079,22 +1319,173 @@ function getTournamentType() {
   return state.tournamentType;
 }
 
-function selectTournamentMode(mode) {
-  const allowed = Object.keys(TOURNAMENT_MODES);
-  const next = allowed.includes(mode) ? mode : 'round-robin';
-  if (state.tournamentType === next) return;
-  state.tournamentType = next;
-  syncModeSelection();
-  persistState();
+function renderModeCards() {
+  if (!elements.modeCardsGrid) return;
+  const universe = UNIVERSES[state.universeId] || UNIVERSES.sportco;
+  const cards = universe.modeIds
+    .map(modeId => {
+      const definition = MODE_DEFINITIONS[modeId];
+      if (!definition) return '';
+      const isActive = state.activeModeId === modeId;
+      const badge = definition.badge ? `<span class="pill">${definition.badge}</span>` : '';
+      return `
+        <article class="mode-card ${isActive ? 'active' : ''}" role="button" tabindex="0" data-mode-id="${modeId}">
+          <div>
+            <strong>${definition.label}</strong>
+            <p>${definition.description}</p>
+          </div>
+          ${badge}
+        </article>
+      `;
+    })
+    .join('');
+  elements.modeCardsGrid.innerHTML = cards;
+  if (elements.modeNextBtn) {
+    elements.modeNextBtn.disabled = !state.activeModeId;
+  }
 }
 
-function syncModeSelection() {
-  const current = getTournamentType();
-  elements.modeCards.forEach(card => {
-    const isActive = card.dataset.mode === current;
-    card.classList.toggle('active', isActive);
-    card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+function updateModeScreenCopy() {
+  const universe = UNIVERSES[state.universeId] || UNIVERSES.sportco;
+  const mode = MODE_DEFINITIONS[state.activeModeId];
+  if (elements.modeScreenTitle) {
+    elements.modeScreenTitle.textContent = universe.label;
+  }
+  if (elements.modeScreenSubtitle) {
+    elements.modeScreenSubtitle.textContent = universe.baseline;
+  }
+  if (elements.modeFootnote) {
+    elements.modeFootnote.textContent = mode
+      ? `Mode sélectionné : ${mode.label} · ${mode.description}`
+      : 'Choisissez un mode pour passer au paramétrage.';
+  }
+  if (elements.modeStepEyebrow) {
+    elements.modeStepEyebrow.textContent = `Étape 1 · ${universe.label}`;
+  }
+  updateModeBadges();
+  updateModeContextPanel();
+}
+
+function updateLadderSettingsVisibility() {
+  if (!elements.ladderSettings) return;
+  const isLadder = state.tournamentType === 'ladder';
+  elements.ladderSettings.classList.toggle('hidden', !isLadder);
+}
+
+function updateModeBadges() {
+  if (elements.universeBadge) {
+    const universe = UNIVERSES[state.universeId];
+    elements.universeBadge.textContent = universe ? universe.badge : 'Univers à choisir';
+  }
+  if (elements.modeBadge) {
+    const mode = MODE_DEFINITIONS[state.activeModeId];
+    elements.modeBadge.textContent = mode ? mode.badge : 'Mode non sélectionné';
+  }
+}
+
+function updateModeContextPanel() {
+  const mode = MODE_DEFINITIONS[state.activeModeId];
+  const universe = UNIVERSES[state.universeId];
+  if (elements.modeOptionsTitle) {
+    elements.modeOptionsTitle.textContent = mode ? mode.label : 'Choisissez un mode';
+  }
+  if (elements.modeOptionsDescription) {
+    elements.modeOptionsDescription.textContent = mode
+      ? mode.description
+      : 'Sélectionnez un mode pour afficher les réglages ciblés.';
+  }
+  if (elements.modeOptionsEyebrow) {
+    elements.modeOptionsEyebrow.textContent = universe ? universe.label : 'Univers';
+  }
+  if (elements.modePracticeChip) {
+    elements.modePracticeChip.textContent = universe ? universe.badge : 'Mode';
+  }
+  updateModeParticipantsLabel();
+  updateModeFieldVisibility();
+}
+
+function updateModeParticipantsLabel() {
+  if (!elements.modeParticipantsLabel) return;
+  const practice = state.practiceType || 'sport-co';
+  elements.modeParticipantsLabel.textContent = practice === 'sport-co' ? 'Nombre d’équipes' : 'Nombre de joueurs';
+}
+
+function updateModeFieldVisibility() {
+  if (!elements.modeFieldBlocks || !elements.modeFieldBlocks.forEach) return;
+  const activeId = state.activeModeId;
+  elements.modeFieldBlocks.forEach(node => {
+    const targetsAttr = node.dataset.modeField || 'all';
+    const targets = targetsAttr
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+    const show = !targets.length || targets.includes('all') || targets.includes(activeId);
+    node.classList.toggle('hidden', !show);
   });
+}
+
+function enterUniverse(universeId) {
+  const universe = UNIVERSES[universeId];
+  if (!universe) return;
+  state.universeId = universeId;
+  updateTheme(universeId);
+  const availableModes = universe.modeIds || [];
+  const hasActiveMode = availableModes.includes(state.activeModeId);
+  if (!hasActiveMode && availableModes.length) {
+    applyModeDefinition(availableModes[0], { skipNavigation: true });
+  } else {
+    renderModeCards();
+    updateModeScreenCopy();
+  }
+  persistState();
+  goTo('type');
+}
+
+function handleModeSelection(modeId) {
+  const applied = applyModeDefinition(modeId);
+  if (!applied) return;
+  if (elements.modeNextBtn) {
+    elements.modeNextBtn.disabled = false;
+    elements.modeNextBtn.focus();
+  }
+  setTimeout(() => goTo('count'), 120);
+}
+
+function applyModeDefinition(modeId, options = {}) {
+  const definition = MODE_DEFINITIONS[modeId];
+  if (!definition) return false;
+  const previousPractice = state.practiceType;
+  state.activeModeId = definition.id;
+  state.universeId = definition.universe;
+  state.practiceType = definition.practiceType;
+  if (TOURNAMENT_MODES[definition.tournamentType]) {
+    state.tournamentType = definition.tournamentType;
+  }
+  updateTheme(state.universeId);
+  renderModeCards();
+  updateModeScreenCopy();
+  updateModeBadges();
+  updateLadderSettingsVisibility();
+  if (previousPractice !== state.practiceType) {
+    state.teamNames = ensureTeamListLength(state.teamNames, state.participants, state.practiceType);
+    state.entityStatuses = ensureEntityStatusLength(state.entityStatuses, state.participants);
+    updateTeamScreenCopy();
+    updateCountScreenCopy();
+    buildTeamFields(state.participants);
+  }
+  persistState();
+  if (!options.skipNavigation && elements.modeNextBtn) {
+    elements.modeNextBtn.disabled = false;
+  }
+  return true;
+}
+
+function updateTheme(universeId) {
+  document.body.classList.remove('theme-sportco', 'theme-raquettes');
+  const universe = UNIVERSES[universeId];
+  if (universe && universe.themeClass) {
+    document.body.classList.add(universe.themeClass);
+  }
 }
 
 function adjustParticipants(delta) {
@@ -1159,10 +1550,24 @@ function syncOptionInputs() {
   if (elements.scoreTargetInput) {
     elements.scoreTargetInput.value = state.options.scoreTarget ?? 11;
   }
+  if (elements.worldCupGroupCount) {
+    elements.worldCupGroupCount.value = state.options.worldCupGroupCount ?? 2;
+  }
+  if (elements.ladderRefereeCourts) {
+    elements.ladderRefereeCourts.value = state.options.ladder?.refereeCourts ?? 0;
+  }
+  if (elements.ladderFreeCourts) {
+    elements.ladderFreeCourts.value = state.options.ladder?.freeCourts ?? 0;
+  }
+  if (elements.modeParticipantsInput) {
+    elements.modeParticipantsInput.value = state.participants;
+  }
   syncScoreFieldVisibility();
   updateTeamScreenCopy();
   updateCountScreenCopy();
   updateRoleControlsState();
+  updateLadderSettingsVisibility();
+  updateModeContextPanel();
 }
 
 function getFinalTeamNames() {
@@ -1215,6 +1620,7 @@ function renderResults(schedule, options = {}) {
     state.validatedMatches = {};
   }
   state.schedule = schedule;
+  hydrateScheduleForSpecialModes(state.schedule);
   if (state.schedule && state.schedule.meta) {
     state.schedule.meta.formatLabel =
       state.schedule.meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label;
@@ -1245,7 +1651,11 @@ function renderResults(schedule, options = {}) {
   renderSummary(schedule.meta);
   updateMatchInsight(state.schedule);
   updatePrintHeader(schedule.meta);
-  renderRotationView(schedule.rotations);
+  if (schedule.format === 'challenge') {
+    renderChallengeBoard(schedule);
+  } else {
+    renderRotationView(schedule.rotations);
+  }
   const teamEntries = buildTeamEntriesFromSchedule(schedule);
   schedule.teams = teamEntries;
   renderTeamView(teamEntries);
@@ -1451,6 +1861,9 @@ function updateMatchInsight(schedule) {
 function getMatchLoadInfo(schedule) {
   if (!schedule) return null;
   const format = schedule.format || 'round-robin';
+  if (format === 'ladder' || format === 'challenge') {
+    return null;
+  }
   const practiceType = getPracticeTypeFromMeta(schedule.meta);
   const pluralLabel = formatParticipantLabel({ plural: true, practiceType });
   const singularLabel = formatParticipantLabel({ practiceType });
@@ -1644,6 +2057,11 @@ function handleQuickGenerate(event) {
   };
   const quickRolesEnabled = quickRoles.arbitre || quickRoles.table || quickRoles.coach;
   state.practiceType = practice;
+  const quickMode = practice === 'raquette' ? 'raquettes-poule' : 'sportco-championnat';
+  if (MODE_DEFINITIONS[quickMode]) {
+    state.activeModeId = quickMode;
+    state.universeId = MODE_DEFINITIONS[quickMode].universe;
+  }
   state.participants = participants;
   state.options.fields = fields;
   state.options.duration = duration;
@@ -1664,6 +2082,8 @@ function handleQuickGenerate(event) {
   renderParticipants();
   buildTeamFields(participants);
   syncOptionInputs();
+  renderModeCards();
+  updateModeScreenCopy();
   persistState();
   const teams = getFinalTeamNames();
   if (teams.length < 2) {
@@ -1747,18 +2167,21 @@ function updateTeamScreenCopy() {
 
 function updateCountScreenCopy() {
   if (!elements.countTitle) return;
-  const neutralLabel = 'Nombre d’équipes / participants';
-  const neutralAction = 'd’équipes / participants';
-  elements.countTitle.textContent = neutralLabel;
+  const practice = state.practiceType || 'sport-co';
+  const isSportCo = practice === 'sport-co';
+  const label = isSportCo ? 'Nombre d’équipes' : 'Nombre de participants';
+  const actionLabel = isSportCo ? 'd’équipes' : 'de participants';
+  elements.countTitle.textContent = label;
   if (elements.countMinus) {
-    elements.countMinus.setAttribute('aria-label', `Moins ${neutralAction}`);
+    elements.countMinus.setAttribute('aria-label', `Moins ${actionLabel}`);
   }
   if (elements.countPlus) {
-    elements.countPlus.setAttribute('aria-label', `Plus ${neutralAction}`);
+    elements.countPlus.setAttribute('aria-label', `Plus ${actionLabel}`);
   }
   if (elements.teamCountSlider) {
-    elements.teamCountSlider.setAttribute('aria-label', `Ajuster ${neutralAction}`);
+    elements.teamCountSlider.setAttribute('aria-label', `Ajuster ${actionLabel}`);
   }
+  updateModeParticipantsLabel();
 }
 
 function updateRoleControlsState() {
@@ -1911,7 +2334,17 @@ function handleOptionsReset() {
   state.options.startTime = defaults.startTime;
   state.options.endTime = defaults.endTime;
   state.options.schedulingMode = defaults.schedulingMode;
+  state.options.matchMode = defaults.matchMode;
+  state.options.scoreTarget = defaults.scoreTarget;
+  state.options.worldCupGroupCount = defaults.worldCupGroupCount;
+  state.options.timer = defaults.timer;
+  state.options.sound = defaults.sound;
+  state.options.vibration = defaults.vibration;
   state.options.roleSettings = { ...DEFAULT_ROLE_SETTINGS };
+  state.options.ladder = {
+    refereeCourts: defaults.ladder?.refereeCourts ?? 0,
+    freeCourts: defaults.ladder?.freeCourts ?? 0,
+  };
   timerState.baseSeconds = state.options.duration * 60;
   if (elements.fieldCount) elements.fieldCount.value = state.options.fields;
   if (elements.matchDuration) elements.matchDuration.value = state.options.duration;
@@ -1924,6 +2357,30 @@ function handleOptionsReset() {
     elements.schedulingModeInputs.forEach(input => {
       input.checked = input.value === state.options.schedulingMode;
     });
+  }
+  if (elements.matchModeSelect) {
+    elements.matchModeSelect.value = state.options.matchMode;
+  }
+  if (elements.scoreTargetInput) {
+    elements.scoreTargetInput.value = state.options.scoreTarget;
+  }
+  if (elements.worldCupGroupCount) {
+    elements.worldCupGroupCount.value = state.options.worldCupGroupCount;
+  }
+  if (elements.timerToggle) {
+    elements.timerToggle.checked = state.options.timer;
+  }
+  if (elements.soundToggle) {
+    elements.soundToggle.checked = state.options.sound;
+  }
+  if (elements.vibrationToggle) {
+    elements.vibrationToggle.checked = state.options.vibration;
+  }
+  if (elements.ladderRefereeCourts) {
+    elements.ladderRefereeCourts.value = state.options.ladder.refereeCourts;
+  }
+  if (elements.ladderFreeCourts) {
+    elements.ladderFreeCourts.value = state.options.ladder.freeCourts;
   }
   updateRoleControlsState();
   persistState();
@@ -2076,17 +2533,22 @@ function buildMatchListHTML(rotation, practiceType, roleAssignments) {
       const groupTag = match.groupLabel ? `<span class="match-group-label">${match.groupLabel}</span>` : '';
       const fieldText = match.field ? `${fieldLabel} ${match.field}` : 'Organisation en cours';
       const roles = renderRoleLines(roleAssignments?.get(matchId));
+      const neutralized = isMatchNeutralized(participants);
+      const homeLabel = decorateNameWithStatus(participants.home);
+      const awayLabel = decorateNameWithStatus(participants.away);
+      const disabledAttr = neutralized ? 'disabled' : '';
+      const neutralBadge = neutralized ? `<span class="status-pill unavailable">Indisponible</span>` : '';
       return `
       <li>
         <div class="match-label">
-          <span>${participants.home} - ${participants.away}</span>
+          <span class="match-title">${homeLabel} <span class="vs">vs</span> ${awayLabel} ${neutralBadge}</span>
           ${groupTag}
           <span class="field-label">${fieldText}</span>
         </div>
         <div class="score-inputs" aria-label="Score ${participants.home} ${participants.away}">
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" />
+          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" ${disabledAttr} />
           <span>:</span>
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" />
+          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" ${disabledAttr} />
         </div>
         ${roles || ''}
       </li>`;
@@ -2098,7 +2560,8 @@ function buildFieldsGridHTML(rotation, practiceType, roleAssignments) {
   return rotation.fieldAssignments
     .map((field, index) => {
       const fieldTitle = formatFieldLabel({ practiceType, capitalized: true });
-      const header = `${fieldTitle} ${index + 1}`;
+      const badge = buildFieldBadgeHtml(index + 1);
+      const header = `${fieldTitle} ${index + 1} ${badge}`;
       const items = field.matches.length
         ? field.matches
             .map(m => {
@@ -2106,7 +2569,8 @@ function buildFieldsGridHTML(rotation, practiceType, roleAssignments) {
               const groupTag = m.groupLabel ? `<span class="match-group-inline">${m.groupLabel}</span>` : '';
               const matchId = m.id || buildMatchKey(rotation.number, participants.home, participants.away);
               const roles = renderRoleLines(roleAssignments?.get(matchId));
-              return `<li>${participants.home} - ${participants.away} ${groupTag}${roles || ''}</li>`;
+              const badge = isMatchNeutralized(participants) ? `<span class="status-pill unavailable">Indisponible</span>` : '';
+              return `<li>${decorateNameWithStatus(participants.home)} - ${decorateNameWithStatus(participants.away)} ${groupTag}${badge}${roles || ''}</li>`;
             })
             .join('')
         : '<li>Aucun match</li>';
@@ -2121,6 +2585,26 @@ function buildRestBadgesHTML(rotation, practiceType, roleAssignments) {
   const badges = waiting.map(team => `<span class="rest-badge">${team}</span>`).join('');
   const pluralLabel = formatParticipantLabel({ practiceType, plural: true, capitalized: true });
   return `<div class="rest-badges" aria-label="${pluralLabel} au repos">${badges}</div>`;
+}
+
+function buildFieldBadgeHtml(fieldNumber) {
+  const profile = getLadderCourtProfile(fieldNumber);
+  if (!profile) return '';
+  const label = profile === 'arbiter' ? 'Arbitré' : 'Libre';
+  return `<span class="field-badge ${profile}">${label}</span>`;
+}
+
+function getLadderCourtProfile(fieldNumber) {
+  if (!state.schedule || state.schedule.format !== 'ladder') return null;
+  if (!Number.isFinite(fieldNumber)) return null;
+  const ladder = state.schedule.ladder || {};
+  const refereeCourts = Number(ladder.refereeCourts) || 0;
+  const freeCourts = Number(ladder.freeCourts) || 0;
+  const index = fieldNumber - 1;
+  if (index < 0) return null;
+  if (index < refereeCourts) return 'arbiter';
+  if (index < refereeCourts + freeCourts) return 'free';
+  return null;
 }
 
 function renderRotationView(rotations) {
@@ -2231,6 +2715,10 @@ function renderRankingView(schedule) {
     elements.rankingView.innerHTML = '';
     return;
   }
+  if (schedule.format === 'challenge') {
+    renderChallengeRanking(schedule);
+    return;
+  }
   if (schedule.format && schedule.format !== 'round-robin') {
     renderGroupRankingCards(schedule);
     return;
@@ -2283,6 +2771,264 @@ function renderRankingView(schedule) {
     })
     .join('');
   elements.rankingView.innerHTML = cards;
+}
+
+function renderChallengeRanking(schedule) {
+  if (!elements.rankingView) return;
+  const challenge = schedule.challenge;
+  if (!challenge) {
+    elements.rankingView.innerHTML = '<p>Aucun classement pour le moment.</p>';
+    return;
+  }
+  const rows = (challenge.order || []).map((teamIndex, position) => {
+    const name = challenge.names[teamIndex];
+    return `<li><span>${position + 1}</span><span>${name}</span></li>`;
+  });
+  elements.rankingView.innerHTML = `
+    <article class="ranking-card">
+      <header>
+        <h3>Classement Défi</h3>
+        <span class="ranking-status">Mise à jour manuelle</span>
+      </header>
+      <ul class="challenge-ranking-list">
+        ${rows.join('')}
+      </ul>
+    </article>
+  `;
+}
+
+function renderChallengeBoard(schedule) {
+  if (!elements.rotationView) return;
+  const challenge = schedule.challenge;
+  if (!challenge || !challenge.names.length) {
+    elements.rotationView.innerHTML = '<p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p>';
+    return;
+  }
+  const order = challenge.order || challenge.names.map((_, index) => index);
+  const rows = order
+    .map((teamIndex, position) => {
+      const name = challenge.names[teamIndex];
+      const statusKey = getEntityStatusByName(name);
+      const isInactive = isEntityInactive(statusKey);
+      const inactiveClass = isInactive ? 'inactive' : '';
+      const actionDisabled = isInactive ? 'disabled' : '';
+      return `
+        <div class="challenge-row ${inactiveClass}" data-challenge-index="${position}" data-challenge-name="${name}">
+          <span class="challenge-rank">${position + 1}</span>
+          <button type="button" class="challenge-name" data-challenge-index="${position}" data-challenge-name="${name}">
+            ${decorateNameWithStatus(name)}
+          </button>
+          <button type="button" class="challenge-action" data-challenge-open="${position}" ${actionDisabled}>
+            Saisir un défi
+          </button>
+        </div>
+      `;
+    })
+    .join('');
+  elements.rotationView.innerHTML = `
+    <div class="challenge-instructions">
+      <p>• Touchez un nom pour afficher la fenêtre ±5 places (3 s).<br />• Utilisez « Saisir un défi » (ou double-clic souris) pour enregistrer un score.</p>
+    </div>
+    <div class="challenge-board" id="challengeBoard">
+      ${rows}
+    </div>
+    ${buildChallengeDialogMarkup()}
+  `;
+}
+
+function buildChallengeDialogMarkup() {
+  return `
+    <div class="challenge-dialog hidden" id="challengeDialog" role="dialog" aria-modal="true">
+      <div class="challenge-dialog-card">
+        <header>
+          <strong id="challengeDialogTitle">Défi</strong>
+          <button type="button" class="btn ghost tiny" data-challenge-action="close">Fermer</button>
+        </header>
+        <form id="challengeForm">
+          <input type="hidden" name="challengerIndex" />
+          <label for="challengeOpponent">Adversaire autorisé (±5 places)</label>
+          <select id="challengeOpponent" name="opponentIndex" required></select>
+          <div class="challenge-score-grid">
+            <label>Score du joueur</label>
+            <input type="number" name="challengerScore" min="0" value="0" required />
+            <label>Score adversaire</label>
+            <input type="number" name="opponentScore" min="0" value="0" required />
+          </div>
+          <div class="challenge-dialog-actions">
+            <button type="submit" class="btn primary">Valider le défi</button>
+            <button type="button" class="btn ghost" data-challenge-action="cancel">Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function handleChallengeClick(event) {
+  if (!isChallengeModeActive()) return;
+  const quickOpen = event.target.closest('[data-challenge-open]');
+  if (quickOpen) {
+    event.preventDefault();
+    const index = Number(quickOpen.dataset.challengeOpen);
+    if (Number.isInteger(index)) {
+      openChallengeDialog(index);
+    }
+    return;
+  }
+  const target = event.target.closest('[data-challenge-index]');
+  if (!target) return;
+  if (target.closest('.challenge-row.inactive')) return;
+  if (event.detail && event.detail > 1) return;
+  const index = Number(target.dataset.challengeIndex);
+  highlightChallengeWindow(index);
+}
+
+function handleChallengeDoubleClick(event) {
+  if (!isChallengeModeActive()) return;
+  const target = event.target.closest('[data-challenge-index]');
+  if (!target) return;
+  if (target.closest('.challenge-row.inactive')) return;
+  event.preventDefault();
+  const index = Number(target.dataset.challengeIndex);
+  openChallengeDialog(index);
+}
+
+function highlightChallengeWindow(index) {
+  const board = document.getElementById('challengeBoard');
+  if (!board) return;
+  const rows = Array.from(board.querySelectorAll('.challenge-row'));
+  rows.forEach(row => row.classList.remove('highlight'));
+  rows.forEach((row, position) => {
+    if (Math.abs(position - index) <= 5) {
+      row.classList.add('highlight');
+    }
+  });
+  if (challengeHighlightTimeout) {
+    clearTimeout(challengeHighlightTimeout);
+  }
+  challengeHighlightTimeout = setTimeout(() => {
+    rows.forEach(row => row.classList.remove('highlight'));
+  }, 3000);
+}
+
+function openChallengeDialog(position) {
+  const dialog = document.getElementById('challengeDialog');
+  if (!dialog || !isChallengeModeActive()) return;
+  const challenge = state.schedule.challenge;
+  const order = challenge.order || [];
+  if (!Number.isInteger(position) || position < 0 || position >= order.length) return;
+  const form = dialog.querySelector('#challengeForm');
+  const select = form.querySelector('select[name="opponentIndex"]');
+  const name = challenge.names[order[position]];
+  const opponents = getChallengeOpponents(position);
+  if (!opponents.length) {
+    alert('Aucun adversaire disponible dans la fenêtre ±5.');
+    return;
+  }
+  form.elements.challengerIndex.value = position;
+  select.innerHTML = opponents
+    .map(option => `<option value="${option.position}">${option.label}</option>`)
+    .join('');
+  form.elements.challengerScore.value = '0';
+  form.elements.opponentScore.value = '0';
+  const title = dialog.querySelector('#challengeDialogTitle');
+  if (title) {
+    title.textContent = `Défi · ${name}`;
+  }
+  dialog.classList.remove('hidden');
+  challengeDialogContext = { challengerIndex: position };
+  syncBodyModalState();
+}
+
+function closeChallengeDialog() {
+  const dialog = document.getElementById('challengeDialog');
+  if (!dialog) return;
+  dialog.classList.add('hidden');
+  challengeDialogContext = null;
+  syncBodyModalState();
+}
+
+function handleChallengeDialogAction(event) {
+  if (!isChallengeModeActive()) return;
+  const control = event.target.closest('[data-challenge-action]');
+  if (!control) return;
+  const action = control.dataset.challengeAction;
+  if (action === 'close' || action === 'cancel') {
+    event.preventDefault();
+    closeChallengeDialog();
+  }
+}
+
+function getChallengeOpponents(position) {
+  const challenge = state.schedule.challenge;
+  const order = challenge.order || [];
+  const names = challenge.names || [];
+  const start = Math.max(0, position - 5);
+  const end = Math.min(order.length - 1, position + 5);
+  const options = [];
+  for (let pos = start; pos <= end; pos += 1) {
+    if (pos === position) continue;
+    const label = `${pos + 1}. ${names[order[pos]]}`;
+    options.push({ position: pos, label });
+  }
+  return options;
+}
+
+function handleChallengeFormSubmit(event) {
+  if (!isChallengeModeActive()) return;
+  if (!event.target.matches('#challengeForm')) return;
+  event.preventDefault();
+  const form = event.target;
+  const challengerIndex = Number(form.elements.challengerIndex.value);
+  const opponentIndex = Number(form.elements.opponentIndex.value);
+  const challengerScore = Number(form.elements.challengerScore.value);
+  const opponentScore = Number(form.elements.opponentScore.value);
+  applyChallengeResult({ challengerIndex, opponentIndex, challengerScore, opponentScore });
+  closeChallengeDialog();
+}
+
+function applyChallengeResult(payload) {
+  if (!isChallengeModeActive()) return;
+  const { challengerIndex, opponentIndex, challengerScore, opponentScore } = payload;
+  if (!Number.isInteger(challengerIndex) || !Number.isInteger(opponentIndex)) return;
+  const challenge = state.schedule.challenge;
+  const order = challenge.order || [];
+  if (
+    challengerIndex < 0 ||
+    opponentIndex < 0 ||
+    challengerIndex >= order.length ||
+    opponentIndex >= order.length ||
+    challengerIndex === opponentIndex
+  ) {
+    return;
+  }
+  if (!Number.isFinite(challengerScore) || !Number.isFinite(opponentScore)) return;
+  if (challengerScore <= opponentScore) {
+    // Victoire obligatoire pour modifier le classement
+    return;
+  }
+  if (opponentIndex >= challengerIndex) {
+    // Le challenger bat un joueur moins bien classé : aucune modification
+    return;
+  }
+  challenge.history = challenge.history || [];
+  const names = challenge.names || [];
+  const challengerName = names[order[challengerIndex]];
+  const opponentName = names[order[opponentIndex]];
+  const temp = order[opponentIndex];
+  order[opponentIndex] = order[challengerIndex];
+  order[challengerIndex] = temp;
+  challenge.history.push({
+    challenger: challengerName,
+    opponent: opponentName,
+    challengerScore,
+    opponentScore,
+    timestamp: new Date().toISOString(),
+  });
+  challenge.history = challenge.history.slice(-20);
+  persistState();
+  renderChallengeBoard(state.schedule);
+  renderRankingView(state.schedule);
 }
 
 function renderGroupRankingCards(schedule) {
@@ -2406,6 +3152,10 @@ function renderLiveRankingPanel(uptoRotation) {
     }
     return;
   }
+  if (state.schedule.format === 'challenge') {
+    renderLiveRankingForChallenge();
+    return;
+  }
   const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
   const columnLabel = formatParticipantLabel({ practiceType, capitalized: true });
   if (elements.liveRankingTitle) {
@@ -2449,6 +3199,39 @@ function renderLiveRankingPanel(uptoRotation) {
       <tbody>${rows}</tbody>
     </table>
     <p class="live-ranking-note">${statusLabel}</p>
+  `;
+}
+
+function renderLiveRankingForChallenge() {
+  if (!elements.liveRankingTable) return;
+  const rows = buildRankingModalRows();
+  if (!rows.length) {
+    elements.liveRankingTable.innerHTML = '<p>Le classement Défi sera visible après l’ajout de participants.</p>';
+    return;
+  }
+  if (elements.liveRankingTitle) {
+    elements.liveRankingTitle.textContent = 'Pos · Joueur';
+  }
+  const list = rows
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+        </tr>`
+    )
+    .join('');
+  elements.liveRankingTable.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Joueur</th>
+        </tr>
+      </thead>
+      <tbody>${list}</tbody>
+    </table>
+    <p class="live-ranking-note">Gestion via le tableau Défi.</p>
   `;
 }
 
@@ -2589,10 +3372,205 @@ function closeHelpModal() {
   syncBodyModalState();
 }
 
+function toggleRankingModal() {
+  if (!elements.rankingModal) return;
+  const willOpen = elements.rankingModal.classList.contains('hidden');
+  if (willOpen) {
+    openRankingModal();
+  } else {
+    closeRankingModal();
+  }
+}
+
+function openRankingModal() {
+  if (!elements.rankingModal) return;
+  if (!state.schedule) {
+    alert('Générez un planning avant d’ouvrir le classement.');
+    return;
+  }
+  renderRankingModal();
+  elements.rankingModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
+function closeRankingModal() {
+  if (!elements.rankingModal) return;
+  elements.rankingModal.classList.add('hidden');
+  syncBodyModalState();
+}
+
+function renderRankingModal() {
+  if (!elements.rankingModalBody || !state.schedule) return;
+  const rows = buildRankingModalRows();
+  if (!rows.length) {
+    elements.rankingModalBody.innerHTML = '<p>Aucun classement disponible pour le moment.</p>';
+    return;
+  }
+  const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
+  const label = formatParticipantLabel({ practiceType, capitalized: true });
+  const tableRows = rows
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.points ?? '–'}</td>
+          <td>${row.played ?? '–'}</td>
+          <td>${row.wins ?? '–'}</td>
+          <td>${row.draws ?? '–'}</td>
+          <td>${row.losses ?? '–'}</td>
+          <td>${row.goalDiff != null ? (row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff) : '–'}</td>
+        </tr>`
+    )
+    .join('');
+  elements.rankingModalBody.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>${label}</th>
+          <th>Pts</th>
+          <th>J</th>
+          <th>G</th>
+          <th>N</th>
+          <th>P</th>
+          <th>Diff</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  `;
+}
+
+function buildRankingModalRows() {
+  if (!state.schedule) return [];
+  if (state.schedule.format === 'ladder' && state.schedule.ladder) {
+    const names = state.schedule.ladder.names || [];
+    const order = ensureLadderOrder(state.schedule.ladder, names.length);
+    return order.map(index => ({
+      name: names[index],
+      points: null,
+      played: null,
+      wins: null,
+      draws: null,
+      losses: null,
+      goalDiff: null,
+    }));
+  }
+  if (state.schedule.format === 'challenge' && state.schedule.challenge) {
+    const names = state.schedule.challenge.names || [];
+    const order = state.schedule.challenge.order || names.map((_, index) => index);
+    return order.map(index => ({
+      name: names[index],
+      points: null,
+      played: null,
+      wins: null,
+      draws: null,
+      losses: null,
+      goalDiff: null,
+    }));
+  }
+  if (state.schedule.format === 'round-robin' || !state.schedule.groups?.length) {
+    const snapshot = computeRankingSnapshot(state.schedule, state.schedule.meta?.rotationCount || Number.MAX_SAFE_INTEGER);
+    return snapshot.table;
+  }
+  const standings = getGroupStandings(state.schedule);
+  if (!standings) return [];
+  const allRows = [];
+  standings.byGroup.forEach((table, groupId) => {
+    table.forEach(entry => {
+      allRows.push({
+        ...entry,
+        name: `${entry.name} (${groupId})`,
+      });
+    });
+  });
+  allRows.sort(compareStatsRows);
+  return allRows;
+}
+
+function openStatusModal() {
+  if (!elements.statusModal) return;
+  renderStatusList();
+  elements.statusModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
+function closeStatusModal() {
+  if (!elements.statusModal) return;
+  elements.statusModal.classList.add('hidden');
+  syncBodyModalState();
+}
+
+function renderStatusList() {
+  if (!elements.statusList) return;
+  const names = ensureTeamListLength(state.teamNames, state.participants, state.practiceType);
+  state.entityStatuses = ensureEntityStatusLength(state.entityStatuses, names.length);
+  if (!names.length) {
+    elements.statusList.innerHTML = '<p>Aucune équipe / participant pour le moment.</p>';
+    return;
+  }
+  const rows = names
+    .map((name, index) => {
+      const statusKey = getEntityStatus(index);
+      const chips = Object.values(STATUS_TYPES)
+        .map(
+          type => `
+            <button class="status-chip ${statusKey === type.key ? 'active' : ''}" data-status-index="${index}" data-status-value="${type.key}">
+              ${type.label}
+            </button>`
+        )
+        .join('');
+      return `
+        <div class="status-row ${isEntityInactive(statusKey) ? 'disabled' : ''}">
+          <div>
+            <p class="status-name">${name}</p>
+            <small class="status-state">${formatStatusLabel(statusKey)}</small>
+          </div>
+          <div class="status-actions">
+            ${chips}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+  elements.statusList.innerHTML = rows;
+}
+
+function handleContextTab(context) {
+  if (!elements.contextTabs) return;
+  elements.contextTabs.querySelectorAll('[data-context]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.context === context);
+  });
+  if (context === 'manage') {
+    goTo('results');
+    setActiveView('rotations');
+    return;
+  }
+  if (context === 'live') {
+    if (!state.schedule) {
+      alert('Générez un planning avant d’ouvrir le mode live.');
+      return;
+    }
+    goTo('live');
+    renderLiveRotation();
+    return;
+  }
+  if (context === 'projection') {
+    if (!state.schedule) {
+      alert('Créez un tournoi pour lancer la projection.');
+      return;
+    }
+    openProjectionScreen();
+  }
+}
+
 function syncBodyModalState() {
   const finalOpen = elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden');
   const helpOpen = elements.helpModal && !elements.helpModal.classList.contains('hidden');
-  const shouldLock = finalOpen || helpOpen;
+  const rankingOpen = elements.rankingModal && !elements.rankingModal.classList.contains('hidden');
+  const statusOpen = elements.statusModal && !elements.statusModal.classList.contains('hidden');
+  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen;
   document.body.classList.toggle('modal-open', shouldLock);
 }
 
@@ -2669,6 +3647,9 @@ function startLiveMode() {
 function renderLiveRotation() {
   if (!elements.liveRotationContent) return;
   setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
+  if (state.schedule) {
+    hydrateScheduleForSpecialModes(state.schedule);
+  }
   if (!state.schedule) {
     elements.liveRotationTitle.textContent = 'Rotation';
     renderLiveMeta(null);
@@ -2747,7 +3728,8 @@ function buildLiveMatchCard(rotation, match, roleAssignments) {
   match.id = matchId;
   const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
   const awayScore = formatScoreValue(getScoreValue(matchId, 'away'));
-  const complete = isMatchCompleteById(matchId);
+  const neutralized = isMatchNeutralized(participants);
+  const complete = neutralized || isMatchCompleteById(matchId);
   const validated = isMatchValidated(matchId);
   const cardClasses = ['live-match-card'];
   if (validated) {
@@ -2755,18 +3737,22 @@ function buildLiveMatchCard(rotation, match, roleAssignments) {
   } else {
     cardClasses.push('active');
   }
+  if (neutralized) {
+    cardClasses.push('neutralized');
+  }
   const parts = [];
   if (match.field) parts.push(`${fieldLabel} ${match.field}`);
   if (rotation.startLabel) parts.push(rotation.startLabel);
   const badge = parts.length ? parts.join(' · ') : `Rotation ${rotation.number}`;
-  const statusText = validated ? 'VALIDÉ' : 'EN COURS';
-  const badgeClass = validated ? 'success' : 'info';
+  const statusText = neutralized ? 'INDISPONIBLE' : validated ? 'VALIDÉ' : 'EN COURS';
+  const badgeClass = neutralized ? 'neutral' : validated ? 'success' : 'info';
   const groupPill = match.groupLabel ? `<span class="group-pill">${match.groupLabel}</span>` : '';
+  const controlsDisabled = validated || neutralized;
   const actionButtons = `
-    <button type="button" class="btn ghost tiny live-validate ${validated ? 'hidden' : ''}" data-validate-match="${matchId}" ${
-      complete ? '' : 'disabled'
+    <button type="button" class="btn ghost tiny live-validate ${validated || neutralized ? 'hidden' : ''}" data-validate-match="${matchId}" ${
+      complete && !neutralized ? '' : 'disabled'
     }>Valider</button>
-    <button type="button" class="btn ghost tiny live-edit ${validated ? '' : 'hidden'}" data-edit-match="${matchId}">Modifier</button>
+    <button type="button" class="btn ghost tiny live-edit ${validated && !neutralized ? '' : 'hidden'}" data-edit-match="${matchId}">Modifier</button>
   `;
   const roleLines = renderRoleLines(roleAssignments?.get(matchId));
   return `
@@ -2779,8 +3765,8 @@ function buildLiveMatchCard(rotation, match, roleAssignments) {
         <span class="live-badge ${badgeClass}">${statusText}</span>
       </header>
       <div class="teams">
-        ${buildLiveTeamColumn('home', participants.home, homeScore, matchId, { disabled: validated })}
-        ${buildLiveTeamColumn('away', participants.away, awayScore, matchId, { disabled: validated })}
+        ${buildLiveTeamColumn('home', participants.home, homeScore, matchId, { disabled: controlsDisabled })}
+        ${buildLiveTeamColumn('away', participants.away, awayScore, matchId, { disabled: controlsDisabled })}
       </div>
       ${roleLines || ''}
       <div class="live-card-actions">
@@ -2796,7 +3782,7 @@ function buildLiveTeamColumn(side, name, score, matchId, options = {}) {
   const plusLabel = `Augmenter le score de ${name}`;
   return `
     <div class="live-team">
-      <strong>${name}</strong>
+      <strong>${decorateNameWithStatus(name)}</strong>
       <div class="live-score-pad">
         <button type="button" class="score-adjust" aria-label="${minusLabel}" data-score-side="${side}" data-score-step="-1" data-match-id="${matchId}" ${disabled}>−</button>
         <input type="number" min="0" inputmode="numeric" aria-label="Score ${name}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" ${disabled} />
@@ -2978,33 +3964,35 @@ function renderLiveFieldBoard(rotation, roleAssignments) {
   const board = new Map();
   rotation.matches.forEach(match => {
     const participants = resolveMatchParticipants(match, state.schedule);
+    const fieldNumber = Number(match.field);
     const key = match.field ? `${fieldLabel} ${match.field}` : 'À affecter';
-    if (!board.has(key)) board.set(key, []);
+    if (!board.has(key)) {
+      board.set(key, {
+        sortKey: Number.isFinite(fieldNumber) ? fieldNumber : Number.MAX_SAFE_INTEGER,
+        badge: buildFieldBadgeHtml(fieldNumber),
+        matches: [],
+      });
+    }
     const groupTag = match.groupLabel ? match.groupLabel : rotation.groupLabel;
     const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     const roles = renderRoleLines(roleAssignments?.get(matchId));
-    board.get(key).push({
+    board.get(key).matches.push({
       label: `${participants.home} vs ${participants.away}`,
       group: groupTag,
       roles,
     });
   });
   const cards = Array.from(board.entries())
-    .sort((a, b) => {
-      const extract = key => {
-        const match = key.match(/(\d+)/);
-        return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-      };
-      return extract(a[0]) - extract(b[0]);
-    })
-    .map(([key, list]) => {
-      const lines = list
+    .sort((a, b) => a[1].sortKey - b[1].sortKey)
+    .map(([key, payload]) => {
+      const lines = payload.matches
         .map(entry => {
           const groupLine = entry.group ? `<span class="match-group-inline">${entry.group}</span>` : '';
           return `<div class="field-match-line"><p>${entry.label} ${groupLine}</p>${entry.roles || ''}</div>`;
         })
         .join('');
-      return `<article><h4>${key}</h4>${lines}</article>`;
+      const badge = payload.badge ? ` ${payload.badge}` : '';
+      return `<article><h4>${key}${badge}</h4>${lines}</article>`;
     })
     .join('');
   elements.liveFieldBoard.innerHTML = cards;
@@ -3064,10 +4052,17 @@ function renderNextRotationPreview() {
 
 function renderChronoScreen() {
   if (!elements.chronoRotationLabel) return;
+  if (state.schedule) {
+    hydrateScheduleForSpecialModes(state.schedule);
+  }
   if (!state.schedule || !state.schedule.rotations.length) {
+    const message =
+      state.schedule && state.schedule.format === 'challenge'
+        ? 'Le mode Défi ne dispose pas de chronomètre dédié.'
+        : 'Générez un planning puis activez le chronomètre pour utiliser ce mode.';
     elements.chronoRotationLabel.textContent = 'Rotation -- / --';
     if (elements.chronoMatchMeta) {
-      elements.chronoMatchMeta.textContent = 'Générez un planning puis activez le chronomètre pour utiliser ce mode.';
+      elements.chronoMatchMeta.textContent = message;
     }
     if (elements.chronoMatches) {
       elements.chronoMatches.innerHTML = '<p class="chrono-empty">Aucun match à afficher.</p>';
@@ -3139,9 +4134,16 @@ function openProjectionScreen() {
 
 function renderProjectionScreen() {
   if (!elements.projectionRotation || !elements.projectionFields) return;
+  if (state.schedule) {
+    hydrateScheduleForSpecialModes(state.schedule);
+  }
   if (!state.schedule || !state.schedule.rotations.length) {
+    const message =
+      state.schedule && state.schedule.format === 'challenge'
+        ? 'Le mode Défi utilise le tableau interactif, projection désactivée.'
+        : 'Générez un planning pour activer la projection.';
     elements.projectionRotation.textContent = 'Rotation -- / --';
-    elements.projectionFields.innerHTML = '<p class="projection-empty">Générez un planning pour activer la projection.</p>';
+    elements.projectionFields.innerHTML = `<p class="projection-empty">${message}</p>`;
     if (elements.projectionNext) {
       elements.projectionNext.innerHTML = '';
       elements.projectionNext.classList.add('hidden');
@@ -3406,6 +4408,7 @@ function isRotationComplete(rotationNumber) {
   if (!rotation) return false;
   return rotation.matches.every(match => {
     const participants = resolveMatchParticipants(match, state.schedule);
+    if (isMatchNeutralized(participants)) return true;
     const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     return isMatchCompleteById(key);
   });
@@ -3787,6 +4790,9 @@ function countMissingScores(rotationNumber) {
   if (!rotation) return 0;
   return rotation.matches.reduce((acc, match) => {
     const participants = resolveMatchParticipants(match, state.schedule);
+    if (isMatchNeutralized(participants)) {
+      return acc;
+    }
     const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     return acc + (isMatchCompleteById(key) ? 0 : 1);
   }, 0);
@@ -3886,11 +4892,31 @@ function generateSchedule(teams, options) {
   if (format === 'round-robin') {
     return buildSinglePoolSchedule(teams, options);
   }
-  const groups = distributeIntoGroups(teams, { finals: format === 'groups-finals' });
+  if (format === 'ladder') {
+    return buildLadderSchedule(teams, options);
+  }
+  if (format === 'challenge') {
+    return buildChallengeBoard(teams, options);
+  }
+  const groupOptions = { finals: format === 'groups-finals' };
+  if (format === 'groups-finals') {
+    const targetGroups = getWorldCupGroupTarget();
+    if (targetGroups) {
+      groupOptions.targetGroups = targetGroups;
+    }
+  }
+  const groups = distributeIntoGroups(teams, groupOptions);
   if (!groups.length || groups.length === 1) {
     return buildSinglePoolSchedule(teams, options);
   }
   return buildGroupedSchedule(groups, teams, options, { finals: format === 'groups-finals' });
+}
+
+function getWorldCupGroupTarget() {
+  if (!state || !state.options) return null;
+  const requested = Number(state.options.worldCupGroupCount);
+  if (!Number.isFinite(requested)) return null;
+  return clampNumber(requested, 2, 4, 2);
 }
 
 function buildSinglePoolSchedule(teams, options) {
@@ -3924,6 +4950,79 @@ function buildGroupedSchedule(groups, allTeams, options, extras = {}) {
     groups,
     finals: finalEntries.length ? { matches: finalEntries.length } : null,
   });
+}
+
+function buildLadderSchedule(teams, options) {
+  const names = [...teams];
+  const fields = clampNumber(Number(options.fields) || 1, 1, 8, 2);
+  const rotationCount = Math.max(3, Math.ceil((names.length - 1) / Math.max(1, fields)) + 1);
+  const duration = clampNumber(Number(options.duration) || 12, 4, 30, 12);
+  const rotations = Array.from({ length: rotationCount }, (_, rotationIndex) => {
+    const matches = [];
+    for (let fieldIndex = 0; fieldIndex < fields; fieldIndex += 1) {
+      const slotA = fieldIndex * 2;
+      const slotB = slotA + 1;
+      if (slotB >= names.length) break;
+      matches.push({
+        id: `ladder-${rotationIndex + 1}-${fieldIndex + 1}`,
+        phase: 'ladder',
+        ladderSlots: [slotA, slotB],
+      });
+    }
+    return {
+      number: rotationIndex + 1,
+      phase: 'ladder',
+      title: `Rotation ${rotationIndex + 1}`,
+      matches,
+      byes: [],
+      startLabel: null,
+      durationLabel: `${duration} min`,
+      fieldAssignments: [],
+    };
+  });
+  const schedule = {
+    format: 'ladder',
+    rotations,
+    teams: names.map(name => ({ name })),
+    meta: {
+      teamCount: names.length,
+      rotationCount,
+      matchCount: rotations.reduce((acc, rotation) => acc + rotation.matches.length, 0),
+      fieldCount: fields,
+      formatLabel: TOURNAMENT_MODES.ladder.label,
+      practiceType: options.practiceType || state.practiceType,
+    },
+    ladder: {
+      names,
+      order: names.map((_, index) => index),
+      refereeCourts: clampNumber(Number(options?.ladder?.refereeCourts) || 0, 0, fields, 0),
+      freeCourts: clampNumber(Number(options?.ladder?.freeCourts) || 0, 0, fields, 0),
+    },
+  };
+  hydrateLadderMatches(schedule);
+  return schedule;
+}
+
+function buildChallengeBoard(teams, options) {
+  const names = [...teams];
+  return {
+    format: 'challenge',
+    rotations: [],
+    teams: names.map(name => ({ name })),
+    meta: {
+      teamCount: names.length,
+      rotationCount: 0,
+      matchCount: 0,
+      fieldCount: clampNumber(Number(options.fields) || 1, 1, 16, 1),
+      formatLabel: TOURNAMENT_MODES.challenge.label,
+      practiceType: options.practiceType || state.practiceType,
+    },
+    challenge: {
+      names,
+      order: names.map((_, index) => index),
+      history: [],
+    },
+  };
 }
 
 function assembleSchedule(entries, teams, options, metaExtras) {
@@ -4125,6 +5224,87 @@ function buildOptimizedRotationsFromBaseline(schedule, teams, options) {
   return optimizedRotations;
 }
 
+function hydrateLadderMatches(schedule) {
+  if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return;
+  const ladder = schedule.ladder;
+  const names = ladder.names || [];
+  const baseOrder = ensureLadderOrder(ladder, names.length);
+  const workingOrder = [...baseOrder];
+  schedule.rotations.forEach(rotation => {
+    const courts = rotation.matches.length;
+    rotation.byes = workingOrder.slice(courts * 2).map(index => names[index] || `Participant ${index + 1}`);
+    rotation.matches.forEach((match, fieldIndex) => {
+      const [slotA, slotB] = match.ladderSlots || [fieldIndex * 2, fieldIndex * 2 + 1];
+      const orderA = workingOrder[slotA];
+      const orderB = workingOrder[slotB];
+      match.field = fieldIndex + 1;
+      match.order = 1;
+      match.home = names[orderA] || `Participant ${slotA + 1}`;
+      match.away = names[orderB] || `Participant ${slotB + 1}`;
+    });
+    rotation.fieldAssignments = rotation.matches.map(match => ({
+      label: `Terrain ${match.field}`,
+      matches: [match],
+    }));
+    applyLadderRoundResults(workingOrder, rotation.matches, names);
+  });
+  ladder.order = workingOrder;
+}
+
+function ensureLadderOrder(ladder, count) {
+  if (!ladder.order || ladder.order.length !== count) {
+    ladder.order = Array.from({ length: count }, (_, index) => index);
+  }
+  return ladder.order;
+}
+
+function applyLadderRoundResults(order, matches, names) {
+  matches.forEach(match => {
+    const [slotA, slotB] = match.ladderSlots || [];
+    if (!Number.isInteger(slotA) || !Number.isInteger(slotB)) return;
+    const homeName = names[order[slotA]];
+    const awayName = names[order[slotB]];
+    const participants = { home: homeName, away: awayName };
+    if (isMatchNeutralized(participants)) return;
+    const record = state.scores && state.scores[match.id];
+    if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away) || record.home === record.away) return;
+    if (record.home > record.away) {
+      // home wins stays at slotA
+      return;
+    }
+    // away wins -> échange les positions
+    const temp = order[slotA];
+    order[slotA] = order[slotB];
+    order[slotB] = temp;
+  });
+}
+
+function hydrateScheduleForSpecialModes(schedule) {
+  if (!schedule) return;
+  if (schedule.format === 'ladder') {
+    hydrateLadderMatches(schedule);
+  }
+  if (schedule.format === 'challenge') {
+    hydrateChallengeBoard(schedule);
+  }
+}
+
+function hydrateChallengeBoard(schedule) {
+  if (!schedule || schedule.format !== 'challenge') return;
+  if (!schedule.challenge) {
+    schedule.challenge = {
+      names: schedule.teams.map(team => team.name),
+      order: schedule.teams.map((_, index) => index),
+      history: [],
+    };
+  }
+  const challenge = schedule.challenge;
+  challenge.names = schedule.teams.map(team => team.name);
+  if (!challenge.order || challenge.order.length !== challenge.names.length) {
+    challenge.order = challenge.names.map((_, index) => index);
+  }
+}
+
 function selectOptimizedBatch(pending, fieldCount, lastPlayed, rotationNumber, remainingCounts) {
   const usedTeams = new Set();
   const batch = [];
@@ -4209,6 +5389,9 @@ function buildSlotByes(entryByes, matches, slot) {
 function distributeIntoGroups(teamNames, options = {}) {
   if (!Array.isArray(teamNames) || !teamNames.length) return [];
   const teams = [...teamNames];
+  const requestedGroups = Number(options.targetGroups);
+  const targetGroups =
+    Number.isFinite(requestedGroups) && requestedGroups > 0 ? clampNumber(requestedGroups, 2, 4, requestedGroups) : null;
   const minGroups = options.finals
     ? Math.min(2, teams.length)
     : teams.length >= 4
@@ -4247,11 +5430,18 @@ function distributeIntoGroups(teamNames, options = {}) {
     ];
   }
   const balanced = candidates.filter(entry => entry.imbalance <= 1);
-  const pool = balanced.length ? balanced : candidates;
+  let pool = balanced.length ? balanced : candidates;
   pool.sort((a, b) => {
     if (a.penalty !== b.penalty) return a.penalty - b.penalty;
     return a.groupCount - b.groupCount;
   });
+  if (targetGroups) {
+    const index = pool.findIndex(entry => entry.groupCount === targetGroups);
+    if (index > 0) {
+      const [targetEntry] = pool.splice(index, 1);
+      pool.unshift(targetEntry);
+    }
+  }
   const selection = pool[0];
   const result = [];
   let cursor = 0;
@@ -4686,6 +5876,71 @@ function ensureTeamListLength(list, length, practiceType = 'sport-co') {
   });
 }
 
+function normalizeStatusKey(value) {
+  if (value === STATUS_TYPES.unavailable.key) return STATUS_TYPES.unavailable.key;
+  if (value === 'injured' || value === 'neutralized') return STATUS_TYPES.unavailable.key;
+  return STATUS_TYPES[value] ? value : STATUS_TYPES.active.key;
+}
+
+function ensureEntityStatusLength(list, length) {
+  const initial = Array.isArray(list) ? [...list] : [];
+  while (initial.length < length) {
+    initial.push(STATUS_TYPES.active.key);
+  }
+  return initial.slice(0, length).map(normalizeStatusKey);
+}
+
+function getEntityStatus(index) {
+  state.entityStatuses = ensureEntityStatusLength(state.entityStatuses, state.participants);
+  return state.entityStatuses[index] || STATUS_TYPES.active.key;
+}
+
+function getEntityStatusByName(name) {
+  if (!name) return STATUS_TYPES.active.key;
+  const index = state.teamNames.findIndex(entry => entry === name);
+  if (index === -1) return STATUS_TYPES.active.key;
+  return getEntityStatus(index);
+}
+
+function isEntityInactive(statusKey) {
+  return statusKey === STATUS_TYPES.unavailable.key;
+}
+
+function formatStatusLabel(statusKey) {
+  const type = STATUS_TYPES[statusKey];
+  return type ? type.label : STATUS_TYPES.active.label;
+}
+
+function decorateNameWithStatus(name) {
+  if (!name) return '';
+  const status = getEntityStatusByName(name);
+  if (!isEntityInactive(status)) return name;
+  return `${name} <span class="status-pill ${status}">${formatStatusLabel(status)}</span>`;
+}
+
+function isMatchNeutralized(participants) {
+  if (!participants) return false;
+  return isEntityInactive(getEntityStatusByName(participants.home)) || isEntityInactive(getEntityStatusByName(participants.away));
+}
+
+function isChallengeModeActive() {
+  return Boolean(state.schedule && state.schedule.format === 'challenge');
+}
+
+function setEntityStatus(index, statusKey) {
+  const normalized = STATUS_TYPES[statusKey] ? statusKey : STATUS_TYPES.active.key;
+  state.entityStatuses = ensureEntityStatusLength(state.entityStatuses, state.participants);
+  if (state.entityStatuses[index] === normalized) return;
+  state.entityStatuses[index] = normalized;
+  state.statusLog.push({ index, status: normalized, at: new Date().toISOString() });
+  state.statusLog = state.statusLog.slice(-100);
+  persistState();
+  renderStatusList();
+  if (state.schedule) {
+    renderResults(state.schedule, { preserveTimestamp: true });
+  }
+}
+
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -4696,13 +5951,18 @@ function updateResumeButton() {
 }
 
 function createDefaultState() {
+  const defaultMode = MODE_DEFINITIONS['sportco-championnat'];
+  const defaultPractice = defaultMode.practiceType;
   return {
     currentScreen: 'landing',
     lastScreen: 'landing',
-    tournamentType: 'round-robin',
-    practiceType: 'sport-co',
+    universeId: defaultMode.universe,
+    activeModeId: defaultMode.id,
+    tournamentType: defaultMode.tournamentType,
+    practiceType: defaultPractice,
     participants: 8,
-    teamNames: ensureTeamListLength([], 8, 'sport-co'),
+    teamNames: ensureTeamListLength([], 8, defaultPractice),
+    entityStatuses: [],
     options: {
       fields: 2,
       duration: 12,
@@ -4717,13 +5977,21 @@ function createDefaultState() {
       sound: true,
       vibration: true,
       schedulingMode: 'pedagogique',
+      worldCupGroupCount: 2,
       roleSettings: { ...DEFAULT_ROLE_SETTINGS },
+      ladder: {
+        refereeCourts: 0,
+        freeCourts: 0,
+      },
     },
     schedule: null,
+    ladderState: null,
+    challengeState: null,
     generatedAt: null,
     scores: {},
     liveRotationIndex: 0,
     validatedMatches: {},
+    statusLog: [],
   };
 }
 
@@ -4745,10 +6013,19 @@ function sanitizeState(raw) {
     ...base,
     ...source,
   };
+  const fallbackMode = MODE_DEFINITIONS['sportco-championnat'];
+  const incomingMode = MODE_DEFINITIONS[source.activeModeId];
+  merged.activeModeId = incomingMode ? incomingMode.id : fallbackMode.id;
+  const inferredUniverse = incomingMode ? incomingMode.universe : fallbackMode.universe;
+  merged.universeId = Object.prototype.hasOwnProperty.call(UNIVERSES, source.universeId) ? source.universeId : inferredUniverse;
   const allowedModes = Object.keys(TOURNAMENT_MODES);
-  merged.tournamentType = allowedModes.includes(source.tournamentType) ? source.tournamentType : base.tournamentType;
+  const targetTournament =
+    MODE_DEFINITIONS[merged.activeModeId]?.tournamentType && allowedModes.includes(MODE_DEFINITIONS[merged.activeModeId].tournamentType)
+      ? MODE_DEFINITIONS[merged.activeModeId].tournamentType
+      : source.tournamentType;
+  merged.tournamentType = allowedModes.includes(targetTournament) ? targetTournament : base.tournamentType;
   const allowedPractices = ['sport-co', 'raquette'];
-  merged.practiceType = allowedPractices.includes(source.practiceType) ? source.practiceType : base.practiceType;
+  merged.practiceType = MODE_DEFINITIONS[merged.activeModeId]?.practiceType || (allowedPractices.includes(source.practiceType) ? source.practiceType : base.practiceType);
   merged.participants = clampNumber(Number(merged.participants), 2, 32, base.participants);
   const optionSource = { ...base.options, ...(source.options || {}) };
   optionSource.fields = clampNumber(Number(optionSource.fields), 1, 16, base.options.fields);
@@ -4765,10 +6042,20 @@ function sanitizeState(raw) {
   optionSource.sound = optionSource.sound !== undefined ? Boolean(optionSource.sound) : base.options.sound;
   optionSource.vibration =
     optionSource.vibration !== undefined ? Boolean(optionSource.vibration) : base.options.vibration;
+  optionSource.worldCupGroupCount = clampNumber(
+    Number.isFinite(Number(optionSource.worldCupGroupCount)) ? Number(optionSource.worldCupGroupCount) : 2,
+    2,
+    4,
+    2
+  );
   const allowedSchedulingModes = ['pedagogique', 'optimise_terrains'];
   optionSource.schedulingMode = allowedSchedulingModes.includes(optionSource.schedulingMode)
     ? optionSource.schedulingMode
     : 'pedagogique';
+  optionSource.ladder = {
+    refereeCourts: clampNumber(Number(optionSource?.ladder?.refereeCourts), 0, 16, 0),
+    freeCourts: clampNumber(Number(optionSource?.ladder?.freeCourts), 0, 16, 0),
+  };
   const legacyRoles = Array.isArray(optionSource.restRoles) ? optionSource.restRoles : null;
   const storedRoles = optionSource.roleSettings || {};
   const mergedRoles = {
@@ -4797,6 +6084,7 @@ function sanitizeState(raw) {
   merged.options = optionSource;
   const incomingNames = Array.isArray(source.teamNames) ? source.teamNames : base.teamNames;
   merged.teamNames = ensureTeamListLength(incomingNames, merged.participants, merged.practiceType);
+  merged.entityStatuses = ensureEntityStatusLength(source.entityStatuses, merged.participants);
   const sanitizedScores = {};
   if (isPlainObject(source.scores)) {
     Object.entries(source.scores).forEach(([key, value]) => {
@@ -4815,6 +6103,9 @@ function sanitizeState(raw) {
     });
   }
   merged.validatedMatches = validatedMatches;
+  merged.ladderState = source.ladderState || null;
+  merged.challengeState = source.challengeState || null;
+  merged.statusLog = Array.isArray(source.statusLog) ? source.statusLog.slice(-50) : [];
   merged.liveRotationIndex = Number.isInteger(source.liveRotationIndex) ? source.liveRotationIndex : 0;
   if (merged.schedule && Array.isArray(merged.schedule.rotations) && merged.schedule.rotations.length) {
     merged.liveRotationIndex = clampNumber(
@@ -4848,7 +6139,9 @@ function resetApplication() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
-  syncModeSelection();
+  updateTheme(state.universeId);
+  renderModeCards();
+  updateModeScreenCopy();
   elements.summaryGrid.innerHTML = '';
   elements.rotationView.innerHTML = '';
   elements.teamView.innerHTML = '';
@@ -4868,7 +6161,8 @@ function resetApplication() {
 
 function setLiveModeAvailability(enabled) {
   if (!elements.startLiveBtn) return;
-  elements.startLiveBtn.disabled = !enabled;
+  const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
+  elements.startLiveBtn.disabled = !enabled || !hasRotations;
   const rotationNumber =
     state.schedule && state.schedule.rotations[state.liveRotationIndex]
       ? state.schedule.rotations[state.liveRotationIndex].number
@@ -4880,8 +6174,11 @@ function setLiveModeAvailability(enabled) {
     elements.startLiveBtn.textContent = 'Démarrer le live';
   }
   if (elements.resultsPrimaryHint) {
+    const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
     if (!enabled) {
       elements.resultsPrimaryHint.textContent = 'Générez un planning pour activer le mode live.';
+    } else if (!hasRotations) {
+      elements.resultsPrimaryHint.textContent = 'Le mode live est désactivé pour le mode Défi. Utilisez la colonne classement pour gérer vos défis.';
     } else if (state.liveRotationIndex > 0) {
       elements.resultsPrimaryHint.textContent = `Reprenez directement à la rotation ${rotationNumber} ou ajustez les scores.`;
     } else {
@@ -4893,5 +6190,10 @@ function setLiveModeAvailability(enabled) {
   }
   if (elements.liveChronoBtn) {
     elements.liveChronoBtn.disabled = !enabled;
+  }
+  if (elements.rankingButtons && elements.rankingButtons.length) {
+    elements.rankingButtons.forEach(btn => {
+      btn.disabled = !enabled;
+    });
   }
 }
