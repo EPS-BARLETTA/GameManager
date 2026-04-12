@@ -19,7 +19,7 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 3. **Étape 2 – Nombre** – compteur + slider adaptés au vocabulaire (équipes ou joueurs).
 4. **Étape 3 – Noms** – auto-remplissage, collage massif, normalisation des patronymes raquettes.
 5. **Étape 4 – Paramétrage ciblé** – carte récap de l’univers + grille d’options prioritaires différentes selon le mode (durées, terrains arbitrés, nombre de poules, etc.) avec options avancées repliées (pauses, chrono, rôles EPS).
-6. **Étape 5 – Résultats** – vue « Gestion » affichée par défaut, carte « Live » et carte « Projection » accessibles via un hub clair « Je consulte / je gère / je projette », raccourcis permanents (Classement, Projection, Chrono) et onglets *Rotations*, *Par équipe* et *Classement*.
+6. **Étape 5 – Résultats** – vue « Gestion » affichée par défaut, carte « Live » et carte « Projection » accessibles via un hub clair « Je consulte / je gère / je projette », raccourcis permanents (Classement, Projection, Chrono) et onglets *Rotations*, *Par équipe* et *Classement*. Un bascule **Lecture / Pilotage** masque les actions tant que l’enseignant ne souhaite que lire la synthèse.
 
 ## Univers et modes
 ### Sports collectifs
@@ -41,12 +41,15 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 - Le bandeau d’étape 5 affiche trois cartes « Je consulte », « Je gère », « Je projette ». Chaque carte agit comme un gros bouton (sélection / ouverture du live / ouverture de la projection plein écran).
 - Des **raccourcis persistants** (« Classement », « Projection », « Chrono ») restent visibles dans la zone résultats.
 - L’action principale « Démarrer / reprendre le live » et le duo **Modifier / Imprimer** sont regroupés et lisibles sur iPad.
+- Un interrupteur **Lecture / Pilotage** contrôle l’affichage des actions : en lecture, seules les synthèses et prévisions s’affichent ; en pilotage, les rotations, saisies et raccourcis avancés réapparaissent.
 
 ## Mode Défi tactile
-- Clic simple = fenêtre ±5 places pendant 3 s (effet valable en projection).
-- Bouton **« Saisir un défi »** sur chaque ligne (et double clic toujours disponible sur desktop) pour renseigner le score.
-- La logique EPS reste inchangée : victoire sur un joueur mieux classé ⇒ échange immédiat des positions, sinon classement intact.
-- Le bouton classement (voir ci-dessous) reste accessible même pendant la gestion du Défi.
+- Après génération, une seule page « Classement Défi » reste visible : aucune zone de saisie fixe, juste la liste des joueurs classés.
+- Tap/clic simple = fenêtre ±5 places pendant 3 s (effet valable en projection) ; retaper sur soi ou utiliser le bouton **Défi** déclenche la saisie.
+- Toute saisie se fait dans une modale plein centre (`.modal-overlay`) ; le classement reste visible derrière, légèrement atténué.
+- Les scores s’affichent dans la modale avec l’adversaire prérempli et focus direct sur la saisie tactile. Le double clic desktop reste supporté.
+- Un encart « Dernier défi » permanent affiche le duel le plus récent avec un bouton **Modifier** qui rouvre la modale préremplie. La correction remplace automatiquement le duel précédent sans casser le classement.
+- La logique EPS reste inchangée : victoire sur un joueur mieux classé ⇒ échange immédiat des positions, sinon classement intact. Les joueurs marqués « Indisponible » restent gris et non interactifs.
 
 ## Classement et statut *Indisponible*
 - Un bouton « Classement » visible dans la zone résultats et dans le menu `Outils` ouvre le panneau dédié sans casser la navigation. Le bouton reste actif dans les vues live et chrono.
@@ -73,3 +76,6 @@ PouleManager est une application web statique (HTML/CSS/JS) pensée pour les pro
 
 ## Mode EPS rapide
 Toujours disponible depuis l’accueil : renseignez participants, terrains, durée, heure de début et pratique, activez Arbitre / Table si besoin puis « Générer rapidement ». Le tournoi obtenu peut être retravaillé ensuite dans le parcours guidé (paramétrage ciblé, simulation, etc.).
+
+## Menu Outils
+Le bouton `Outils` (dans la topbar) ouvre un mini panneau contextuel accessible à tout moment (Classement, Statut indisponible, Imprimer). L’ouverture/fermeture gère automatiquement le clic extérieur et la navigation clavier, ce qui le rend exploitable en situation terrain sur iPad comme sur desktop.

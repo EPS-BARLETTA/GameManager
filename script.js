@@ -410,6 +410,8 @@ const elements = {
   modeParticipantsInput: document.getElementById('modeParticipantsInput'),
   modeParticipantsLabel: document.getElementById('modeParticipantsLabel'),
   modeFieldBlocks: document.querySelectorAll('[data-mode-field]'),
+  toolsToggle: document.getElementById('toolsToggle'),
+  toolsMenu: document.getElementById('toolsMenu'),
   navButtons: document.querySelectorAll('[data-nav]'),
   printTopBtn: document.getElementById('printTopBtn'),
   universeBadge: document.getElementById('universeBadge'),
@@ -468,6 +470,10 @@ const elements = {
   rotationView: document.getElementById('rotationView'),
   teamView: document.getElementById('teamView'),
   rankingView: document.getElementById('rankingView'),
+  resultsScreen: document.querySelector('.screen[data-screen="results"]'),
+  resultsModeSwitch: document.getElementById('resultsModeSwitch'),
+  resultsModeButtons: document.querySelectorAll('[data-results-mode-target]'),
+  resultsModeNote: document.getElementById('resultsModeNote'),
   teamTabButton: document.getElementById('teamTabButton'),
   tabButtons: document.querySelectorAll('.tab'),
   summaryGrid: document.getElementById('summaryGrid'),
@@ -525,6 +531,9 @@ const elements = {
   rankingModal: document.getElementById('rankingModal'),
   rankingModalBody: document.getElementById('rankingModalBody'),
   rankingModalClose: document.getElementById('rankingModalClose'),
+  challengeModal: document.getElementById('challengeModal'),
+  challengeForm: document.getElementById('challengeForm'),
+  challengeDialogInfo: document.getElementById('challengeDialogInfo'),
   statusBtn: document.getElementById('statusBtn'),
   statusModal: document.getElementById('statusModal'),
   statusModalClose: document.getElementById('statusModalClose'),
@@ -565,11 +574,15 @@ const timerUiState = {
   expanded: false,
   available: false,
 };
+const uiState = {
+  resultsMode: 'read',
+};
 let latestRecommendation = null;
 let recommendationApplied = false;
 let resetFeedbackTimeout = null;
 let challengeHighlightTimeout = null;
-let challengeDialogContext = null;
+let challengeSelection = { index: null, allowed: [] };
+let challengeEditContext = null;
 
 const timerController = {
   prepare() {
@@ -679,6 +692,7 @@ function init() {
   updateTheme(state.universeId);
   renderModeCards();
   updateModeScreenCopy();
+  setResultsMode(uiState.resultsMode);
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
   }
@@ -691,6 +705,20 @@ function init() {
 }
 
 function bindNavigation() {
+  if (elements.toolsToggle) {
+    elements.toolsToggle.addEventListener('click', event => {
+      event.preventDefault();
+      toggleToolsMenu();
+    });
+  }
+  if (elements.toolsMenu) {
+    elements.toolsMenu.addEventListener('click', event => {
+      const item = event.target.closest('.tools-item');
+      if (item) {
+        closeToolsMenu();
+      }
+    });
+  }
   if (elements.landingSportcoBtn) {
     elements.landingSportcoBtn.addEventListener('click', () => enterUniverse('sportco'));
   }
@@ -1144,8 +1172,6 @@ function bindNavigation() {
   if (elements.rotationView) {
     elements.rotationView.addEventListener('click', handleChallengeClick);
     elements.rotationView.addEventListener('dblclick', handleChallengeDoubleClick);
-    elements.rotationView.addEventListener('submit', handleChallengeFormSubmit);
-    elements.rotationView.addEventListener('click', handleChallengeDialogAction);
   }
   if (elements.simulateBtn) {
     elements.simulateBtn.addEventListener('click', handleSimulationRequest);
@@ -1171,6 +1197,13 @@ function bindNavigation() {
       const target = event.target.closest('[data-context]');
       if (!target) return;
       handleContextTab(target.dataset.context);
+    });
+  }
+  if (elements.resultsModeSwitch) {
+    elements.resultsModeSwitch.addEventListener('click', event => {
+      const btn = event.target.closest('[data-results-mode-target]');
+      if (!btn) return;
+      setResultsMode(btn.dataset.resultsModeTarget);
     });
   }
   if (elements.recommendBtn) {
@@ -1217,6 +1250,10 @@ function bindNavigation() {
     }
     if (elements.helpModal && !elements.helpModal.classList.contains('hidden')) {
       closeHelpModal();
+      handled = true;
+    }
+    if (elements.challengeModal && !elements.challengeModal.classList.contains('hidden')) {
+      closeChallengeDialog();
       handled = true;
     }
     if (closeOverflowPanels()) {
@@ -1424,6 +1461,30 @@ function updateModeFieldVisibility() {
   });
 }
 
+function setResultsMode(mode) {
+  if (!elements.resultsScreen) return;
+  const next = mode === 'pilot' ? 'pilot' : 'read';
+  uiState.resultsMode = next;
+  elements.resultsScreen.dataset.resultsMode = next;
+  if (elements.resultsModeButtons && elements.resultsModeButtons.forEach) {
+    elements.resultsModeButtons.forEach(btn => {
+      const target = btn.dataset.resultsModeTarget === 'pilot' ? 'pilot' : 'read';
+      btn.classList.toggle('active', target === next);
+      btn.setAttribute('aria-pressed', target === next ? 'true' : 'false');
+    });
+  }
+  updateResultsModeNote();
+}
+
+function updateResultsModeNote() {
+  if (!elements.resultsModeNote) return;
+  if (uiState.resultsMode === 'read') {
+    elements.resultsModeNote.textContent = 'Passez en mode « Pilotage » pour ajuster les rotations ou accéder aux actions avancées.';
+  } else {
+    elements.resultsModeNote.textContent = 'Mode Pilotage : toutes les actions de préparation et de saisie sont visibles ci-dessous.';
+  }
+}
+
 function enterUniverse(universeId) {
   const universe = UNIVERSES[universeId];
   if (!universe) return;
@@ -1615,6 +1676,7 @@ function handleGenerate() {
 function renderResults(schedule, options = {}) {
   const preserveTimestamp = Boolean(options.preserveTimestamp);
   const resetScores = Boolean(options.resetScores);
+  const isChallenge = schedule?.format === 'challenge';
   if (resetScores) {
     state.scores = {};
     state.validatedMatches = {};
@@ -1651,7 +1713,8 @@ function renderResults(schedule, options = {}) {
   renderSummary(schedule.meta);
   updateMatchInsight(state.schedule);
   updatePrintHeader(schedule.meta);
-  if (schedule.format === 'challenge') {
+  toggleChallengeLayout(isChallenge);
+  if (isChallenge) {
     renderChallengeBoard(schedule);
   } else {
     renderRotationView(schedule.rotations);
@@ -1833,6 +1896,17 @@ function renderTimeIndicator(summary) {
     elements.timeIndicator.textContent = `Le tournoi dépasse le créneau d’environ ${deltaLabel}.`;
   }
   elements.timeIndicator.classList.remove('hidden');
+}
+
+function toggleChallengeLayout(enabled) {
+  if (!elements.resultsScreen) return;
+  elements.resultsScreen.classList.toggle('results-challenge', Boolean(enabled));
+  if (!enabled) {
+    clearChallengeHighlights();
+    resetChallengeSelection();
+    clearChallengeEditContext();
+    closeChallengeDialog();
+  }
 }
 
 function updateMatchInsight(schedule) {
@@ -2801,10 +2875,12 @@ function renderChallengeBoard(schedule) {
   if (!elements.rotationView) return;
   const challenge = schedule.challenge;
   if (!challenge || !challenge.names.length) {
-    elements.rotationView.innerHTML = '<p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p>';
+    elements.rotationView.innerHTML =
+      '<section class="challenge-shell"><p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p></section>';
     return;
   }
   const order = challenge.order || challenge.names.map((_, index) => index);
+  resetChallengeSelection();
   const rows = order
     .map((teamIndex, position) => {
       const name = challenge.names[teamIndex];
@@ -2819,58 +2895,85 @@ function renderChallengeBoard(schedule) {
             ${decorateNameWithStatus(name)}
           </button>
           <button type="button" class="challenge-action" data-challenge-open="${position}" ${actionDisabled}>
-            Saisir un défi
+            Défi
           </button>
         </div>
       `;
     })
     .join('');
+  const historyHtml = buildChallengeHistoryBlock(challenge);
   elements.rotationView.innerHTML = `
-    <div class="challenge-instructions">
-      <p>• Touchez un nom pour afficher la fenêtre ±5 places (3 s).<br />• Utilisez « Saisir un défi » (ou double-clic souris) pour enregistrer un score.</p>
-    </div>
-    <div class="challenge-board" id="challengeBoard">
-      ${rows}
-    </div>
-    ${buildChallengeDialogMarkup()}
+    <section class="challenge-shell" aria-live="polite">
+      <header class="challenge-shell-header">
+        <div>
+          <p class="eyebrow">Mode Défi</p>
+          <h3>Classement · fenêtre ±5</h3>
+          <p class="challenge-shell-hint">Tap = surbrillance (3 s) · Tap à nouveau ou « Défi » = saisie · Joueurs indisponibles grisés.</p>
+        </div>
+      </header>
+      ${historyHtml}
+      <div class="challenge-board" id="challengeBoard">
+        ${rows}
+      </div>
+    </section>
   `;
 }
 
-function buildChallengeDialogMarkup() {
-  return `
-    <div class="challenge-dialog hidden" id="challengeDialog" role="dialog" aria-modal="true">
-      <div class="challenge-dialog-card">
-        <header>
-          <strong id="challengeDialogTitle">Défi</strong>
-          <button type="button" class="btn ghost tiny" data-challenge-action="close">Fermer</button>
-        </header>
-        <form id="challengeForm">
-          <input type="hidden" name="challengerIndex" />
-          <label for="challengeOpponent">Adversaire autorisé (±5 places)</label>
-          <select id="challengeOpponent" name="opponentIndex" required></select>
-          <div class="challenge-score-grid">
-            <label>Score du joueur</label>
-            <input type="number" name="challengerScore" min="0" value="0" required />
-            <label>Score adversaire</label>
-            <input type="number" name="opponentScore" min="0" value="0" required />
-          </div>
-          <div class="challenge-dialog-actions">
-            <button type="submit" class="btn primary">Valider le défi</button>
-            <button type="button" class="btn ghost" data-challenge-action="cancel">Annuler</button>
-          </div>
-        </form>
+function buildChallengeHistoryBlock(challenge) {
+  const lastEntry = getLastChallengeHistoryEntry(challenge);
+  if (!lastEntry) {
+    return `
+      <div class="challenge-history-card is-empty">
+        <div>
+          <strong>Aucun défi validé</strong>
+          <p class="challenge-history-meta">Validez un premier résultat pour activer la correction express.</p>
+        </div>
+        <button class="btn ghost small" data-challenge-edit-last disabled>Modifier</button>
       </div>
+    `;
+  }
+  const score = `${lastEntry.challengerScore} – ${lastEntry.opponentScore}`;
+  const timestamp = formatChallengeTimestamp(lastEntry.timestamp);
+  return `
+    <div class="challenge-history-card">
+      <div>
+        <strong>${lastEntry.challenger}</strong> vs <strong>${lastEntry.opponent}</strong> • ${score}
+        <p class="challenge-history-meta">Validé ${timestamp}</p>
+      </div>
+      <button class="btn ghost small" data-challenge-edit-last>Modifier</button>
     </div>
   `;
+}
+
+function getLastChallengeHistoryEntry(challenge) {
+  if (!challenge || !Array.isArray(challenge.history) || !challenge.history.length) return null;
+  return challenge.history[challenge.history.length - 1];
+}
+
+function formatChallengeTimestamp(isoString) {
+  if (!isoString) return 'il y a un instant';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  } catch (error) {
+    return 'il y a un instant';
+  }
 }
 
 function handleChallengeClick(event) {
   if (!isChallengeModeActive()) return;
+  const editBtn = event.target.closest('[data-challenge-edit-last]');
+  if (editBtn) {
+    event.preventDefault();
+    startChallengeHistoryEdit();
+    return;
+  }
   const quickOpen = event.target.closest('[data-challenge-open]');
   if (quickOpen) {
     event.preventDefault();
     const index = Number(quickOpen.dataset.challengeOpen);
     if (Number.isInteger(index)) {
+      highlightChallengeWindow(index);
       openChallengeDialog(index);
     }
     return;
@@ -2880,6 +2983,19 @@ function handleChallengeClick(event) {
   if (target.closest('.challenge-row.inactive')) return;
   if (event.detail && event.detail > 1) return;
   const index = Number(target.dataset.challengeIndex);
+  if (!Number.isInteger(index)) return;
+  if (!isChallengeSelectionActive()) {
+    highlightChallengeWindow(index);
+    return;
+  }
+  if (challengeSelection.index === index) {
+    openChallengeDialog(index);
+    return;
+  }
+  if (challengeSelection.allowed.includes(index)) {
+    openChallengeDialog(challengeSelection.index, { presetOpponent: index });
+    return;
+  }
   highlightChallengeWindow(index);
 }
 
@@ -2890,61 +3006,139 @@ function handleChallengeDoubleClick(event) {
   if (target.closest('.challenge-row.inactive')) return;
   event.preventDefault();
   const index = Number(target.dataset.challengeIndex);
+  if (!Number.isInteger(index)) return;
+  highlightChallengeWindow(index);
   openChallengeDialog(index);
+}
+
+function startChallengeHistoryEdit() {
+  if (!isChallengeModeActive()) return;
+  const challenge = state.schedule.challenge;
+  const lastEntry = getLastChallengeHistoryEntry(challenge);
+  if (!lastEntry) {
+    alert('Aucun défi à modifier pour le moment.');
+    return;
+  }
+  challengeEditContext = {
+    ...lastEntry,
+    orderBefore: Array.isArray(lastEntry.orderBefore) ? [...lastEntry.orderBefore] : null,
+  };
+  openChallengeDialog(lastEntry.challengerPosition, {
+    presetOpponent: lastEntry.opponentPosition,
+    presetScores: {
+      challenger: lastEntry.challengerScore,
+      opponent: lastEntry.opponentScore,
+    },
+    editContext: challengeEditContext,
+  });
 }
 
 function highlightChallengeWindow(index) {
   const board = document.getElementById('challengeBoard');
   if (!board) return;
   const rows = Array.from(board.querySelectorAll('.challenge-row'));
-  rows.forEach(row => row.classList.remove('highlight'));
-  rows.forEach((row, position) => {
-    if (Math.abs(position - index) <= 5) {
-      row.classList.add('highlight');
-    }
-  });
+  if (!rows.length || index < 0 || index >= rows.length) return;
   if (challengeHighlightTimeout) {
     clearTimeout(challengeHighlightTimeout);
   }
+  const allowedOpponents = getChallengeOpponents(index).map(option => option.position);
+  rows.forEach((row, position) => {
+    row.classList.remove('highlight', 'selected');
+    if (Math.abs(position - index) <= 5) {
+      row.classList.add('highlight');
+    }
+    if (position === index) {
+      row.classList.add('selected');
+    }
+  });
+  challengeSelection = { index, allowed: allowedOpponents };
   challengeHighlightTimeout = setTimeout(() => {
-    rows.forEach(row => row.classList.remove('highlight'));
+    clearChallengeHighlights();
+    resetChallengeSelection();
   }, 3000);
 }
 
-function openChallengeDialog(position) {
-  const dialog = document.getElementById('challengeDialog');
-  if (!dialog || !isChallengeModeActive()) return;
+function clearChallengeHighlights() {
+  const board = document.getElementById('challengeBoard');
+  if (!board) return;
+  board.querySelectorAll('.challenge-row').forEach(row => row.classList.remove('highlight', 'selected'));
+}
+
+function resetChallengeSelection() {
+  if (challengeHighlightTimeout) {
+    clearTimeout(challengeHighlightTimeout);
+    challengeHighlightTimeout = null;
+  }
+  challengeSelection = { index: null, allowed: [] };
+}
+
+function isChallengeSelectionActive() {
+  return Number.isInteger(challengeSelection.index);
+}
+
+function openChallengeDialog(position, options = {}) {
+  if (!isChallengeModeActive()) return;
+  if (!elements.challengeModal || !elements.challengeForm) return;
+  const form = elements.challengeForm;
+  const select = form.elements.opponentIndex;
   const challenge = state.schedule.challenge;
   const order = challenge.order || [];
-  if (!Number.isInteger(position) || position < 0 || position >= order.length) return;
-  const form = dialog.querySelector('#challengeForm');
-  const select = form.querySelector('select[name="opponentIndex"]');
-  const name = challenge.names[order[position]];
-  const opponents = getChallengeOpponents(position);
-  if (!opponents.length) {
-    alert('Aucun adversaire disponible dans la fenêtre ±5.');
-    return;
+  const editContext = options.editContext || null;
+  const presetScores = options.presetScores || null;
+  let challengerPosition = Number.isInteger(position) ? position : null;
+  select.disabled = false;
+
+  if (editContext) {
+    challengerPosition = resolveChallengePosition(editContext.challengerPosition, editContext.challengerTeamIndex);
+    const opponentPosition = resolveChallengePosition(editContext.opponentPosition, editContext.opponentTeamIndex);
+    if (!Number.isInteger(challengerPosition) || !Number.isInteger(opponentPosition)) {
+      alert('Impossible de rouvrir le dernier défi.'); // fall back gracefully
+      clearChallengeEditContext();
+      return;
+    }
+    form.elements.challengerIndex.value = challengerPosition;
+    select.innerHTML = `<option value="${opponentPosition}">${editContext.opponent}</option>`;
+    select.value = String(opponentPosition);
+    select.disabled = true;
+    form.elements.challengerScore.value = String(
+      Number.isFinite(presetScores?.challenger) ? presetScores.challenger : editContext.challengerScore || 0
+    );
+    form.elements.opponentScore.value = String(
+      Number.isFinite(presetScores?.opponent) ? presetScores.opponent : editContext.opponentScore || 0
+    );
+    updateChallengeDialogText(`Corriger ${editContext.challenger}`, 'Mode correction · ce duel remplacera le précédent.');
+  } else {
+    if (!Number.isInteger(challengerPosition) || challengerPosition < 0 || challengerPosition >= order.length) return;
+    const opponents = getChallengeOpponents(challengerPosition);
+    if (!opponents.length) {
+      alert('Aucun adversaire disponible dans la fenêtre ±5.');
+      return;
+    }
+    form.elements.challengerIndex.value = challengerPosition;
+    select.innerHTML = opponents.map(option => `<option value="${option.position}">${option.label}</option>`).join('');
+    form.elements.challengerScore.value = '0';
+    form.elements.opponentScore.value = '0';
+    const presetOpponent = Number(options.presetOpponent);
+    if (Number.isInteger(presetOpponent)) {
+      const optionExists = select.querySelector(`option[value="${presetOpponent}"]`);
+      if (optionExists) {
+        select.value = String(presetOpponent);
+      }
+    }
+    const name = challenge.names[order[challengerPosition]];
+    updateChallengeDialogText(`Défi · ${name}`, 'Touchez un joueur pour préparer la fenêtre ±5, puis validez ici.');
   }
-  form.elements.challengerIndex.value = position;
-  select.innerHTML = opponents
-    .map(option => `<option value="${option.position}">${option.label}</option>`)
-    .join('');
-  form.elements.challengerScore.value = '0';
-  form.elements.opponentScore.value = '0';
-  const title = dialog.querySelector('#challengeDialogTitle');
-  if (title) {
-    title.textContent = `Défi · ${name}`;
-  }
-  dialog.classList.remove('hidden');
-  challengeDialogContext = { challengerIndex: position };
+
+  elements.challengeModal.classList.remove('hidden');
   syncBodyModalState();
 }
 
 function closeChallengeDialog() {
-  const dialog = document.getElementById('challengeDialog');
-  if (!dialog) return;
-  dialog.classList.add('hidden');
-  challengeDialogContext = null;
+  if (!elements.challengeModal || elements.challengeModal.classList.contains('hidden')) return;
+  elements.challengeModal.classList.add('hidden');
+  clearChallengeEditContext();
+  clearChallengeHighlights();
+  resetChallengeSelection();
   syncBodyModalState();
 }
 
@@ -2957,6 +3151,43 @@ function handleChallengeDialogAction(event) {
     event.preventDefault();
     closeChallengeDialog();
   }
+}
+
+function updateChallengeDialogText(titleText, infoText) {
+  if (elements.challengeModal) {
+    const titleNode = elements.challengeModal.querySelector('#challengeDialogTitle');
+    if (titleNode && titleText) {
+      titleNode.textContent = titleText;
+    }
+  }
+  if (elements.challengeDialogInfo) {
+    elements.challengeDialogInfo.textContent =
+      infoText || 'Touchez un joueur pour préparer la fenêtre ±5, puis validez ici.';
+  }
+}
+
+function resolveChallengePosition(storedPosition, teamIndex) {
+  if (Number.isInteger(storedPosition)) return storedPosition;
+  return findChallengePositionByTeam(teamIndex);
+}
+
+function findChallengePositionByTeam(teamIndex) {
+  if (!Number.isInteger(teamIndex)) return null;
+  const challenge = state.schedule?.challenge;
+  if (!challenge) return null;
+  const order = challenge.order || [];
+  for (let i = 0; i < order.length; i += 1) {
+    if (order[i] === teamIndex) return i;
+  }
+  return null;
+}
+
+function clearChallengeEditContext() {
+  challengeEditContext = null;
+  if (elements.challengeForm && elements.challengeForm.elements.opponentIndex) {
+    elements.challengeForm.elements.opponentIndex.disabled = false;
+  }
+  updateChallengeDialogText(null, null);
 }
 
 function getChallengeOpponents(position) {
@@ -2983,16 +3214,28 @@ function handleChallengeFormSubmit(event) {
   const opponentIndex = Number(form.elements.opponentIndex.value);
   const challengerScore = Number(form.elements.challengerScore.value);
   const opponentScore = Number(form.elements.opponentScore.value);
-  applyChallengeResult({ challengerIndex, opponentIndex, challengerScore, opponentScore });
+  const editContext = challengeEditContext ? { ...challengeEditContext } : null;
+  applyChallengeResult({ challengerIndex, opponentIndex, challengerScore, opponentScore }, { editContext });
   closeChallengeDialog();
 }
 
-function applyChallengeResult(payload) {
+function applyChallengeResult(payload, options = {}) {
   if (!isChallengeModeActive()) return;
   const { challengerIndex, opponentIndex, challengerScore, opponentScore } = payload;
   if (!Number.isInteger(challengerIndex) || !Number.isInteger(opponentIndex)) return;
   const challenge = state.schedule.challenge;
-  const order = challenge.order || [];
+  if (!challenge.history) {
+    challenge.history = [];
+  }
+  if (!challenge.order) {
+    challenge.order = challenge.names.map((_, index) => index);
+  }
+  const editContext = options.editContext || null;
+  if (editContext && Array.isArray(editContext.orderBefore) && challenge.history.length) {
+    challenge.order = [...editContext.orderBefore];
+    challenge.history.pop();
+  }
+  const order = challenge.order;
   if (
     challengerIndex < 0 ||
     opponentIndex < 0 ||
@@ -3013,8 +3256,11 @@ function applyChallengeResult(payload) {
   }
   challenge.history = challenge.history || [];
   const names = challenge.names || [];
-  const challengerName = names[order[challengerIndex]];
-  const opponentName = names[order[opponentIndex]];
+  const snapshotBefore = order.slice();
+  const challengerTeamIndex = snapshotBefore[challengerIndex];
+  const opponentTeamIndex = snapshotBefore[opponentIndex];
+  const challengerName = names[challengerTeamIndex];
+  const opponentName = names[opponentTeamIndex];
   const temp = order[opponentIndex];
   order[opponentIndex] = order[challengerIndex];
   order[challengerIndex] = temp;
@@ -3024,6 +3270,11 @@ function applyChallengeResult(payload) {
     challengerScore,
     opponentScore,
     timestamp: new Date().toISOString(),
+    challengerPosition: challengerIndex,
+    opponentPosition: opponentIndex,
+    challengerTeamIndex,
+    opponentTeamIndex,
+    orderBefore: snapshotBefore,
   });
   challenge.history = challenge.history.slice(-20);
   persistState();
@@ -3570,7 +3821,8 @@ function syncBodyModalState() {
   const helpOpen = elements.helpModal && !elements.helpModal.classList.contains('hidden');
   const rankingOpen = elements.rankingModal && !elements.rankingModal.classList.contains('hidden');
   const statusOpen = elements.statusModal && !elements.statusModal.classList.contains('hidden');
-  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen;
+  const challengeOpen = elements.challengeModal && !elements.challengeModal.classList.contains('hidden');
+  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen || challengeOpen;
   document.body.classList.toggle('modal-open', shouldLock);
 }
 
@@ -3598,6 +3850,18 @@ function toggleLiveActionsPanel() {
   }
 }
 
+function toggleToolsMenu() {
+  if (!elements.toolsMenu || !elements.toolsToggle) return;
+  const willOpen = elements.toolsMenu.classList.contains('hidden');
+  if (willOpen) {
+    closeOverflowPanels();
+    elements.toolsMenu.classList.remove('hidden');
+    elements.toolsToggle.setAttribute('aria-expanded', 'true');
+  } else {
+    closeToolsMenu();
+  }
+}
+
 function closeResultsMorePanel() {
   if (!elements.resultsMorePanel || elements.resultsMorePanel.classList.contains('hidden')) return false;
   elements.resultsMorePanel.classList.add('hidden');
@@ -3616,10 +3880,20 @@ function closeLiveActionsPanel() {
   return true;
 }
 
+function closeToolsMenu() {
+  if (!elements.toolsMenu || elements.toolsMenu.classList.contains('hidden')) return false;
+  elements.toolsMenu.classList.add('hidden');
+  if (elements.toolsToggle) {
+    elements.toolsToggle.setAttribute('aria-expanded', 'false');
+  }
+  return true;
+}
+
 function closeOverflowPanels() {
   const closedResults = closeResultsMorePanel();
   const closedLive = closeLiveActionsPanel();
-  return closedResults || closedLive;
+  const closedTools = closeToolsMenu();
+  return closedResults || closedLive || closedTools;
 }
 
 function handleGlobalMenuClick(event) {
@@ -3631,6 +3905,11 @@ function handleGlobalMenuClick(event) {
   if (elements.liveActionsPanel && !elements.liveActionsPanel.classList.contains('hidden')) {
     if (!event.target.closest('.live-header-actions')) {
       closeLiveActionsPanel();
+    }
+  }
+  if (elements.toolsMenu && !elements.toolsMenu.classList.contains('hidden')) {
+    if (!event.target.closest('.topbar-actions')) {
+      closeToolsMenu();
     }
   }
 }
@@ -5300,6 +5579,9 @@ function hydrateChallengeBoard(schedule) {
   }
   const challenge = schedule.challenge;
   challenge.names = schedule.teams.map(team => team.name);
+  if (!Array.isArray(challenge.history)) {
+    challenge.history = [];
+  }
   if (!challenge.order || challenge.order.length !== challenge.names.length) {
     challenge.order = challenge.names.map((_, index) => index);
   }
@@ -6197,3 +6479,15 @@ function setLiveModeAvailability(enabled) {
     });
   }
 }
+  if (elements.challengeForm) {
+    elements.challengeForm.addEventListener('submit', handleChallengeFormSubmit);
+  }
+  if (elements.challengeModal) {
+    elements.challengeModal.addEventListener('click', event => {
+      if (event.target === elements.challengeModal) {
+        closeChallengeDialog();
+        return;
+      }
+      handleChallengeDialogAction(event);
+    });
+  }

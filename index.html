@@ -267,7 +267,7 @@
               <div class="mode-field wide" data-mode-field="raquettes-defi">
                 <div class="defi-hint">
                   <strong>Règle ±5</strong>
-                  <p>Un joueur peut défier uniquement les 5 places au-dessus et en dessous. Le clic simple affiche la zone autorisée.</p>
+                  <p>Un joueur peut défier uniquement les 5 places au-dessus et en dessous. Touchez un joueur pour visualiser sa zone, touchez de nouveau pour ouvrir la saisie.</p>
                 </div>
               </div>
             </section>
@@ -320,10 +320,10 @@
               <article class="panel-card" data-mode-field="raquettes-defi">
                 <header>
                   <p class="eyebrow">Mode Défi</p>
-                  <h4>Board tactile</h4>
+                  <h4>Saisie en popup</h4>
                 </header>
-                <p>Chaque ligne comporte désormais un bouton « Saisir un défi » pour tablette en plus du double clic.</p>
-                <p class="micro-copy">Disponible après génération : accès direct au classement via le bouton « Classement ».</p>
+                <p>Le classement reste seul à l’écran. La saisie se fait via une fenêtre centrale et se referme automatiquement après validation.</p>
+                <p class="micro-copy">Touchez deux fois un joueur pour ouvrir la popup, ou utilisez le bouton « Saisir un défi » par ligne.</p>
               </article>
             </section>
             <details class="options-advanced" id="optionsAdvanced">
@@ -406,7 +406,7 @@
           </div>
         </section>
 
-        <section class="screen" data-screen="results">
+        <section class="screen" data-screen="results" data-results-mode="read">
           <header class="screen-header">
             <p class="eyebrow">Étape 5</p>
             <h2>Planning généré</h2>
@@ -433,6 +433,11 @@
           <section class="summary-grid" id="summaryGrid"></section>
           <p class="match-insight hidden" id="matchInsight"></p>
           <p class="time-indicator hidden" id="timeIndicator"></p>
+          <div class="results-mode-switch" id="resultsModeSwitch" role="group" aria-label="Mode d’affichage des résultats">
+            <button class="mode-toggle active" data-results-mode-target="read" aria-pressed="true">Lecture</button>
+            <button class="mode-toggle" data-results-mode-target="pilot" aria-pressed="false">Pilotage</button>
+          </div>
+          <p class="results-mode-note" id="resultsModeNote">Passez en mode « Pilotage » pour ajuster les rotations ou accéder aux actions avancées.</p>
           <div class="results-action-stack">
             <div class="results-primary-cta">
               <button class="btn primary hero" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
@@ -664,6 +669,36 @@
         </header>
         <p class="status-hint">Ne supprimez plus votre équipe. Marquez-la « Indisponible » : tous les matchs concernés seront neutralisés proprement.</p>
         <div class="status-list" id="statusList"></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="challengeModal" role="dialog" aria-modal="true" aria-labelledby="challengeDialogTitle">
+      <div class="modal-card challenge-card">
+        <header>
+          <div>
+            <p class="eyebrow">Défi</p>
+            <h3 id="challengeDialogTitle">Saisie du duel</h3>
+          </div>
+          <button class="btn ghost small" data-challenge-action="close" aria-label="Fermer la saisie">Fermer</button>
+        </header>
+        <p class="challenge-dialog-info" id="challengeDialogInfo">Touchez un joueur dans le classement pour éclairer la fenêtre ±5, puis validez ici.</p>
+        <form id="challengeForm">
+          <input type="hidden" name="challengerIndex" />
+          <label class="field">
+            <span>Adversaire autorisé (±5)</span>
+            <select id="challengeOpponent" name="opponentIndex" required></select>
+          </label>
+          <div class="challenge-score-grid">
+            <label for="challengeChallengerScore">Score du joueur</label>
+            <input type="number" id="challengeChallengerScore" name="challengerScore" min="0" value="0" required />
+            <label for="challengeOpponentScore">Score adversaire</label>
+            <input type="number" id="challengeOpponentScore" name="opponentScore" min="0" value="0" required />
+          </div>
+          <div class="challenge-dialog-actions">
+            <button type="submit" class="btn primary">Valider</button>
+            <button type="button" class="btn ghost" data-challenge-action="cancel">Annuler</button>
+          </div>
+        </form>
       </div>
     </div>
 
