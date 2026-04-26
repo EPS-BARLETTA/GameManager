@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PouleManager</title>
+    <title>GameManager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -15,8 +15,7 @@
         <div class="brand">
           <span class="brand-mark"></span>
           <div>
-            <p>PouleManager</p>
-            <small>EPS couteau suisse</small>
+            <span class="brand-name">GameManager</span>
           </div>
         </div>
         <div class="mode-badges" aria-live="polite">
@@ -60,7 +59,7 @@
         <section class="screen active" data-screen="landing">
           <div class="landing-card hero">
             <p class="landing-eyebrow">EPS · Terrain · Projection</p>
-            <h1>PouleManager</h1>
+            <h1>GameManager</h1>
             <p class="landing-subtitle">Choisissez votre univers et pilotez tout le tournoi en six étapes claires.</p>
             <div class="landing-entry">
               <button class="mega-card theme-sportco" id="landingSportcoBtn">
@@ -75,7 +74,7 @@
                 <div class="mega-card-body">
                   <p class="mega-eyebrow">Univers 2</p>
                   <strong>Raquettes</strong>
-                  <span>Poule · Montée-descente · Défi</span>
+                  <span>Poule · Montée-descente · Défi · Ronde Suisse</span>
                 </div>
                 <span aria-hidden="true">→</span>
               </button>
@@ -85,6 +84,26 @@
               <button class="btn secondary hero" id="resumeFlow">Reprendre ma dernière configuration</button>
               <button class="btn ghost small" id="openHelpFromLanding">Aide rapide</button>
             </div>
+            <section class="landing-highlight class-manager-card" aria-labelledby="challengeClassManagerTitle">
+              <div>
+                <p class="mega-eyebrow">Gestion des classes</p>
+                <h3 id="challengeClassManagerTitle">Défi par classe / groupe</h3>
+                <p class="landing-subcopy">Créez, reprenez ou importez une classe sans repasser par les écrans de saisie.</p>
+              </div>
+              <label class="field class-manager-field">
+                <span>Classes disponibles</span>
+                <select id="challengeClassSelect">
+                  <option value="">Aucune classe sauvegardée</option>
+                </select>
+              </label>
+              <div class="landing-meta class-manager-actions">
+                <button class="btn success hero" id="challengeClassCreateBtn">Créer une classe</button>
+                <button class="btn secondary hero" id="challengeClassResumeBtn">Reprendre une classe</button>
+                <button class="btn ghost hero" id="challengeClassImportBtn">Importer une classe</button>
+              </div>
+              <p class="micro-copy" id="challengeClassManagerHint">Les classes sauvegardées localement apparaissent ici.</p>
+              <input type="file" id="challengeClassImportFile" accept=".json,application/json" class="hidden" />
+            </section>
             <p class="landing-hint">Simple en façade · puissant derrière · utilisable sur iPad, téléphone et TV.</p>
           </div>
         </section>
@@ -192,6 +211,11 @@
               <textarea id="teamBulkInput" rows="4" placeholder="Équipe A&#10;Équipe B&#10;Participant C"></textarea>
               <button class="btn primary" id="applyBulkNames">Appliquer la liste</button>
             </div>
+            <div class="bulk-import" data-mode-field="raquettes-montee-descente">
+              <label for="teamRankingImport">Importer un classement CSV</label>
+              <input type="file" id="teamRankingImport" accept=".csv,text/csv,.txt" />
+              <p class="micro-copy">CSV de classement ou simple liste ordonnée pour reprendre directement une montée-descente.</p>
+            </div>
           </div>
           <div class="team-list" id="teamFields"></div>
           <div class="nav-actions">
@@ -227,11 +251,11 @@
                 <span>Nombre de terrains</span>
                 <input type="number" id="fieldCount" min="1" max="16" value="2" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente" id="matchDurationField">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="matchDurationField">
                 <span id="modeDurationLabel">Durée d’un match (minutes)</span>
                 <input type="number" id="matchDuration" min="1" max="180" value="12" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="availableDurationField">
                 <span>Durée disponible (optionnel)</span>
                 <input type="number" id="availableDuration" min="0" max="1440" placeholder="Durée totale" />
               </label>
@@ -239,19 +263,19 @@
                 <span>Heure de début</span>
                 <input type="time" id="startTime" value="09:00" />
               </label>
-              <label class="field mode-field" data-mode-field="raquettes-montee-descente">
+              <label class="field mode-field" data-mode-field="raquettes-montee-descente" id="ladderRefereeField">
                 <span>Terrains avec arbitre</span>
                 <input type="number" id="ladderRefereeCourts" min="0" value="0" />
               </label>
-              <label class="field mode-field" data-mode-field="raquettes-montee-descente">
+              <label class="field mode-field" data-mode-field="raquettes-montee-descente" id="ladderFreeField">
                 <span>Terrains sans arbitre dédié</span>
                 <input type="number" id="ladderFreeCourts" min="0" value="0" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi,raquettes-ronde-suisse" id="endTimeField">
                 <span>Prévision de fin (optionnel)</span>
                 <input type="time" id="endTime" />
               </label>
-              <div class="mode-field wide" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi">
+              <div class="mode-field wide" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi" id="schedulingModeField">
                 <span>Optimisation des rotations</span>
                 <div class="scheduling-chips">
                   <label class="chip">
@@ -265,9 +289,31 @@
                 </div>
               </div>
               <div class="mode-field wide" data-mode-field="raquettes-defi">
+                <label class="field">
+                  <span>Classe / groupe</span>
+                  <input type="text" id="challengeClassName" name="challengeClassName" placeholder="ex : 6A, 5B, AS Badminton" />
+                </label>
+              </div>
+              <div class="mode-field wide" data-mode-field="raquettes-defi">
+                <label class="field">
+                  <span>Fenêtre de défi</span>
+                  <div class="field-hint">Nombre de places au-dessus et en-dessous accessibles (±N)</div>
+                  <input type="number" id="challengeRange" name="challengeRange" min="1" max="10" value="5" />
+                </label>
+              </div>
+              <div class="mode-field wide" data-mode-field="raquettes-defi">
                 <div class="defi-hint">
-                  <strong>Règle ±5</strong>
-                  <p>Un joueur peut défier uniquement les 5 places au-dessus et en dessous. Touchez un joueur pour visualiser sa zone, touchez de nouveau pour ouvrir la saisie.</p>
+                  <div class="section-title-row">
+                    <strong>Fenêtre de défi</strong>
+                    <button
+                      type="button"
+                      class="info-trigger"
+                      data-tip="Un joueur peut défier uniquement les places situées dans la fenêtre configurée au-dessus et en dessous. Touchez un joueur pour visualiser sa zone, puis touchez un adversaire autorisé pour ouvrir la saisie."
+                      aria-label="Afficher l’aide sur la fenêtre de défi"
+                    >
+                      ℹ️
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -292,38 +338,139 @@
               <article class="panel-card" data-mode-field="sportco-worldcup">
                 <header>
                   <p class="eyebrow">Coupe du monde</p>
-                  <h4>Structure des poules</h4>
+                  <div class="section-title-row">
+                    <h4>Structure des poules</h4>
+                    <button
+                      type="button"
+                      class="info-trigger"
+                      data-tip="Hypothèse EPS : les deux premiers sont qualifiés. Avec 3 poules, le meilleur 2e rejoint les demi-finales."
+                      aria-label="Afficher l’aide sur la structure des poules"
+                    >
+                      ℹ️
+                    </button>
+                  </div>
                 </header>
-                <label class="field">
-                  <span>Nombre de poules</span>
-                  <select id="worldCupGroupCount">
-                    <option value="2">2 poules</option>
-                    <option value="3">3 poules</option>
-                    <option value="4">4 poules</option>
-                  </select>
-                </label>
-                <p class="micro-copy">Hypothèse EPS : les deux premiers sont qualifiés. Avec 3 poules, le meilleur 2e rejoint les demi-finales.</p>
+                <button type="button" class="collapsible-toggle" data-collapsible-target="worldCupOptionsBody" aria-expanded="false">
+                  <span class="collapsible-icon">▸</span>
+                  <span>Afficher / Masquer</span>
+                </button>
+                <div class="collapsible-body collapsed" id="worldCupOptionsBody">
+                  <label class="field">
+                    <span>Nombre de poules</span>
+                    <select id="worldCupGroupCount">
+                      <option value="2">2 poules</option>
+                      <option value="3">3 poules</option>
+                      <option value="4">4 poules</option>
+                    </select>
+                  </label>
+                </div>
               </article>
               <article class="panel-card" data-mode-field="raquettes-montee-descente">
                 <header>
                   <p class="eyebrow">Montée-descente</p>
-                  <h4>Terrains arbitrés</h4>
-                </header>
-                <div class="ladder-settings" id="ladderSettings">
-                  <div class="ladder-legend">
-                    <span class="badge arbiter">Arbitré</span>
-                    <span class="badge free">Libre</span>
+                  <div class="section-title-row">
+                    <h4>Pilotage terrain EPS</h4>
+                    <button
+                      type="button"
+                      class="info-trigger"
+                      data-tip="Choisissez un fonctionnement simple, puis l’app prépare les terrains, les arbitres et le résumé de séance."
+                      aria-label="Afficher l’aide sur la montée-descente"
+                    >
+                      ℹ️
+                    </button>
                   </div>
-                  <p class="micro-copy">Les terrains arbitrés garantissent la montée immédiate du vainqueur. Les terrains libres fonctionnent en autonomie, pratique si vous manquez d’adultes.</p>
+                </header>
+                <div class="ladder-mode-switch" id="ladderModeSwitch">
+                  <button type="button" class="ladder-mode-btn" data-ladder-mode="free">
+                    <strong>Sans arbitre</strong>
+                    <span>Je gagne je monte, je perds je descends</span>
+                  </button>
+                  <button type="button" class="ladder-mode-btn" data-ladder-mode="arbiter">
+                    <strong>Avec arbitres</strong>
+                    <span>Des arbitres tournent et entrent en jeu</span>
+                  </button>
+                  <button type="button" class="ladder-mode-btn" data-ladder-mode="mixed">
+                    <strong>Mixte</strong>
+                    <span>Certains terrains avec arbitre, d’autres sans</span>
+                  </button>
+                </div>
+                <p class="micro-copy ladder-mode-help" id="ladderModeHelp"></p>
+                <div class="ladder-settings" id="ladderSettings">
+                  <div class="ladder-court-mode">
+                    <p class="eyebrow">Format de séance</p>
+                    <div class="ladder-court-mode-switch" id="ladderSessionModeSwitch">
+                      <button type="button" class="ladder-court-mode-btn" data-ladder-session-mode="open">
+                        <strong>Session libre</strong>
+                        <span>Rotations illimitées, arrêt manuel via « Terminer le tournoi »</span>
+                      </button>
+                      <button type="button" class="ladder-court-mode-btn" data-ladder-session-mode="limited">
+                        <strong>Session limitée</strong>
+                        <span>Nombre de rotations fixé à l’avance</span>
+                      </button>
+                    </div>
+                    <p class="micro-copy ladder-court-mode-help" id="ladderSessionModeHelp"></p>
+                    <label class="field hidden" id="ladderRotationLimitField">
+                      <span>Nombre de rotations</span>
+                      <input type="number" id="ladderRotationLimit" min="1" max="999" value="6" />
+                    </label>
+                  </div>
+                  <div class="ladder-court-mode">
+                    <p class="eyebrow">Utilisation des terrains</p>
+                    <div class="ladder-court-mode-switch" id="ladderCourtModeSwitch">
+                      <button type="button" class="ladder-court-mode-btn" data-ladder-court-mode="optimized">
+                        <strong>⚡ Optimisé</strong>
+                        <span>Garde des joueurs en attente pour fluidifier la séance</span>
+                      </button>
+                      <button type="button" class="ladder-court-mode-btn" data-ladder-court-mode="max">
+                        <strong>🔢 Maximum de terrains</strong>
+                        <span>Utilise le plus de terrains possible sans dépasser le maximum réel</span>
+                      </button>
+                    </div>
+                    <p class="micro-copy ladder-court-mode-help" id="ladderCourtModeHelp"></p>
+                  </div>
+                  <label class="field" id="ladderRefereePlacementField">
+                    <span>Placement des arbitres</span>
+                    <select id="ladderRefereePlacement">
+                      <option value="top">Arbitres en haut</option>
+                      <option value="spread">Arbitres répartis</option>
+                      <option value="bottom">Arbitres en bas</option>
+                      <option value="manual">Placement manuel</option>
+                    </select>
+                  </label>
+                  <div class="field hidden" id="ladderManualPlacementField">
+                    <span>Terrains arbitrés manuellement</span>
+                    <div class="ladder-manual-grid" id="ladderManualPlacementGrid"></div>
+                  </div>
+                  <div class="ladder-summary-card" id="ladderSummaryCard"></div>
+                  <div class="ladder-legend">
+                    <span class="badge arbiter">Avec arbitre</span>
+                    <span class="badge free">Sans arbitre</span>
+                  </div>
                 </div>
               </article>
               <article class="panel-card" data-mode-field="raquettes-defi">
                 <header>
                   <p class="eyebrow">Mode Défi</p>
-                  <h4>Saisie en popup</h4>
+                  <div class="section-title-row">
+                    <h4>Saisie en popup</h4>
+                    <button
+                      type="button"
+                      class="info-trigger"
+                      data-tip="Le classement reste seul à l’écran. La saisie se fait via une fenêtre centrale et se referme automatiquement après validation. Touchez un joueur pour afficher sa fenêtre de défi puis choisissez un adversaire autorisé, ou utilisez le bouton « Défi » par ligne."
+                      aria-label="Afficher l’aide sur la saisie en popup"
+                    >
+                      ℹ️
+                    </button>
+                  </div>
                 </header>
-                <p>Le classement reste seul à l’écran. La saisie se fait via une fenêtre centrale et se referme automatiquement après validation.</p>
-                <p class="micro-copy">Touchez deux fois un joueur pour ouvrir la popup, ou utilisez le bouton « Saisir un défi » par ligne.</p>
+                <button type="button" class="collapsible-toggle" data-collapsible-target="challengePopupBody" aria-expanded="false">
+                  <span class="collapsible-icon">▸</span>
+                  <span>Afficher / Masquer</span>
+                </button>
+                <div class="collapsible-body collapsed" id="challengePopupBody">
+                  <p>Le classement reste seul à l’écran. La saisie se fait via une fenêtre centrale et se referme automatiquement après validation.</p>
+                  <p class="micro-copy">Touchez un joueur pour afficher sa fenêtre de défi puis choisissez un adversaire autorisé, ou utilisez le bouton « Défi » par ligne.</p>
+                </div>
               </article>
             </section>
             <details class="options-advanced" id="optionsAdvanced">
@@ -337,9 +484,18 @@
                   <input type="number" id="rotationBuffer" min="0" max="30" value="2" />
                 </label>
                 <label class="field">
-                  <span>Pause globale (hydratation / regroupement)</span>
+                  <div class="field-label-row">
+                    <span>Pause globale (hydratation / regroupement)</span>
+                    <button
+                      type="button"
+                      class="info-trigger"
+                      data-tip="Temps de pause ajouté au tournoi (hydratation, regroupement, explication des règles)."
+                      aria-label="Afficher l’aide sur la pause globale"
+                    >
+                      ℹ️
+                    </button>
+                  </div>
                   <input type="number" id="breakDuration" min="0" max="180" value="0" />
-                  <small class="field-hint">Temps de pause ajouté au tournoi (hydratation, regroupement, explication des règles).</small>
                 </label>
                 <label class="field switch">
                   <span>Activer le chronomètre</span>
@@ -366,15 +522,15 @@
                   </div>
                   <div class="roles-options disabled" id="roleOptions">
                     <label class="role-option">
-                      <input type="checkbox" value="arbitre" data-role-choice />
+                      <input type="checkbox" id="roleChoiceArbitre" name="roleChoices" value="arbitre" data-role-choice />
                       <span>Arbitre</span>
                     </label>
                     <label class="role-option">
-                      <input type="checkbox" value="table" data-role-choice />
+                      <input type="checkbox" id="roleChoiceTable" name="roleChoices" value="table" data-role-choice />
                       <span>Table de marque</span>
                     </label>
                     <label class="role-option">
-                      <input type="checkbox" value="coach" data-role-choice />
+                      <input type="checkbox" id="roleChoiceCoach" name="roleChoices" value="coach" data-role-choice />
                       <span>Coach</span>
                     </label>
                   </div>
@@ -402,7 +558,7 @@
           </div>
           <div class="nav-actions">
             <button class="btn ghost" data-nav="teams">Retour</button>
-            <button class="btn primary" id="generateBtn">Générer le planning</button>
+            <button class="btn primary" id="generateBtn" type="button">Générer le planning</button>
           </div>
         </section>
 
@@ -414,17 +570,17 @@
           </header>
           <div class="view-hub" id="contextTabs">
             <button class="view-hub-card active" data-context="manage">
-              <span class="eyebrow">Je consulte</span>
+              <span class="eyebrow">📋 Planning</span>
               <strong>Gestion</strong>
               <small>Planning, options, optimisation</small>
             </button>
             <button class="view-hub-card" data-context="live">
-              <span class="eyebrow">Je gère</span>
+              <span class="eyebrow">⚡ Live terrain</span>
               <strong>Live terrain</strong>
               <small>Scores, chrono, statuts</small>
             </button>
             <button class="view-hub-card" data-context="projection">
-              <span class="eyebrow">Je projette</span>
+              <span class="eyebrow">📺 Grand écran</span>
               <strong>Grand écran</strong>
               <small>Affichage TV / vidéoprojecteur</small>
             </button>
@@ -489,6 +645,7 @@
                 <p id="liveStatus" class="live-status"></p>
               </div>
               <div class="live-header-actions">
+                <button class="btn primary" id="liveCurrentRotationBtn">Rotation en cours</button>
                 <button class="btn ghost small" id="liveActionsToggle" aria-expanded="false" aria-controls="liveActionsPanel">Options live</button>
                 <div class="live-actions-panel hidden" id="liveActionsPanel">
                   <button class="btn ghost small" id="liveModeToggle">Mode projection</button>
@@ -497,6 +654,7 @@
                 </div>
               </div>
             </header>
+            <section class="live-current-rotation-card" id="liveCurrentRotationCard"></section>
             <div class="live-grid" id="liveGrid">
               <div class="live-pilot-stack" id="livePilotColumn">
                 <section class="live-timer-panel" id="liveTimerPanel">
@@ -522,12 +680,13 @@
                   </div>
                 </div>
               </div>
-              <section class="live-matches">
+              <section class="live-matches" id="currentRotationMatchesAnchor">
                 <header class="live-now-header">
                   <p class="eyebrow">Rotation en cours</p>
                   <h3 id="liveNowLabel">Terrains en jeu</h3>
                 </header>
                 <div class="live-field-board" id="liveFieldBoard"></div>
+                <section class="live-ladder-secondary hidden" id="liveLadderSecondary" aria-live="polite"></section>
               </section>
               <aside class="live-ranking" id="liveRankingPanel">
                 <header>
@@ -539,10 +698,10 @@
                 </header>
                 <div class="live-ranking-table" id="liveRankingTable"></div>
               </aside>
-              <section class="live-score-panel">
+              <section class="live-score-panel" id="liveScorePanel">
                 <header class="live-score-header">
-                  <p class="eyebrow">Scores en direct</p>
-                  <h3>Gestion des matchs</h3>
+                  <p class="eyebrow" id="liveScoreEyebrow">Scores en direct</p>
+                  <h3 id="liveScoreTitle">Gestion des matchs</h3>
                 </header>
                 <div id="liveRotationContent" aria-live="polite"></div>
                 <section class="live-next hidden" id="liveNextRotation" aria-live="polite">
@@ -572,6 +731,7 @@
               <div class="projection-fields" id="projectionFields"></div>
               <section class="projection-next" id="projectionNext"></section>
               <section class="projection-rest" id="projectionRest"></section>
+              <section class="projection-ranking" id="projectionRanking"></section>
             </div>
           </div>
         </section>
@@ -582,7 +742,7 @@
               <div class="brand chrono-brand">
                 <span class="brand-mark"></span>
                 <div>
-                  <p>PouleManager</p>
+                  <span class="brand-name">GameManager</span>
                   <small>Chrono plein écran</small>
                 </div>
               </div>
@@ -629,7 +789,7 @@
     <button class="timer-fab hidden" id="timerFab" aria-label="Ouvrir le chrono">⏱</button>
 
     <div class="modal-overlay hidden" id="finalRankingModal" role="dialog" aria-modal="true" aria-labelledby="finalRankingTitle">
-      <div class="modal-card">
+      <div class="modal-card final-ranking-card">
         <header>
           <div>
             <p class="eyebrow">Clôture du tournoi</p>
@@ -658,6 +818,44 @@
       </div>
     </div>
 
+        <section class="screen ladder-pilot-screen" data-screen="ladder-pilot" id="ladderPilotModal">
+          <div class="ladder-pilot-screen-shell ladder-pilot-modal-card">
+        <header>
+          <div>
+            <p class="eyebrow">Pilotage</p>
+            <h3 id="ladderPilotTitle">Rotation en cours</h3>
+            <p class="live-meta" id="ladderPilotMeta"></p>
+          </div>
+          <button class="btn ghost small" id="ladderPilotCloseBtn" aria-label="Fermer le pilotage">Fermer</button>
+        </header>
+        <div class="ladder-pilot-toolbar">
+          <button class="btn secondary" id="ladderPilotBackBtn">Retour configuration</button>
+          <button class="btn primary" id="ladderPilotNextBtn">Rotation suivante</button>
+          <button class="btn secondary" id="ladderPilotFinishBtn">Terminer la montée-descente</button>
+          <button class="btn ghost" id="ladderPilotRankingBtn">Voir le classement</button>
+        </div>
+        <div class="ladder-pilot-modal-body" id="ladderPilotBody"></div>
+          </div>
+        </section>
+
+        <section class="screen ladder-pilot-screen swiss-pilot-screen" data-screen="swiss-pilot" id="swissPilotScreen">
+          <div class="ladder-pilot-screen-shell ladder-pilot-modal-card swiss-pilot-card">
+            <header>
+              <div>
+                <p class="eyebrow">Pilotage</p>
+                <h3 id="swissPilotTitle">Ronde Suisse — Ronde 1</h3>
+                <p class="live-meta" id="swissPilotMeta"></p>
+              </div>
+              <button class="btn ghost small" id="swissPilotCloseBtn" aria-label="Fermer le pilotage suisse">Fermer</button>
+            </header>
+            <div class="ladder-pilot-toolbar swiss-pilot-toolbar">
+              <button class="btn secondary" id="swissPilotBackBtn">Retour planning</button>
+              <button class="btn ghost" id="swissPilotExportBtn">Exporter CSV</button>
+            </div>
+            <div class="ladder-pilot-modal-body swiss-pilot-body" id="swissPilotBody"></div>
+          </div>
+        </section>
+
     <div class="modal-overlay hidden" id="statusModal" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
       <div class="modal-card status-card">
         <header>
@@ -681,11 +879,11 @@
           </div>
           <button class="btn ghost small" data-challenge-action="close" aria-label="Fermer la saisie">Fermer</button>
         </header>
-        <p class="challenge-dialog-info" id="challengeDialogInfo">Choisissez un adversaire dans la fenêtre ±5 puis saisissez le score.</p>
+        <p class="challenge-dialog-info" id="challengeDialogInfo">Choisissez un adversaire dans la fenêtre de défi puis saisissez le score.</p>
         <form id="challengeForm" class="challenge-form">
           <input type="hidden" name="challengerIndex" />
           <div class="challenge-field">
-            <label for="challengeOpponent">Adversaire autorisé (±5)</label>
+            <label for="challengeOpponent">Adversaire autorisé</label>
             <div class="challenge-select">
               <select id="challengeOpponent" name="opponentIndex" required></select>
             </div>
@@ -802,6 +1000,23 @@
               <li>Depuis le live, ouvrez « Mode projection » pour afficher rotations, terrains, rôles et chrono sur TV.</li>
               <li>Le bouton Imprimer génère un PDF noir & blanc (résumé, rotations, rôles, classements) prêt à distribuer.</li>
               <li>Utilisez cette fiche pour briefer arbitres et table de marque avant la séance.</li>
+            </ul>
+          </article>
+          <article class="help-section">
+            <div class="help-section-head">
+              <span class="help-icon" aria-hidden="true">♟️</span>
+              <div>
+                <p class="help-section-eyebrow">Ronde Suisse</p>
+                <h4>Classer rapidement sans élimination</h4>
+              </div>
+            </div>
+            <ul class="help-list">
+              <li>Chaque élève joue un match maximum par ronde.</li>
+              <li>Cliquez directement sur le gagnant : gagnant = 1 point, perdant = 0 point.</li>
+              <li>Si le nombre est impair, un élève est exempt et reçoit 1 point.</li>
+              <li>La ronde suivante regroupe en priorité des joueurs proches au classement.</li>
+              <li>Le classement live affiche points, matchs, victoires, défaites et exemptions.</li>
+              <li>Montée-descente : idéal pour faire tourner les terrains. Défi : idéal pour provoquer un joueur proche. Ronde Suisse : idéal pour classer vite tout un groupe avec des matchs équilibrés.</li>
             </ul>
           </article>
         </div>

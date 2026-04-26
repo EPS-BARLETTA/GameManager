@@ -24,7 +24,7 @@ const UNIVERSES = {
     baseline: 'Badminton · Tennis de table · Pickleball',
     themeClass: 'theme-raquettes',
     practiceType: 'raquette',
-    modeIds: ['raquettes-poule', 'raquettes-montee-descente', 'raquettes-defi'],
+    modeIds: ['raquettes-poule', 'raquettes-montee-descente', 'raquettes-defi', 'raquettes-ronde-suisse'],
   },
 };
 const MODE_DEFINITIONS = {
@@ -68,10 +68,19 @@ const MODE_DEFINITIONS = {
     id: 'raquettes-defi',
     universe: 'raquettes',
     label: 'Défi',
-    description: 'Classement vivant avec défis dans une fenêtre ±5 places.',
+    description: 'Classement vivant avec défis dans une fenêtre configurable de positions.',
     tournamentType: 'challenge',
     practiceType: 'raquette',
     badge: 'Mode Défi',
+  },
+  'raquettes-ronde-suisse': {
+    id: 'raquettes-ronde-suisse',
+    universe: 'raquettes',
+    label: 'Ronde Suisse',
+    description: 'Appariement par niveau de points, idéal pour classer rapidement sans élimination.',
+    tournamentType: 'swiss',
+    practiceType: 'raquette',
+    badge: 'Ronde Suisse',
   },
 };
 const TOURNAMENT_MODES = {
@@ -80,6 +89,7 @@ const TOURNAMENT_MODES = {
   'groups-finals': { label: 'Groupes + finales' },
   ladder: { label: 'Montée-descente' },
   challenge: { label: 'Défi' },
+  swiss: { label: 'Ronde Suisse' },
 };
 const STATUS_TYPES = {
   active: { key: 'active', label: 'Actif', cssClass: 'status-active' },
@@ -99,7 +109,7 @@ const ROLE_LABELS = {
 };
 const DEFAULT_ROLE_SETTINGS = {
   enabled: false,
-  arbitre: true,
+  arbitre: false,
   table: false,
   coach: false,
   coachMode: 'disabled',
@@ -208,12 +218,20 @@ const COMMON_FIRST_NAMES = new Set(
     'quentin',
     'lucas',
     'luca',
-    'ines',
   ].map(name => name.toLowerCase())
 );
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function removeDiacritics(value) {
@@ -386,6 +404,12 @@ const elements = {
   landingSportcoBtn: document.getElementById('landingSportcoBtn'),
   landingRaquettesBtn: document.getElementById('landingRaquettesBtn'),
   resumeFlow: document.getElementById('resumeFlow'),
+  challengeClassSelect: document.getElementById('challengeClassSelect'),
+  challengeClassCreateBtn: document.getElementById('challengeClassCreateBtn'),
+  challengeClassResumeBtn: document.getElementById('challengeClassResumeBtn'),
+  challengeClassImportBtn: document.getElementById('challengeClassImportBtn'),
+  challengeClassImportFile: document.getElementById('challengeClassImportFile'),
+  challengeClassManagerHint: document.getElementById('challengeClassManagerHint'),
   quickModeBtn: document.getElementById('quickModeBtn'),
   openHelpFromLanding: document.getElementById('openHelpFromLanding'),
   quickForm: document.getElementById('quickForm'),
@@ -427,13 +451,17 @@ const elements = {
   autoFillTeams: document.getElementById('autoFillTeams'),
   teamBulkInput: document.getElementById('teamBulkInput'),
   applyBulkNames: document.getElementById('applyBulkNames'),
+  teamRankingImport: document.getElementById('teamRankingImport'),
   fieldCount: document.getElementById('fieldCount'),
   matchDuration: document.getElementById('matchDuration'),
   startTime: document.getElementById('startTime'),
   rotationBuffer: document.getElementById('rotationBuffer'),
   breakDuration: document.getElementById('breakDuration'),
   availableDuration: document.getElementById('availableDuration'),
+  availableDurationField: document.getElementById('availableDurationField'),
   endTime: document.getElementById('endTime'),
+  endTimeField: document.getElementById('endTimeField'),
+  schedulingModeField: document.getElementById('schedulingModeField'),
   schedulingModeInputs: document.querySelectorAll('input[name="schedulingMode"]'),
   practiceTypeSelect: document.getElementById('practiceType'),
   matchModeSelect: document.getElementById('matchMode'),
@@ -442,6 +470,24 @@ const elements = {
   scoreTargetField: document.getElementById('scoreTargetField'),
   worldCupGroupCount: document.getElementById('worldCupGroupCount'),
   ladderSettings: document.getElementById('ladderSettings'),
+  ladderModeSwitch: document.getElementById('ladderModeSwitch'),
+  ladderModeButtons: document.querySelectorAll('[data-ladder-mode]'),
+  ladderModeHelp: document.getElementById('ladderModeHelp'),
+  ladderSessionModeSwitch: document.getElementById('ladderSessionModeSwitch'),
+  ladderSessionModeButtons: document.querySelectorAll('[data-ladder-session-mode]'),
+  ladderSessionModeHelp: document.getElementById('ladderSessionModeHelp'),
+  ladderRotationLimitField: document.getElementById('ladderRotationLimitField'),
+  ladderRotationLimit: document.getElementById('ladderRotationLimit'),
+  ladderCourtModeSwitch: document.getElementById('ladderCourtModeSwitch'),
+  ladderCourtModeButtons: document.querySelectorAll('[data-ladder-court-mode]'),
+  ladderCourtModeHelp: document.getElementById('ladderCourtModeHelp'),
+  ladderRefereePlacementField: document.getElementById('ladderRefereePlacementField'),
+  ladderRefereePlacement: document.getElementById('ladderRefereePlacement'),
+  ladderManualPlacementField: document.getElementById('ladderManualPlacementField'),
+  ladderManualPlacementGrid: document.getElementById('ladderManualPlacementGrid'),
+  ladderSummaryCard: document.getElementById('ladderSummaryCard'),
+  ladderRefereeField: document.getElementById('ladderRefereeField'),
+  ladderFreeField: document.getElementById('ladderFreeField'),
   ladderRefereeCourts: document.getElementById('ladderRefereeCourts'),
   ladderFreeCourts: document.getElementById('ladderFreeCourts'),
   simulateBtn: document.getElementById('simulateBtn'),
@@ -495,8 +541,13 @@ const elements = {
   liveRotationTitle: document.getElementById('liveRotationTitle'),
   liveStatus: document.getElementById('liveStatus'),
   liveMeta: document.getElementById('liveMeta'),
+  liveCurrentRotationCard: document.getElementById('liveCurrentRotationCard'),
+  liveCurrentRotationBtn: document.getElementById('liveCurrentRotationBtn'),
   liveRotationContent: document.getElementById('liveRotationContent'),
+  currentRotationMatchesAnchor: document.getElementById('currentRotationMatchesAnchor'),
   liveFieldBoard: document.getElementById('liveFieldBoard'),
+  liveLadderSecondary: document.getElementById('liveLadderSecondary'),
+  liveScorePanel: document.getElementById('liveScorePanel'),
   liveShell: document.getElementById('liveShell'),
   liveActionsToggle: document.getElementById('liveActionsToggle'),
   liveActionsPanel: document.getElementById('liveActionsPanel'),
@@ -505,6 +556,8 @@ const elements = {
   liveRankingTable: document.getElementById('liveRankingTable'),
   liveRankingTitle: document.getElementById('liveRankingTitle'),
   liveRestNotice: document.getElementById('liveRestNotice'),
+  liveScoreEyebrow: document.getElementById('liveScoreEyebrow'),
+  liveScoreTitle: document.getElementById('liveScoreTitle'),
   liveTimerPanel: document.getElementById('liveTimerPanel'),
   liveTimerHint: document.getElementById('liveTimerHint'),
   liveTimerDisplay: document.getElementById('liveTimerDisplay'),
@@ -531,6 +584,22 @@ const elements = {
   rankingModal: document.getElementById('rankingModal'),
   rankingModalBody: document.getElementById('rankingModalBody'),
   rankingModalClose: document.getElementById('rankingModalClose'),
+  ladderPilotModal: document.getElementById('ladderPilotModal'),
+  ladderPilotTitle: document.getElementById('ladderPilotTitle'),
+  ladderPilotMeta: document.getElementById('ladderPilotMeta'),
+  ladderPilotBody: document.getElementById('ladderPilotBody'),
+  ladderPilotCloseBtn: document.getElementById('ladderPilotCloseBtn'),
+  ladderPilotBackBtn: document.getElementById('ladderPilotBackBtn'),
+  ladderPilotNextBtn: document.getElementById('ladderPilotNextBtn'),
+  ladderPilotFinishBtn: document.getElementById('ladderPilotFinishBtn'),
+  ladderPilotRankingBtn: document.getElementById('ladderPilotRankingBtn'),
+  swissPilotScreen: document.getElementById('swissPilotScreen'),
+  swissPilotTitle: document.getElementById('swissPilotTitle'),
+  swissPilotMeta: document.getElementById('swissPilotMeta'),
+  swissPilotBody: document.getElementById('swissPilotBody'),
+  swissPilotCloseBtn: document.getElementById('swissPilotCloseBtn'),
+  swissPilotBackBtn: document.getElementById('swissPilotBackBtn'),
+  swissPilotExportBtn: document.getElementById('swissPilotExportBtn'),
   challengeModal: document.getElementById('challengeModal'),
   challengeForm: document.getElementById('challengeForm'),
   challengeDialogInfo: document.getElementById('challengeDialogInfo'),
@@ -557,6 +626,7 @@ const elements = {
   projectionFields: document.getElementById('projectionFields'),
   projectionNext: document.getElementById('projectionNext'),
   projectionRest: document.getElementById('projectionRest'),
+  projectionRanking: document.getElementById('projectionRanking'),
   projectionBackBtn: document.getElementById('projectionBackBtn'),
 };
 
@@ -580,8 +650,8 @@ const uiState = {
 let latestRecommendation = null;
 let recommendationApplied = false;
 let resetFeedbackTimeout = null;
-let challengeHighlightTimeout = null;
-let challengeSelection = { playerId: null, allowedIds: [] };
+let _challengeAutoReset = null;
+let _challengeSelectedId = null;
 let challengeEditContext = null;
 const MIN_TURNAROUND_MINUTES = 1;
 const IDEAL_TURNAROUND_MINUTES = 2;
@@ -592,11 +662,240 @@ function generateChallengePlayerId() {
   return challengeIdSeed;
 }
 
+function getChallengeRange() {
+  return clampNumber(Number(state.options.challengeRange) || 5, 1, 10, 5);
+}
+
+function getChallengeClassStorageKey(className) {
+  const safe = String(className || '').trim().toLowerCase();
+  if (!safe) return null;
+  return `poulemanager_challenge_class_${safe}`;
+}
+
+function saveChallengeClassSnapshot() {
+  const className = String(state.options.challengeClassName || '').trim();
+  if (!className || !state.schedule?.challenge) return;
+  const key = getChallengeClassStorageKey(className);
+  if (!key) return;
+  const data = {
+    type: 'poulemanager-challenge-class',
+    version: 1,
+    className,
+    savedAt: new Date().toISOString(),
+    challenge: state.schedule.challenge,
+  };
+  localStorage.setItem(key, JSON.stringify(data));
+  renderChallengeClassManager();
+}
+
+function loadChallengeClassSnapshot(className) {
+  const key = getChallengeClassStorageKey(className);
+  if (!key) return null;
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    if (data?.type !== 'poulemanager-challenge-class') return null;
+    if (!data.challenge?.order || !data.challenge?.roster) return null;
+    return data;
+  } catch (error) {
+    return null;
+  }
+}
+
+function exportChallengeClassSnapshot() {
+  if (!state.schedule?.challenge) return;
+  const className = String(state.options.challengeClassName || '').trim() || 'defi';
+  const data = {
+    type: 'poulemanager-challenge-class',
+    version: 1,
+    className,
+    exportedAt: new Date().toISOString(),
+    challenge: state.schedule.challenge,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `defi_${className}_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function saveCurrentChallengeClass() {
+  if (!state.schedule?.challenge) return;
+  saveChallengeClassSnapshot();
+  exportChallengeClassSnapshot();
+  persistState();
+  renderChallengeClassManager();
+}
+
+function importChallengeClassSnapshot(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function onload(event) {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (!data.challenge || !data.challenge.order) {
+        alert('Fichier invalide');
+        return;
+      }
+      const names = Array.isArray(data.challenge?.names) && data.challenge.names.length
+        ? data.challenge.names.slice()
+        : Array.isArray(data.challenge?.roster)
+          ? data.challenge.roster.map(player => player.name).filter(Boolean)
+          : [];
+      if (!names.length) {
+        alert('Fichier invalide');
+        return;
+      }
+      applyModeDefinition('raquettes-defi', { skipNavigation: true });
+      state.options.challengeClassName = String(data.className || state.options.challengeClassName || '').trim();
+      state.participants = names.length;
+      state.teamNames = ensureTeamListLength(names, names.length, 'raquette');
+      state.entityStatuses = ensureEntityStatusLength([], names.length);
+      renderParticipants();
+      buildTeamFields(names.length);
+      syncOptionInputs();
+      const schedule = buildChallengeBoard(names, state.options);
+      schedule.challenge = data.challenge;
+      ensureChallengeRoster(schedule);
+      state.schedule = schedule;
+      saveChallengeClassSnapshot();
+      persistState();
+      renderResults(schedule, { resetScores: true });
+      renderChallengeClassManager();
+      goTo('results');
+      renderChallengeBoard(schedule);
+      renderRankingView(schedule);
+      renderLiveRankingForChallenge();
+    } catch (error) {
+      alert('Erreur import');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function listChallengeClassSnapshots() {
+  const entries = [];
+  const prefix = 'poulemanager_challenge_class_';
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key || !key.startsWith(prefix)) continue;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const data = JSON.parse(raw);
+      if (data?.type !== 'poulemanager-challenge-class' || !data.className) continue;
+      entries.push({
+        key,
+        className: String(data.className).trim(),
+        savedAt: data.savedAt || data.exportedAt || null,
+      });
+    } catch (error) {
+      continue;
+    }
+  }
+  return entries.sort((a, b) => String(a.className).localeCompare(String(b.className), 'fr', { sensitivity: 'base' }));
+}
+
+function renderChallengeClassManager() {
+  const select = elements.challengeClassSelect;
+  if (!select) return;
+  const entries = listChallengeClassSnapshots();
+  const currentClass = String(state.options.challengeClassName || '').trim();
+  if (!entries.length) {
+    select.innerHTML = '<option value="">Aucune classe sauvegardée</option>';
+    select.disabled = true;
+    if (elements.challengeClassManagerHint) {
+      elements.challengeClassManagerHint.textContent = 'Aucune classe sauvegardée localement pour le moment.';
+    }
+    if (elements.challengeClassResumeBtn) {
+      elements.challengeClassResumeBtn.disabled = true;
+    }
+    return;
+  }
+  select.disabled = false;
+  select.innerHTML = entries
+    .map(entry => {
+      const stamp = entry.savedAt
+        ? new Date(entry.savedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+        : 'sauvegarde locale';
+      const selected = currentClass && currentClass.toLowerCase() === entry.className.toLowerCase() ? 'selected' : '';
+      return `<option value="${escapeHtml(entry.className)}" ${selected}>${escapeHtml(entry.className)} · ${escapeHtml(stamp)}</option>`;
+    })
+    .join('');
+  if (elements.challengeClassManagerHint) {
+    elements.challengeClassManagerHint.textContent = `${entries.length} classe(s) disponible(s) localement.`;
+  }
+  if (elements.challengeClassResumeBtn) {
+    elements.challengeClassResumeBtn.disabled = false;
+  }
+}
+
+function openChallengeClassCreationFlow() {
+  const className = window.prompt('Nom de la classe / du groupe ?');
+  const trimmed = String(className || '').trim();
+  if (!trimmed) return;
+  applyModeDefinition('raquettes-defi', { skipNavigation: true });
+  state.options.challengeClassName = trimmed;
+  state.schedule = null;
+  state.generatedAt = null;
+  state.scores = {};
+  state.validatedMatches = {};
+  state.teamNames = ensureTeamListLength([], state.participants, 'raquette');
+  state.entityStatuses = ensureEntityStatusLength([], state.participants);
+  persistState();
+  renderParticipants();
+  buildTeamFields(state.participants);
+  syncOptionInputs();
+  renderModeCards();
+  updateModeScreenCopy();
+  renderChallengeClassManager();
+  goTo('count');
+}
+
+function resumeChallengeClass(className) {
+  const trimmed = String(className || '').trim();
+  const data = loadChallengeClassSnapshot(trimmed);
+  if (!data) {
+    alert('Aucune sauvegarde trouvée pour cette classe.');
+    return;
+  }
+  const challengeData = data.challenge;
+  const names = Array.isArray(challengeData?.names) && challengeData.names.length
+    ? challengeData.names.slice()
+    : Array.isArray(challengeData?.roster)
+      ? challengeData.roster.map(player => player.name).filter(Boolean)
+      : [];
+  if (!names.length) {
+    alert('Sauvegarde invalide');
+    return;
+  }
+  applyModeDefinition('raquettes-defi', { skipNavigation: true });
+  state.options.challengeClassName = trimmed;
+  state.participants = names.length;
+  state.teamNames = ensureTeamListLength(names, names.length, 'raquette');
+  state.entityStatuses = ensureEntityStatusLength([], names.length);
+  renderParticipants();
+  buildTeamFields(names.length);
+  syncOptionInputs();
+  const schedule = buildChallengeBoard(names, state.options);
+  schedule.challenge = challengeData;
+  ensureChallengeRoster(schedule);
+  renderResults(schedule, { resetScores: true });
+  renderChallengeClassManager();
+  goTo('results');
+  alert(`Classe ${trimmed} reprise`);
+}
+
 const timerController = {
   prepare() {
     timerState.baseSeconds = state.options.duration * 60;
     timerState.remainingSeconds = timerState.baseSeconds;
-    timerState.totalRotations = state.schedule ? state.schedule.meta.rotationCount : 0;
+    timerState.totalRotations = state.schedule ? getLadderRotationTotal(state.schedule) || state.schedule.rotations.length : 0;
     timerState.currentRotation = state.schedule ? (state.liveRotationIndex + 1 || 1) : 1;
     const highlightTarget = state.schedule ? state.schedule.rotations[state.liveRotationIndex]?.number || 1 : 1;
     highlightRotation(highlightTarget);
@@ -696,6 +995,7 @@ function init() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  renderChallengeClassManager();
   setupAutoSelectInputs();
   updateTheme(state.universeId);
   renderModeCards();
@@ -735,6 +1035,32 @@ function bindNavigation() {
   }
   if (elements.resumeFlow) {
     elements.resumeFlow.addEventListener('click', handleResume);
+  }
+  if (elements.challengeClassCreateBtn) {
+    elements.challengeClassCreateBtn.addEventListener('click', openChallengeClassCreationFlow);
+  }
+  if (elements.challengeClassResumeBtn) {
+    elements.challengeClassResumeBtn.addEventListener('click', () => {
+      const className = elements.challengeClassSelect?.value;
+      if (!className) {
+        alert('Sélectionnez une classe à reprendre.');
+        return;
+      }
+      resumeChallengeClass(className);
+    });
+  }
+  if (elements.challengeClassImportBtn) {
+    elements.challengeClassImportBtn.addEventListener('click', () => {
+      elements.challengeClassImportFile?.click();
+    });
+  }
+  if (elements.challengeClassImportFile) {
+    elements.challengeClassImportFile.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      importChallengeClassSnapshot(file);
+      event.target.value = '';
+    });
   }
   if (elements.openHelpFromLanding) {
     elements.openHelpFromLanding.addEventListener('click', openHelpModal);
@@ -827,13 +1153,7 @@ function bindNavigation() {
     state.options.fields = clampNumber(Number(event.target.value), 1, 16, state.options.fields);
     event.target.value = state.options.fields;
     if (state.options.ladder) {
-      state.options.ladder.refereeCourts = clampNumber(
-        Number(state.options.ladder.refereeCourts),
-        0,
-        state.options.fields,
-        0
-      );
-      state.options.ladder.freeCourts = clampNumber(Number(state.options.ladder.freeCourts), 0, state.options.fields, 0);
+      normalizeLadderOptions(state.options.ladder.mode);
     }
     if (elements.ladderRefereeCourts) {
       elements.ladderRefereeCourts.value = state.options.ladder.refereeCourts || 0;
@@ -841,18 +1161,40 @@ function bindNavigation() {
     if (elements.ladderFreeCourts) {
       elements.ladderFreeCourts.value = state.options.ladder.freeCourts || 0;
     }
+    updateLadderSettingsVisibility();
     persistState();
   });
 
   elements.matchDuration.addEventListener('input', event => {
     state.options.duration = clampNumber(Number(event.target.value), 1, 180, state.options.duration);
     event.target.value = state.options.duration;
+    updateLadderSettingsVisibility();
     persistState();
     timerState.baseSeconds = state.options.duration * 60;
   });
 
+  const challengeRangeInput = document.getElementById('challengeRange');
+  if (challengeRangeInput) {
+    challengeRangeInput.addEventListener('input', event => {
+      state.options.challengeRange = clampNumber(Number(event.target.value), 1, 10, 5);
+      event.target.value = state.options.challengeRange;
+      persistState();
+      if (isChallengeModeActive()) renderChallengeBoard();
+    });
+  }
+
+  const challengeClassNameInput = document.getElementById('challengeClassName');
+  if (challengeClassNameInput) {
+    challengeClassNameInput.addEventListener('input', event => {
+      state.options.challengeClassName = String(event.target.value || '').trim();
+      persistState();
+      if (isChallengeModeActive()) renderChallengeBoard();
+    });
+  }
+
   elements.startTime.addEventListener('input', event => {
     state.options.startTime = event.target.value;
+    updateLadderSettingsVisibility();
     persistState();
   });
 
@@ -927,18 +1269,80 @@ function bindNavigation() {
   if (elements.ladderRefereeCourts) {
     elements.ladderRefereeCourts.addEventListener('input', event => {
       const value = clampNumber(Number(event.target.value), 0, state.options.fields, 0);
-      state.options.ladder = state.options.ladder || { refereeCourts: 0, freeCourts: 0 };
+      state.options.ladder = state.options.ladder || { mode: 'free', courtMode: 'optimized', refereeCourts: 0, freeCourts: 0 };
       state.options.ladder.refereeCourts = value;
+      if (state.options.ladder.mode === 'mixed') {
+        state.options.ladder.freeCourts = Math.max(state.options.fields - value, 0);
+      } else {
+        state.options.ladder.mode = inferLadderMode(
+          state.options.fields,
+          value,
+          Math.max(state.options.fields - value, 0)
+        );
+        state.options.ladder.freeCourts = Math.max(state.options.fields - value, 0);
+      }
       event.target.value = value;
+      updateLadderSettingsVisibility();
       persistState();
     });
   }
   if (elements.ladderFreeCourts) {
     elements.ladderFreeCourts.addEventListener('input', event => {
       const value = clampNumber(Number(event.target.value), 0, state.options.fields, 0);
-      state.options.ladder = state.options.ladder || { refereeCourts: 0, freeCourts: 0 };
+      state.options.ladder = state.options.ladder || { mode: 'free', courtMode: 'optimized', refereeCourts: 0, freeCourts: 0 };
       state.options.ladder.freeCourts = value;
+      if (state.options.ladder.mode === 'mixed') {
+        state.options.ladder.refereeCourts = Math.max(state.options.fields - value, 0);
+      } else {
+        state.options.ladder.mode = inferLadderMode(
+          state.options.fields,
+          state.options.ladder.refereeCourts,
+          value
+        );
+      }
       event.target.value = value;
+      updateLadderSettingsVisibility();
+      persistState();
+    });
+  }
+  if (elements.ladderModeButtons && elements.ladderModeButtons.length) {
+    elements.ladderModeButtons.forEach(button => {
+      button.addEventListener('click', () => setLadderMode(button.dataset.ladderMode));
+    });
+  }
+  if (elements.ladderSessionModeButtons && elements.ladderSessionModeButtons.length) {
+    elements.ladderSessionModeButtons.forEach(button => {
+      button.addEventListener('click', () => setLadderSessionMode(button.dataset.ladderSessionMode));
+    });
+  }
+  if (elements.ladderCourtModeButtons && elements.ladderCourtModeButtons.length) {
+    elements.ladderCourtModeButtons.forEach(button => {
+      button.addEventListener('click', () => setLadderCourtMode(button.dataset.ladderCourtMode));
+    });
+  }
+  if (elements.ladderRefereePlacement) {
+    elements.ladderRefereePlacement.addEventListener('change', event => {
+      setLadderRefereePlacement(event.target.value);
+    });
+  }
+  if (elements.ladderManualPlacementGrid) {
+    elements.ladderManualPlacementGrid.addEventListener('change', event => {
+      const input = event.target.closest('[data-ladder-manual-field]');
+      if (!input) return;
+      toggleManualLadderRefereeField(Number(input.dataset.ladderManualField), Boolean(input.checked));
+    });
+  }
+  if (elements.ladderRotationLimit) {
+    elements.ladderRotationLimit.addEventListener('change', event => {
+      const fallback = getDefaultLimitedLadderRotationCount(state.participants, state.options.fields);
+      const value = clampNumber(Number(event.target.value) || fallback, 1, 999, fallback);
+      state.options.ladder = {
+        ...(state.options.ladder || {}),
+        sessionMode: 'limited',
+        rotationLimit: value,
+      };
+      event.target.value = value;
+      updateLadderSettingsVisibility();
       persistState();
     });
   }
@@ -1001,6 +1405,9 @@ function bindNavigation() {
     buildTeamFields(state.participants);
     renderResults(generateSchedule(teams, state.options), { resetScores: true });
   });
+  if (elements.teamRankingImport) {
+    elements.teamRankingImport.addEventListener('change', handleTeamRankingImport);
+  }
 
   elements.printBtn.addEventListener('click', () => window.print());
   elements.printTopBtn.addEventListener('click', () => window.print());
@@ -1008,10 +1415,29 @@ function bindNavigation() {
     elements.resultsMoreToggle.addEventListener('click', toggleResultsMorePanel);
   }
   if (elements.startLiveBtn) {
-    elements.startLiveBtn.addEventListener('click', startLiveMode);
+    elements.startLiveBtn.addEventListener('click', () => {
+      if (state.schedule?.format === 'swiss') {
+        openSwissPilotScreen();
+        return;
+      }
+      if (isLadderLiveMode(state.schedule)) {
+        openLadderPilotModal();
+        return;
+      }
+      startLiveMode();
+    });
   }
   if (elements.liveActionsToggle) {
     elements.liveActionsToggle.addEventListener('click', toggleLiveActionsPanel);
+  }
+  if (elements.liveCurrentRotationBtn) {
+    elements.liveCurrentRotationBtn.addEventListener('click', () => {
+      if (isLadderLiveMode(state.schedule)) {
+        openLadderPilotModal();
+        return;
+      }
+      focusCurrentLadderRotation();
+    });
   }
 
   elements.tabButtons.forEach(btn => {
@@ -1045,6 +1471,26 @@ function bindNavigation() {
   if (elements.liveRotationContent) {
     elements.liveRotationContent.addEventListener('input', handleScoreInput);
     elements.liveRotationContent.addEventListener('click', handleLiveClick);
+  }
+  if (elements.liveFieldBoard) {
+    elements.liveFieldBoard.addEventListener('input', handleScoreInput);
+    elements.liveFieldBoard.addEventListener('click', handleLiveClick);
+  }
+  if (elements.liveCurrentRotationCard) {
+    elements.liveCurrentRotationCard.addEventListener('click', handleLiveClick);
+  }
+  if (elements.ladderPilotBody) {
+    elements.ladderPilotBody.addEventListener('input', handleScoreInput);
+    elements.ladderPilotBody.addEventListener('click', handleLiveClick);
+  }
+  if (elements.rotationView) {
+    elements.rotationView.addEventListener('click', handleRotationViewClick);
+  }
+  if (elements.swissPilotBody) {
+    elements.swissPilotBody.addEventListener('click', handleRotationViewClick);
+  }
+  if (elements.liveRestNotice) {
+    elements.liveRestNotice.addEventListener('click', handleLiveClick);
   }
   if (elements.liveBackBtn) {
     elements.liveBackBtn.addEventListener('click', () => {
@@ -1155,6 +1601,42 @@ function bindNavigation() {
       }
     });
   }
+  if (elements.ladderPilotCloseBtn) {
+    elements.ladderPilotCloseBtn.addEventListener('click', closeLadderPilotModal);
+  }
+  if (elements.ladderPilotBackBtn) {
+    elements.ladderPilotBackBtn.addEventListener('click', closeLadderPilotModal);
+  }
+  if (elements.ladderPilotRankingBtn) {
+    elements.ladderPilotRankingBtn.addEventListener('click', () => {
+      closeLadderPilotModal();
+      openRankingModal();
+    });
+  }
+  if (elements.ladderPilotNextBtn) {
+    elements.ladderPilotNextBtn.addEventListener('click', () => {
+      const progressed = advanceLiveRotation();
+      if (
+        progressed &&
+        isLadderLiveMode(state.schedule) &&
+        !(elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden'))
+      ) {
+        openLadderPilotModal();
+      }
+    });
+  }
+  if (elements.ladderPilotFinishBtn) {
+    elements.ladderPilotFinishBtn.addEventListener('click', handleLiveFinish);
+  }
+  if (elements.swissPilotCloseBtn) {
+    elements.swissPilotCloseBtn.addEventListener('click', closeSwissPilotScreen);
+  }
+  if (elements.swissPilotBackBtn) {
+    elements.swissPilotBackBtn.addEventListener('click', closeSwissPilotScreen);
+  }
+  if (elements.swissPilotExportBtn) {
+    elements.swissPilotExportBtn.addEventListener('click', exportSwissRankingCsv);
+  }
   if (elements.statusBtn) {
     elements.statusBtn.addEventListener('click', openStatusModal);
   }
@@ -1166,6 +1648,18 @@ function bindNavigation() {
       if (event.target === elements.statusModal) {
         closeStatusModal();
       }
+    });
+  }
+  if (elements.challengeForm) {
+    elements.challengeForm.addEventListener('submit', handleChallengeFormSubmit);
+  }
+  if (elements.challengeModal) {
+    elements.challengeModal.addEventListener('click', event => {
+      if (event.target === elements.challengeModal) {
+        closeChallengeDialog();
+        return;
+      }
+      handleChallengeDialogAction(event);
     });
   }
   if (elements.statusList) {
@@ -1212,6 +1706,13 @@ function bindNavigation() {
       const btn = event.target.closest('[data-results-mode-target]');
       if (!btn) return;
       setResultsMode(btn.dataset.resultsModeTarget);
+      if (btn.dataset.resultsModeTarget === 'pilot' && state.schedule?.format === 'swiss') {
+        openSwissPilotScreen();
+        return;
+      }
+      if (btn.dataset.resultsModeTarget === 'pilot' && isLadderLiveMode(state.schedule)) {
+        openLadderPilotModal();
+      }
     });
   }
   if (elements.recommendBtn) {
@@ -1264,6 +1765,14 @@ function bindNavigation() {
       closeChallengeDialog();
       handled = true;
     }
+    if (state.currentScreen === 'ladder-pilot') {
+      closeLadderPilotModal();
+      handled = true;
+    }
+    if (state.currentScreen === 'swiss-pilot') {
+      closeSwissPilotScreen();
+      handled = true;
+    }
     if (closeOverflowPanels()) {
       handled = true;
     }
@@ -1288,6 +1797,7 @@ function handleResume() {
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  renderChallengeClassManager();
   updateTheme(state.universeId);
   renderModeCards();
   updateModeScreenCopy();
@@ -1301,6 +1811,17 @@ function handleResume() {
   elements.regenerateBtn.disabled = !state.schedule;
   setChronoPanelEnabled(Boolean(state.schedule && state.options.timer));
   renderChronoScreen();
+  updateLadderModeUiState();
+}
+
+function updateLadderModeUiState(screen = state.currentScreen) {
+  const isLadderMode = state.activeModeId === 'raquettes-montee-descente';
+  document.body.classList.toggle('ladder-mode', isLadderMode);
+  if (screen) {
+    document.body.dataset.screen = screen;
+  } else {
+    delete document.body.dataset.screen;
+  }
 }
 
 function goTo(screen, options = {}) {
@@ -1318,10 +1839,17 @@ function goTo(screen, options = {}) {
     state.lastScreen = screen;
     persistState();
   }
+  updateLadderModeUiState(screen);
   updateStepper(screen);
   togglePrintButton(screen === 'results');
   if (screen === 'chrono') {
     renderChronoScreen();
+  }
+  if (screen === 'ladder-pilot') {
+    renderLadderPilotModal();
+  }
+  if (screen === 'swiss-pilot') {
+    renderSwissPilotScreen();
   }
 }
 
@@ -1415,6 +1943,587 @@ function updateLadderSettingsVisibility() {
   if (!elements.ladderSettings) return;
   const isLadder = state.tournamentType === 'ladder';
   elements.ladderSettings.classList.toggle('hidden', !isLadder);
+  if (elements.ladderModeSwitch) {
+    elements.ladderModeSwitch.classList.toggle('hidden', !isLadder);
+  }
+  if (elements.availableDurationField) {
+    elements.availableDurationField.classList.toggle('hidden', isLadder);
+  }
+  if (elements.endTimeField) {
+    elements.endTimeField.classList.toggle('hidden', isLadder);
+  }
+  if (elements.schedulingModeField) {
+    elements.schedulingModeField.classList.toggle('hidden', isLadder);
+  }
+  if (!isLadder) {
+    if (elements.generateBtn) {
+      elements.generateBtn.textContent = 'Générer le planning';
+    }
+    return;
+  }
+  normalizeLadderOptions(state.options.ladder?.mode);
+  const ladderMode = getLadderMode();
+  const summary = computeLadderSetupSummary(state.participants, state.options.fields, state.options);
+  const courtUsage = resolveLadderCourtUsage(state.participants, state.options.fields, getLadderCourtMode());
+  state.options.ladder = {
+    ...(state.options.ladder || {}),
+    refereeCourts: summary.refereeCourts,
+    freeCourts: summary.freeCourts,
+  };
+  if (elements.ladderRefereeField) {
+    elements.ladderRefereeField.classList.toggle('hidden', ladderMode === 'free');
+  }
+  if (elements.ladderFreeField) {
+    elements.ladderFreeField.classList.add('hidden');
+  }
+  if (elements.ladderRefereePlacementField) {
+    elements.ladderRefereePlacementField.classList.toggle('hidden', ladderMode === 'free');
+  }
+  if (elements.ladderRefereePlacement) {
+    elements.ladderRefereePlacement.value = normalizeLadderRefereePlacement(state.options.ladder?.refereePlacement);
+  }
+  if (elements.ladderManualPlacementField) {
+    const showManual = ladderMode !== 'free' && normalizeLadderRefereePlacement(state.options.ladder?.refereePlacement) === 'manual';
+    elements.ladderManualPlacementField.classList.toggle('hidden', !showManual);
+    if (showManual) {
+      renderLadderManualPlacementGrid();
+    }
+  }
+  if (elements.ladderModeButtons && elements.ladderModeButtons.forEach) {
+    elements.ladderModeButtons.forEach(button => {
+      const active = button.dataset.ladderMode === ladderMode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  if (elements.ladderModeHelp) {
+    const helpCopy = {
+      free: 'Mode rapide : tous les terrains tournent en autonomie, idéal quand vous pilotez la séance seul.',
+      arbiter: 'Mode encadré : l’app met en avant les terrains arbitrés et les transitions d’arbitrage.',
+      mixed: 'Mode hybride : vous combinez terrains arbitrés et terrains autonomes dans la même séance.',
+    };
+    elements.ladderModeHelp.textContent = helpCopy[ladderMode] || helpCopy.free;
+  }
+  const sessionMode = getLadderSessionMode();
+  const rotationLimit = getLadderRotationLimit(state.options, state.participants, state.options.fields);
+  if (elements.ladderSessionModeButtons && elements.ladderSessionModeButtons.forEach) {
+    elements.ladderSessionModeButtons.forEach(button => {
+      const active = button.dataset.ladderSessionMode === sessionMode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  if (elements.ladderSessionModeHelp) {
+    elements.ladderSessionModeHelp.textContent =
+      sessionMode === 'limited'
+        ? `La séance s’arrêtera automatiquement après ${rotationLimit} rotation${rotationLimit > 1 ? 's' : ''}.`
+        : 'La séance reste ouverte : vous continuez les rotations tant que vous voulez, puis vous terminez manuellement.';
+  }
+  if (elements.ladderRotationLimitField) {
+    elements.ladderRotationLimitField.classList.toggle('hidden', sessionMode !== 'limited');
+  }
+  if (elements.ladderRotationLimit) {
+    elements.ladderRotationLimit.value = rotationLimit ?? getDefaultLimitedLadderRotationCount(state.participants, state.options.fields);
+  }
+  if (elements.ladderCourtModeButtons && elements.ladderCourtModeButtons.forEach) {
+    elements.ladderCourtModeButtons.forEach(button => {
+      const active = button.dataset.ladderCourtMode === courtUsage.courtMode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  if (elements.ladderCourtModeHelp) {
+    elements.ladderCourtModeHelp.textContent =
+      courtUsage.courtMode === 'max'
+        ? `L’app utilisera jusqu’à ${courtUsage.activeCourts} terrain${courtUsage.activeCourts > 1 ? 's' : ''} sur un maximum réel de ${courtUsage.maxCourts}.`
+        : `Mode optimisé : ${courtUsage.activeCourts} terrain${courtUsage.activeCourts > 1 ? 's' : ''} utilisés, avec des joueurs conservés en attente. Maximum réel : ${courtUsage.maxCourts}.`;
+  }
+  if (elements.ladderSummaryCard) {
+    const summaryLines = [
+      `<strong>${state.participants}</strong> élèves`,
+      `<strong>${summary.activeCourts}</strong> terrain${summary.activeCourts > 1 ? 's' : ''} actif${summary.activeCourts > 1 ? 's' : ''}`,
+      `<strong>${summary.refereeCourts}</strong> terrain${summary.refereeCourts > 1 ? 's' : ''} avec arbitre`,
+      `<strong>${summary.freeCourts}</strong> terrain${summary.freeCourts > 1 ? 's' : ''} sans arbitre`,
+      `<strong>${summary.waitingPlayers}</strong> élève${summary.waitingPlayers > 1 ? 's' : ''} en attente`,
+      `<strong>${summary.refereePlayers}</strong> arbitre${summary.refereePlayers > 1 ? 's' : ''} mobilisé${summary.refereePlayers > 1 ? 's' : ''}`,
+      `<strong>${state.options.duration}</strong> min par match`,
+    ];
+    const tips = summary.tips.slice(0, 2).map(line => `<p class="ladder-summary-tip">${line}</p>`).join('');
+    elements.ladderSummaryCard.innerHTML = `
+      <div class="ladder-summary-top">
+        <span class="ladder-summary-pill">${formatLadderModeLabel(ladderMode)}</span>
+        <span class="ladder-summary-pill">${sessionMode === 'limited' ? `${rotationLimit} rotations` : 'Session libre'}</span>
+        <span class="ladder-summary-pill">${formatLadderCourtModeLabel(courtUsage.courtMode)}</span>
+        <span>${state.options.startTime || '09:00'}</span>
+      </div>
+      <div class="ladder-summary-grid">
+        ${summaryLines.map(line => `<p>${line}</p>`).join('')}
+      </div>
+      ${tips}
+      <p class="ladder-summary-cta">Lancer la montée-descente</p>
+    `;
+  }
+  if (elements.generateBtn) {
+    elements.generateBtn.textContent = 'Lancer la montée-descente';
+  }
+}
+
+function inferLadderMode(fields, refereeCourts, freeCourts) {
+  if (refereeCourts > 0 && freeCourts > 0) return 'mixed';
+  if (refereeCourts > 0) return 'arbiter';
+  return 'free';
+}
+
+function normalizeLadderRefereePlacement(value) {
+  const allowed = ['top', 'spread', 'bottom', 'manual'];
+  return allowed.includes(value) ? value : 'top';
+}
+
+function normalizeManualRefereeFields(list, maxField = state.options?.fields || 16) {
+  if (!Array.isArray(list)) return [];
+  const limit = Math.max(1, Number(maxField) || 1);
+  return Array.from(
+    new Set(
+      list
+        .map(value => Number(value))
+        .filter(value => Number.isInteger(value) && value >= 1 && value <= limit)
+    )
+  ).sort((a, b) => a - b);
+}
+
+function formatLadderModeLabel(mode) {
+  const labels = {
+    free: 'Sans arbitre',
+    arbiter: 'Avec arbitres',
+    mixed: 'Mixte',
+  };
+  return labels[mode] || labels.free;
+}
+
+function getLadderCourtMode() {
+  const courtMode = state.options.ladder?.courtMode;
+  return courtMode === 'max' ? 'max' : 'optimized';
+}
+
+function formatLadderCourtModeLabel(mode) {
+  return mode === 'max' ? 'Maximum de terrains' : 'Optimisé';
+}
+
+function getDefaultLimitedLadderRotationCount(
+  playerCount = state.participants,
+  configuredCourts = state.options.fields,
+  courtMode = state.options?.ladder?.courtMode
+) {
+  const safePlayers = Math.max(2, Number(playerCount) || 2);
+  const usage = resolveLadderCourtUsage(safePlayers, configuredCourts, courtMode);
+  return Math.max(3, Math.ceil((safePlayers - 1) / Math.max(1, usage.activeCourts)) + 1);
+}
+
+function getLadderSessionMode(source = state.options) {
+  return source?.ladder?.sessionMode === 'limited' ? 'limited' : 'open';
+}
+
+function getLadderRotationLimit(source = state.options, playerCount = state.participants, configuredCourts = state.options.fields) {
+  if (getLadderSessionMode(source) !== 'limited') return null;
+  const fallback = getDefaultLimitedLadderRotationCount(playerCount, configuredCourts, source?.ladder?.courtMode);
+  return clampNumber(Number(source?.ladder?.rotationLimit) || fallback, 1, 999, fallback);
+}
+
+function isLadderOpenSession(schedule = state.schedule) {
+  return (schedule?.meta?.sessionMode || getLadderSessionMode()) !== 'limited';
+}
+
+function isLadderSessionEnded(schedule = state.schedule) {
+  return Boolean(schedule?.meta?.sessionEnded);
+}
+
+function getLadderRotationTotal(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'ladder') return schedule?.meta?.rotationCount || schedule?.rotations?.length || null;
+  if (isLadderOpenSession(schedule)) return null;
+  return schedule.meta?.rotationLimit || schedule.meta?.rotationCount || schedule.rotations.length;
+}
+
+function formatLadderRotationLabel(rotation, schedule = state.schedule) {
+  if (!rotation) return 'Rotation';
+  const base = rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotation.number}` : `Rotation ${rotation.number}`;
+  const total = getLadderRotationTotal(schedule);
+  return total ? `${base} / ${total}` : base;
+}
+
+function formatLadderSessionLabel(schedule = state.schedule) {
+  return isLadderOpenSession(schedule) ? 'Session libre' : 'Session limitée';
+}
+
+function calculateLadderMaxCourts(playerCount) {
+  return Math.floor(playerCount / 2);
+}
+
+function calculateOptimizedLadderCourts(playerCount, configuredCourts) {
+  const maxCourts = calculateLadderMaxCourts(playerCount);
+  const safeConfigured = clampNumber(Number(configuredCourts) || 1, 1, 16, 1);
+  if (playerCount <= 8) {
+    return Math.min(safeConfigured, maxCourts);
+  }
+  let reservePlayers = playerCount >= 12 ? Math.floor(playerCount * 0.25) : 2;
+  if (reservePlayers % 2 !== 0) reservePlayers += 1;
+  reservePlayers = Math.min(Math.max(reservePlayers, 2), Math.max(0, playerCount - 2));
+  const activePlayers = Math.max(2, playerCount - reservePlayers);
+  const optimizedCourts = Math.max(1, Math.floor(activePlayers / 2));
+  return Math.min(safeConfigured, maxCourts, optimizedCourts);
+}
+
+function resolveLadderCourtUsage(playerCount, configuredCourts, courtMode = getLadderCourtMode()) {
+  const safePlayers = Math.max(0, Number(playerCount) || 0);
+  const safeConfigured = clampNumber(Number(configuredCourts) || 1, 1, 16, 1);
+  const maxCourts = Math.max(1, calculateLadderMaxCourts(safePlayers));
+  const activeCourts =
+    courtMode === 'max'
+      ? Math.min(safeConfigured, maxCourts)
+      : calculateOptimizedLadderCourts(safePlayers, safeConfigured);
+  return {
+    courtMode,
+    configuredCourts: safeConfigured,
+    maxCourts,
+    activeCourts,
+  };
+}
+
+function resolveLadderCourtDistribution(activeCourts, ladderOptions = {}) {
+  const totalCourts = Math.max(1, Number(activeCourts) || 1);
+  const mode = ladderOptions.mode || 'free';
+  if (mode === 'free') {
+    return { refereeCourts: 0, freeCourts: totalCourts };
+  }
+  if (mode === 'arbiter') {
+    return { refereeCourts: totalCourts, freeCourts: 0 };
+  }
+  const requestedReferee = Math.min(Math.max(Number(ladderOptions.refereeCourts) || 0, 0), totalCourts);
+  const refereeCourts = requestedReferee > 0 ? requestedReferee : Math.max(1, Math.floor(totalCourts / 2));
+  return {
+    refereeCourts,
+    freeCourts: Math.max(totalCourts - refereeCourts, 0),
+  };
+}
+
+function getLadderMode() {
+  const ladder = state.options.ladder || {};
+  return ladder.mode || inferLadderMode(state.options.fields, ladder.refereeCourts || 0, ladder.freeCourts || 0);
+}
+
+function normalizeLadderOptions(requestedMode = getLadderMode()) {
+  const fields = clampNumber(Number(state.options.fields) || 1, 1, 16, 1);
+  const ladder = state.options.ladder || {
+    mode: 'free',
+    sessionMode: 'open',
+    rotationLimit: null,
+    courtMode: 'optimized',
+    refereePlacement: 'top',
+    manualRefereeFields: [],
+    refereeCourts: 0,
+    freeCourts: fields,
+  };
+  let mode = ['free', 'arbiter', 'mixed'].includes(requestedMode) ? requestedMode : inferLadderMode(fields, ladder.refereeCourts, ladder.freeCourts);
+  let refereeCourts = clampNumber(Number(ladder.refereeCourts) || 0, 0, fields, 0);
+  let freeCourts = clampNumber(Number(ladder.freeCourts) || 0, 0, fields, 0);
+  const sessionMode = ladder.sessionMode === 'limited' ? 'limited' : 'open';
+  const rotationLimit = sessionMode === 'limited' ? getLadderRotationLimit({ ladder }, state.participants, fields) : null;
+  const refereePlacement = normalizeLadderRefereePlacement(ladder.refereePlacement);
+  const manualRefereeFields = normalizeManualRefereeFields(ladder.manualRefereeFields, fields);
+  if (mode === 'free') {
+    refereeCourts = 0;
+    freeCourts = fields;
+  } else if (mode === 'arbiter') {
+    refereeCourts = Math.max(refereeCourts || fields, 1);
+    refereeCourts = clampNumber(refereeCourts, 1, fields, fields);
+    freeCourts = Math.max(fields - refereeCourts, 0);
+    if (freeCourts > 0) {
+      mode = 'mixed';
+    }
+  } else {
+    if (fields <= 1) {
+      mode = 'arbiter';
+      refereeCourts = 1;
+      freeCourts = 0;
+    } else {
+      if (refereeCourts <= 0 || refereeCourts >= fields) {
+        refereeCourts = Math.max(1, Math.floor(fields / 2));
+      }
+      freeCourts = fields - refereeCourts;
+    }
+  }
+  state.options.ladder = {
+    ...ladder,
+    mode,
+    sessionMode,
+    rotationLimit,
+    refereePlacement,
+    manualRefereeFields,
+    refereeCourts,
+    freeCourts,
+    courtMode: getLadderCourtMode(),
+  };
+}
+
+function setLadderMode(mode) {
+  normalizeLadderOptions(mode);
+  if (elements.ladderRefereeCourts) {
+    elements.ladderRefereeCourts.value = state.options.ladder.refereeCourts;
+  }
+  if (elements.ladderFreeCourts) {
+    elements.ladderFreeCourts.value = state.options.ladder.freeCourts;
+  }
+  updateLadderSettingsVisibility();
+  persistState();
+}
+
+function setLadderCourtMode(mode) {
+  state.options.ladder = {
+    ...(state.options.ladder || {}),
+    courtMode: mode === 'max' ? 'max' : 'optimized',
+  };
+  updateLadderSettingsVisibility();
+  persistState();
+}
+
+function selectSpreadFieldNumbers(totalCourts, count) {
+  if (count <= 0 || totalCourts <= 0) return [];
+  if (count === 1) return [1];
+  const values = [];
+  for (let index = 0; index < count; index += 1) {
+    const field = Math.round((index * (totalCourts - 1)) / Math.max(count - 1, 1)) + 1;
+    values.push(field);
+  }
+  return Array.from(new Set(values)).sort((a, b) => a - b);
+}
+
+function getRequestedLadderRefereeCount(totalCourts, ladderOptions = {}, mode = ladderOptions.mode || getLadderMode()) {
+  if (mode === 'free' || totalCourts <= 0) return 0;
+  if (ladderOptions.refereePlacement === 'manual') {
+    return normalizeManualRefereeFields(ladderOptions.manualRefereeFields, totalCourts).length;
+  }
+  if (mode === 'arbiter') return totalCourts;
+  const requested = clampNumber(Number(ladderOptions.refereeCourts) || 0, 0, totalCourts, 0);
+  return requested > 0 ? requested : Math.max(1, Math.floor(totalCourts / 2));
+}
+
+function selectLadderRefereeFields(totalCourts, ladderOptions = {}, mode = ladderOptions.mode || getLadderMode(), forcedCount = null) {
+  if (mode === 'free' || totalCourts <= 0) return [];
+  const count = forcedCount == null ? getRequestedLadderRefereeCount(totalCourts, ladderOptions, mode) : Math.max(0, Math.min(totalCourts, forcedCount));
+  const placement = normalizeLadderRefereePlacement(ladderOptions.refereePlacement);
+  if (placement === 'manual') {
+    return normalizeManualRefereeFields(ladderOptions.manualRefereeFields, totalCourts).slice(0, count || undefined);
+  }
+  if (placement === 'bottom') {
+    return Array.from({ length: count }, (_, index) => totalCourts - count + index + 1);
+  }
+  if (placement === 'spread') {
+    const spread = selectSpreadFieldNumbers(totalCourts, count);
+    if (spread.length === count) return spread;
+  }
+  return Array.from({ length: count }, (_, index) => index + 1);
+}
+
+function computeLadderSetupSummary(playerCount = state.participants, configuredCourts = state.options.fields, optionSource = state.options) {
+  const safePlayers = Math.max(0, Number(playerCount) || 0);
+  const safeConfiguredCourts = clampNumber(Number(configuredCourts) || 1, 1, 16, 1);
+  const ladderOptions = optionSource?.ladder || {};
+  const mode = ['free', 'arbiter', 'mixed'].includes(ladderOptions.mode) ? ladderOptions.mode : getLadderMode();
+  const courtUsage = resolveLadderCourtUsage(safePlayers, safeConfiguredCourts, ladderOptions.courtMode);
+  let activeCourts = courtUsage.activeCourts;
+  const requestedReferees = getRequestedLadderRefereeCount(activeCourts, ladderOptions, mode);
+  while (activeCourts > 0 && 2 * activeCourts + Math.min(requestedReferees, activeCourts) > safePlayers) {
+    activeCourts -= 1;
+  }
+  const refereeCourts = Math.min(
+    selectLadderRefereeFields(activeCourts, ladderOptions, mode, requestedReferees).length,
+    Math.max(safePlayers - activeCourts * 2, 0),
+    activeCourts
+  );
+  const refereeFields = selectLadderRefereeFields(activeCourts, ladderOptions, mode, refereeCourts);
+  const playingPlayers = activeCourts * 2;
+  const refereePlayers = refereeCourts;
+  const waitingPlayers = Math.max(safePlayers - playingPlayers - refereePlayers, 0);
+  const simpleCourts = Math.min(safeConfiguredCourts, Math.floor(safePlayers / 2));
+  const extraPlayers = Math.max(safePlayers - simpleCourts * 2, 0);
+  const tips = [];
+  if (safeConfiguredCourts > simpleCourts) {
+    tips.push(
+      `${safePlayers} élèves pour ${safeConfiguredCourts} terrains : ${simpleCourts} match${simpleCourts > 1 ? 's' : ''} simultané${simpleCourts > 1 ? 's' : ''} possible${simpleCourts > 1 ? 's' : ''}.`
+    );
+  }
+  if (extraPlayers > 0) {
+    const possibleRefCourts = Math.min(extraPlayers, safeConfiguredCourts);
+    tips.push(
+      `${extraPlayers} élève${extraPlayers > 1 ? 's' : ''} disponible${extraPlayers > 1 ? 's' : ''} : vous pouvez créer ${possibleRefCourts} terrain${possibleRefCourts > 1 ? 's' : ''} avec arbitre.`
+    );
+  }
+  if (waitingPlayers > 0) {
+    tips.push(`${waitingPlayers} élève${waitingPlayers > 1 ? 's' : ''} en attente.`);
+  } else if (refereePlayers > 0) {
+    tips.push(`${refereePlayers} terrain${refereePlayers > 1 ? 's' : ''} avec arbitre intégré${refereePlayers > 1 ? 's' : ''}.`);
+  } else {
+    tips.push('Configuration équilibrée.');
+  }
+  if (2 * activeCourts + requestedReferees > safePlayers) {
+    tips.push("Pas assez d'élèves pour utiliser tous les terrains demandés avec arbitre : l'app réduit automatiquement les terrains actifs.");
+  }
+  return {
+    mode,
+    activeCourts,
+    configuredCourts: safeConfiguredCourts,
+    maxCourts: courtUsage.maxCourts,
+    courtMode: courtUsage.courtMode,
+    refereeCourts,
+    freeCourts: Math.max(activeCourts - refereeCourts, 0),
+    refereeFields,
+    playingPlayers,
+    refereePlayers,
+    waitingPlayers,
+    simpleCourts,
+    extraPlayers,
+    tips,
+  };
+}
+
+function renderLadderManualPlacementGrid() {
+  if (!elements.ladderManualPlacementGrid) return;
+  const totalCourts = clampNumber(Number(state.options.fields) || 1, 1, 16, 1);
+  const selected = new Set(normalizeManualRefereeFields(state.options.ladder?.manualRefereeFields, totalCourts));
+  elements.ladderManualPlacementGrid.innerHTML = Array.from({ length: totalCourts }, (_, index) => {
+    const field = index + 1;
+    return `
+      <label class="ladder-manual-option">
+        <input type="checkbox" data-ladder-manual-field="${field}" ${selected.has(field) ? 'checked' : ''} />
+        <span>Terrain ${field}</span>
+      </label>
+    `;
+  }).join('');
+}
+
+function setLadderRefereePlacement(value) {
+  state.options.ladder = {
+    ...(state.options.ladder || {}),
+    refereePlacement: normalizeLadderRefereePlacement(value),
+  };
+  updateLadderSettingsVisibility();
+  persistState();
+}
+
+function toggleManualLadderRefereeField(fieldNumber, enabled) {
+  const totalCourts = clampNumber(Number(state.options.fields) || 1, 1, 16, 1);
+  const current = new Set(normalizeManualRefereeFields(state.options.ladder?.manualRefereeFields, totalCourts));
+  if (enabled) {
+    current.add(fieldNumber);
+  } else {
+    current.delete(fieldNumber);
+  }
+  state.options.ladder = {
+    ...(state.options.ladder || {}),
+    refereePlacement: 'manual',
+    manualRefereeFields: Array.from(current).sort((a, b) => a - b),
+    refereeCourts: current.size,
+  };
+  updateLadderSettingsVisibility();
+  persistState();
+}
+
+function parseDelimitedRankingRows(raw) {
+  return raw
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.split(/[;,]/).map(part => part.trim()));
+}
+
+function extractImportedRankingNames(raw) {
+  const rows = parseDelimitedRankingRows(raw);
+  if (!rows.length) return [];
+  const firstRow = rows[0];
+  const normalizedHeader = firstRow.map(value => value.toLowerCase());
+  const nameColumn = normalizedHeader.findIndex(value => value === 'nom' || value === 'name');
+  const hasHeader = nameColumn !== -1 || normalizedHeader.includes('rang') || normalizedHeader.includes('rank');
+  const sourceRows = hasHeader ? rows.slice(1) : rows;
+  const candidates = sourceRows
+    .map(columns => {
+      if (columns.length === 1) return columns[0];
+      if (nameColumn !== -1) return columns[nameColumn];
+      const nonNumeric = columns.find(value => value && !/^\d+$/.test(value));
+      return nonNumeric || columns[0];
+    })
+    .map(value => value?.replace(/^"|"$/g, '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(candidates));
+}
+
+function applyImportedLadderNames(names) {
+  if (!Array.isArray(names) || names.length < 2) {
+    alert('Import impossible : au moins deux noms ordonnés sont nécessaires.');
+    return;
+  }
+  applyModeDefinition('raquettes-montee-descente', { skipNavigation: true });
+  state.participants = clampNumber(names.length, 2, 32, names.length);
+  state.teamNames = ensureTeamListLength(names, state.participants, 'raquette');
+  state.entityStatuses = ensureEntityStatusLength([], state.participants);
+  renderParticipants();
+  buildTeamFields(state.participants);
+  syncOptionInputs();
+  persistState();
+  const schedule = generateSchedule(getFinalTeamNames(), state.options);
+  renderResults(schedule, { resetScores: true });
+  if (isLadderLiveMode(schedule)) {
+    openLadderPilotModal();
+  } else {
+    goTo('results');
+  }
+}
+
+function applyImportedSwissNames(names) {
+  if (!Array.isArray(names) || names.length < 2) {
+    alert('Import impossible : au moins deux noms ordonnés sont nécessaires.');
+    return;
+  }
+  applyModeDefinition('raquettes-ronde-suisse', { skipNavigation: true });
+  state.participants = clampNumber(names.length, 2, 32, names.length);
+  state.teamNames = ensureTeamListLength(names, state.participants, 'raquette');
+  state.entityStatuses = ensureEntityStatusLength([], state.participants);
+  renderParticipants();
+  buildTeamFields(state.participants);
+  syncOptionInputs();
+  persistState();
+  const schedule = generateSchedule(getFinalTeamNames(), state.options);
+  renderResults(schedule, { resetScores: true });
+  goTo('results');
+}
+
+async function handleTeamRankingImport(event) {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const names = extractImportedRankingNames(raw);
+    if (state.activeModeId === 'raquettes-ronde-suisse') {
+      applyImportedSwissNames(names);
+    } else {
+      applyImportedLadderNames(names);
+    }
+  } catch (error) {
+    console.error('Import ladder impossible', error);
+    alert("Impossible d'importer ce fichier.");
+  } finally {
+    event.target.value = '';
+  }
+}
+
+function setLadderSessionMode(mode) {
+  const sessionMode = mode === 'limited' ? 'limited' : 'open';
+  const defaultLimit = getDefaultLimitedLadderRotationCount(state.participants, state.options.fields);
+  state.options.ladder = {
+    ...(state.options.ladder || {}),
+    sessionMode,
+    rotationLimit: sessionMode === 'limited' ? getLadderRotationLimit(state.options, state.participants, state.options.fields) || defaultLimit : null,
+  };
+  updateLadderSettingsVisibility();
+  persistState();
 }
 
 function updateModeBadges() {
@@ -1489,7 +2598,13 @@ function updateResultsModeNote() {
   if (uiState.resultsMode === 'read') {
     elements.resultsModeNote.textContent = 'Passez en mode « Pilotage » pour ajuster les rotations ou accéder aux actions avancées.';
   } else {
-    elements.resultsModeNote.textContent = 'Mode Pilotage : toutes les actions de préparation et de saisie sont visibles ci-dessous.';
+    if (state.schedule?.format === 'swiss') {
+      elements.resultsModeNote.textContent = 'Mode Pilotage : ouvre la page dédiée de saisie de la ronde suisse en cours.';
+      return;
+    }
+    elements.resultsModeNote.textContent = isLadderLiveMode(state.schedule)
+      ? 'Mode Pilotage : ouvre la console de saisie dédiée de la rotation en cours.'
+      : 'Mode Pilotage : toutes les actions de préparation et de saisie sont visibles ci-dessous.';
   }
 }
 
@@ -1535,6 +2650,7 @@ function applyModeDefinition(modeId, options = {}) {
   updateModeScreenCopy();
   updateModeBadges();
   updateLadderSettingsVisibility();
+  updateLadderModeUiState();
   if (previousPractice !== state.practiceType) {
     state.teamNames = ensureTeamListLength(state.teamNames, state.participants, state.practiceType);
     state.entityStatuses = ensureEntityStatusLength(state.entityStatuses, state.participants);
@@ -1567,6 +2683,7 @@ function updateParticipants(value) {
   state.teamNames = ensureTeamListLength(state.teamNames, next, state.practiceType);
   renderParticipants();
   buildTeamFields(next);
+  updateLadderSettingsVisibility();
   persistState();
 }
 
@@ -1584,6 +2701,8 @@ function buildTeamFields(count) {
     input.inputMode = 'text';
     input.autocomplete = 'off';
     input.spellcheck = false;
+    input.id = `teamName-${index + 1}`;
+    input.name = `teamName-${index + 1}`;
     input.placeholder = `${participantLabel} ${index + 1}`;
     input.value = name;
     input.dataset.index = index;
@@ -1596,6 +2715,14 @@ function buildTeamFields(count) {
 function syncOptionInputs() {
   elements.fieldCount.value = state.options.fields;
   elements.matchDuration.value = state.options.duration;
+  const challengeClassNameInput = document.getElementById('challengeClassName');
+  if (challengeClassNameInput) {
+    challengeClassNameInput.value = state.options.challengeClassName || '';
+  }
+  const challengeRangeInput = document.getElementById('challengeRange');
+  if (challengeRangeInput) {
+    challengeRangeInput.value = state.options.challengeRange ?? 5;
+  }
   elements.startTime.value = state.options.startTime;
   elements.rotationBuffer.value = state.options.turnaround;
   elements.breakDuration.value = state.options.breakMinutes;
@@ -1628,6 +2755,14 @@ function syncOptionInputs() {
   if (elements.ladderFreeCourts) {
     elements.ladderFreeCourts.value = state.options.ladder?.freeCourts ?? 0;
   }
+  if (elements.ladderRotationLimit) {
+    elements.ladderRotationLimit.value = getLadderRotationLimit(state.options, state.participants, state.options.fields) ?? getDefaultLimitedLadderRotationCount(state.participants, state.options.fields);
+  }
+  if (elements.ladderRefereePlacement) {
+    elements.ladderRefereePlacement.value = normalizeLadderRefereePlacement(state.options.ladder?.refereePlacement);
+  }
+  renderLadderManualPlacementGrid();
+  updateLadderSettingsVisibility();
   if (elements.modeParticipantsInput) {
     elements.modeParticipantsInput.value = state.participants;
   }
@@ -1635,7 +2770,6 @@ function syncOptionInputs() {
   updateTeamScreenCopy();
   updateCountScreenCopy();
   updateRoleControlsState();
-  updateLadderSettingsVisibility();
   updateModeContextPanel();
 }
 
@@ -1669,25 +2803,40 @@ function applyBulkTeamNames() {
 }
 
 function handleGenerate() {
-  const teams = getFinalTeamNames();
-  if (teams.length < 2) {
-    alert(`Ajoutez au moins deux ${formatParticipantLabel({ plural: true })}.`);
-    return;
+  try {
+    const teams = getFinalTeamNames();
+    if (teams.length < 2) {
+      alert(`Ajoutez au moins deux ${formatParticipantLabel({ plural: true })}.`);
+      return;
+    }
+    state.teamNames = teams;
+    buildTeamFields(state.participants);
+    const schedule = generateSchedule(teams, state.options);
+    renderResults(schedule, { resetScores: true });
+    if (isLadderLiveMode(schedule)) {
+      openLadderPilotModal();
+      return;
+    }
+    goTo('results');
+  } catch (error) {
+    console.error('Erreur lors du lancement du tournoi', error);
+    alert('Impossible de lancer le tournoi. Ouvrez la console pour voir l’erreur.');
   }
-  state.teamNames = teams;
-  buildTeamFields(state.participants);
-  const schedule = generateSchedule(teams, state.options);
-  renderResults(schedule, { resetScores: true });
-  goTo('results');
 }
 
 function renderResults(schedule, options = {}) {
   const preserveTimestamp = Boolean(options.preserveTimestamp);
   const resetScores = Boolean(options.resetScores);
   const isChallenge = schedule?.format === 'challenge';
+  const isLadder = isLadderLiveMode(schedule);
+  const isSwiss = schedule?.format === 'swiss';
   if (resetScores) {
     state.scores = {};
     state.validatedMatches = {};
+    if (isLadder) {
+      state.entityStatuses = ensureEntityStatusLength([], state.participants);
+      state.statusLog = [];
+    }
   }
   state.schedule = schedule;
   hydrateScheduleForSpecialModes(state.schedule);
@@ -1722,8 +2871,12 @@ function renderResults(schedule, options = {}) {
   updateMatchInsight(state.schedule);
   updatePrintHeader(schedule.meta);
   toggleChallengeLayout(isChallenge);
+  toggleLadderResultsLayout(isLadder);
   if (isChallenge) {
     renderChallengeBoard(schedule);
+    saveChallengeClassSnapshot();
+  } else if (isSwiss) {
+    renderSwissBoard(schedule);
   } else {
     renderRotationView(schedule.rotations);
   }
@@ -1733,10 +2886,12 @@ function renderResults(schedule, options = {}) {
   renderRankingView(schedule);
   renderLiveRankingPanel(schedule.rotations[state.liveRotationIndex]?.number || 1);
   const defaultRotation = Number.isInteger(state.liveRotationIndex) ? state.liveRotationIndex + 1 : 1;
-  const highlightTarget =
-    state.schedule && state.schedule.meta
-      ? Math.min(state.schedule.meta.rotationCount, Math.max(1, defaultRotation))
-      : 1;
+  const maxRotation =
+    getLadderRotationTotal(state.schedule) ||
+    (state.schedule && state.schedule.meta && state.schedule.meta.rotationCount) ||
+    state.schedule?.rotations?.length ||
+    1;
+  const highlightTarget = Math.min(maxRotation, Math.max(1, defaultRotation));
   highlightRotation(highlightTarget);
   setActiveView('rotations');
   elements.regenerateBtn.disabled = false;
@@ -1758,11 +2913,41 @@ function renderSummary(meta) {
     capitalized: true,
   });
   const summary = meta.timeSummary;
+  const analysisMetrics = buildPedagogyMetrics(meta, summary, meta.optionsSnapshot || state.options);
+  const openEstimate = analysisMetrics?.kind === 'ladder-open-estimated' ? getOpenLadderSessionEstimate(meta.optionsSnapshot || state.options) : null;
   const primaryCards = [
     { label: participantLabel, value: meta.teamCount },
     { label: fieldLabel, value: meta.fieldCount },
-    { label: 'Durée tournoi', value: summary ? humanizeDuration(summary.totalMinutes) : '-' },
-    { label: 'Fin prévue', value: summary?.estimatedEnd || '-' },
+    {
+      label:
+        analysisMetrics?.kind === 'ladder-open-per-rotation'
+          ? 'Cycle de rotation'
+          : analysisMetrics?.kind === 'ladder-open-estimated'
+            ? 'Séance estimée'
+            : 'Durée tournoi',
+      value:
+        analysisMetrics?.kind === 'ladder-open-estimated'
+          ? openEstimate?.estimatedTotalMinutes != null
+            ? humanizeDuration(openEstimate.estimatedTotalMinutes)
+            : '-'
+          : summary
+            ? humanizeDuration(summary.totalMinutes)
+            : '-',
+    },
+    {
+      label:
+        analysisMetrics?.kind === 'ladder-open-per-rotation'
+          ? 'Statut séance'
+          : analysisMetrics?.kind === 'ladder-open-estimated'
+            ? 'Fin estimée'
+            : 'Fin prévue',
+      value:
+        analysisMetrics?.kind === 'ladder-open-per-rotation'
+          ? 'Libre'
+          : analysisMetrics?.kind === 'ladder-open-estimated'
+            ? openEstimate?.estimatedEnd || '—'
+            : summary?.estimatedEnd || '-',
+    },
   ];
   const detailItems = [
     { label: 'Format', value: meta.formatLabel || TOURNAMENT_MODES[getTournamentType()].label },
@@ -1810,7 +2995,6 @@ function renderSummary(meta) {
       </ul>
     </details>
   `;
-  const analysisMetrics = buildPedagogyMetrics(meta, summary, meta.optionsSnapshot || state.options);
   const analysisCard = `
     <article class="summary-card analysis-card">
       <span>Analyse pédagogique</span>
@@ -1842,7 +3026,11 @@ function updatePrintHeader(meta) {
     capitalized: true,
   });
   if (meta.teamCount) parts.push(`${meta.teamCount} ${practiceLabel}`);
-  if (meta.rotationCount) parts.push(`${meta.rotationCount} rotation${meta.rotationCount > 1 ? 's' : ''}`);
+  if (meta.format === 'ladder' && meta.sessionMode === 'open') {
+    parts.push('session libre');
+  } else if (meta.rotationCount) {
+    parts.push(`${meta.rotationCount} rotation${meta.rotationCount > 1 ? 's' : ''}`);
+  }
   if (meta.fieldCount) {
     const fieldLabel = formatFieldLabel({
       practiceType: getPracticeTypeFromMeta(meta),
@@ -1917,6 +3105,11 @@ function toggleChallengeLayout(enabled) {
   }
 }
 
+function toggleLadderResultsLayout(enabled) {
+  if (!elements.resultsScreen) return;
+  elements.resultsScreen.classList.toggle('results-ladder-simplified', Boolean(enabled));
+}
+
 function updateMatchInsight(schedule) {
   if (!elements.matchInsight) return;
   if (!schedule || !schedule.meta) {
@@ -1943,7 +3136,7 @@ function updateMatchInsight(schedule) {
 function getMatchLoadInfo(schedule) {
   if (!schedule) return null;
   const format = schedule.format || 'round-robin';
-  if (format === 'ladder' || format === 'challenge') {
+  if (format === 'ladder' || format === 'challenge' || format === 'swiss') {
     return null;
   }
   const practiceType = getPracticeTypeFromMeta(schedule.meta);
@@ -2025,10 +3218,20 @@ function renderSimulationResult(payload) {
   const fieldCountValue = Number.isFinite(meta.fieldCount) ? meta.fieldCount : null;
   const matchCount = matchCountValue ?? '-';
   const totalRotations = Number.isFinite(meta.rotationCount) ? meta.rotationCount : null;
-  const rotationCount = totalRotations ?? '-';
-  const durationLabel = summary ? humanizeDuration(summary.totalMinutes) : '-';
+  const rotationCount = meta.format === 'ladder' && meta.sessionMode === 'open' ? 'Libre' : totalRotations ?? '-';
+  const analysisMetrics = buildPedagogyMetrics(meta, summary, state.options);
+  const openEstimate = analysisMetrics?.kind === 'ladder-open-estimated' ? getOpenLadderSessionEstimate(state.options) : null;
+  const durationLabel =
+    analysisMetrics?.kind === 'ladder-open-estimated'
+      ? openEstimate?.estimatedTotalMinutes != null
+        ? humanizeDuration(openEstimate.estimatedTotalMinutes)
+        : '-'
+      : summary
+        ? humanizeDuration(summary.totalMinutes)
+        : '-';
   const durationMinutesLabel = summary ? `${Math.round(summary.totalMinutes)} min` : '-';
-  const endLabel = summary?.estimatedEnd ?? '—';
+  const endLabel =
+    analysisMetrics?.kind === 'ladder-open-estimated' ? openEstimate?.estimatedEnd ?? '—' : summary?.estimatedEnd ?? '—';
   const perTeamNumber =
     Number.isFinite(matchCountValue) && Number.isFinite(teamCountValue) && teamCountValue > 0
       ? Math.round((matchCountValue * 2) / teamCountValue)
@@ -2043,7 +3246,6 @@ function renderSimulationResult(payload) {
   const perFieldSentence = formatMatchesSentence(perFieldNumber);
   const fieldWord = formatFieldLabel({ practiceType });
   const perFieldLine = perFieldSentence ? `<p>Chaque ${fieldWord} accueillera environ ${perFieldSentence}.</p>` : '';
-  const analysisMetrics = buildPedagogyMetrics(meta, summary, state.options);
   const timePerTeamLabel = analysisMetrics ? formatMinutesLabel(analysisMetrics.timePerTeam) : '—';
   let statusMarkup = '<p class="simulation-status">Simulation disponible.</p>';
   let detailMarkup = '';
@@ -2096,12 +3298,24 @@ function renderSimulationResult(payload) {
         <strong>${rotationCount}</strong>
       </div>
       <div class="simulation-metric">
-        <span>Durée du tournoi</span>
+        <span>${
+          analysisMetrics?.kind === 'ladder-open-per-rotation'
+            ? 'Cycle de rotation'
+            : analysisMetrics?.kind === 'ladder-open-estimated'
+              ? 'Séance estimée'
+              : 'Durée du tournoi'
+        }</span>
         <strong>${durationLabel}</strong>
       </div>
       <div class="simulation-metric">
-        <span>Fin prévue</span>
-        <strong>${endLabel}</strong>
+        <span>${
+          analysisMetrics?.kind === 'ladder-open-per-rotation'
+            ? 'Statut séance'
+            : analysisMetrics?.kind === 'ladder-open-estimated'
+              ? 'Fin estimée'
+              : 'Fin prévue'
+        }</span>
+        <strong>${analysisMetrics?.kind === 'ladder-open-per-rotation' ? 'Libre' : endLabel}</strong>
       </div>
       <div class="simulation-metric">
         <span>Matchs par ${singularParticipantTitle}</span>
@@ -2174,6 +3388,10 @@ function handleQuickGenerate(event) {
   }
   const schedule = generateSchedule(teams, state.options);
   renderResults(schedule, { resetScores: true });
+  if (isLadderLiveMode(schedule)) {
+    openLadderPilotModal();
+    return;
+  }
   goTo('results');
 }
 
@@ -2304,6 +3522,127 @@ function syncQuickRoleInputs(settings = getRoleSettings()) {
 
 function buildPedagogyMetrics(meta, summary, options) {
   if (!meta) return null;
+  if (meta.format === 'ladder') {
+    const teamCount = Number(meta.teamCount);
+    const duration = Number(options?.duration);
+    if (!Number.isFinite(teamCount) || teamCount <= 0 || !Number.isFinite(duration) || duration <= 0) {
+      return null;
+    }
+    const sessionMode = meta.sessionMode === 'limited' ? 'limited' : 'open';
+    const totalMatchCount = Number(meta.matchCount);
+    const limitedRotationCount = Number(meta.rotationCount) || Number(meta.rotationLimit) || 0;
+    const rotationsForAverage = sessionMode === 'limited' && limitedRotationCount > 0 ? limitedRotationCount : 1;
+    const matchesPerRotation = Number.isFinite(totalMatchCount) ? totalMatchCount / rotationsForAverage : null;
+    const activePlayersPerRotation =
+      matchesPerRotation != null ? Math.min(teamCount, Math.max(0, matchesPerRotation * 2)) : null;
+    const restingPlayersPerRotation =
+      activePlayersPerRotation != null ? Math.max(teamCount - activePlayersPerRotation, 0) : null;
+    const timePerActivePlayer = duration;
+    const averageTimePerPlayerPerRotation =
+      activePlayersPerRotation != null ? (activePlayersPerRotation / teamCount) * duration : null;
+    const engagementPerRotation =
+      activePlayersPerRotation != null ? (activePlayersPerRotation / teamCount) * 100 : null;
+
+    if (sessionMode === 'open') {
+      const estimate = getOpenLadderSessionEstimate(options);
+      if (estimate.rotationEstimate != null && estimate.rotationEstimate > 0) {
+        const totalActiveSlots = Number.isFinite(activePlayersPerRotation) ? activePlayersPerRotation * estimate.rotationEstimate : null;
+        const matchesPerTeam = totalActiveSlots != null ? totalActiveSlots / teamCount : null;
+        const timePerTeam = matchesPerTeam != null ? matchesPerTeam * duration : null;
+        const totalMinutes = estimate.estimatedTotalMinutes;
+        const waitTime =
+          Number.isFinite(totalMinutes) && Number.isFinite(matchesPerTeam) && matchesPerTeam > 0
+            ? Math.max(totalMinutes / matchesPerTeam - duration, 0)
+            : null;
+        const engagement =
+          Number.isFinite(totalMinutes) && totalMinutes > 0 && Number.isFinite(timePerTeam) ? (timePerTeam / totalMinutes) * 100 : null;
+        const indicator = classifyLadderPerRotationLevel(engagementPerRotation);
+        return {
+          kind: 'ladder-open-estimated',
+          teamCount,
+          sessionMode,
+          rotationEstimate: estimate.rotationEstimate,
+          matchesPerRotation,
+          activePlayersPerRotation,
+          restingPlayersPerRotation,
+          timePerActivePlayer,
+          averageTimePerPlayerPerRotation,
+          engagementPerRotation,
+          matchesPerTeam,
+          timePerTeam,
+          waitTime,
+          engagement,
+          minMatchesPerPlayer: totalActiveSlots != null ? Math.floor(totalActiveSlots / teamCount) : null,
+          maxMatchesPerPlayer: totalActiveSlots != null ? Math.ceil(totalActiveSlots / teamCount) : null,
+          indicator,
+          guidance: buildLadderPedagogyGuidance({
+            restingPlayersPerRotation,
+            engagement: engagementPerRotation,
+            perRotation: true,
+          }),
+        };
+      }
+      const indicator = classifyLadderPerRotationLevel(engagementPerRotation);
+      return {
+        kind: 'ladder-open-per-rotation',
+        teamCount,
+        sessionMode,
+        matchesPerRotation,
+        activePlayersPerRotation,
+        restingPlayersPerRotation,
+        timePerActivePlayer,
+        averageTimePerPlayerPerRotation,
+        engagementPerRotation,
+        timePerTeam: averageTimePerPlayerPerRotation,
+        waitTime: null,
+        engagement: engagementPerRotation,
+        indicator,
+        guidance: buildLadderPedagogyGuidance({
+          restingPlayersPerRotation,
+          engagement: engagementPerRotation,
+          perRotation: true,
+        }),
+      };
+    }
+
+    const matchesPerTeam = Number.isFinite(totalMatchCount) ? (totalMatchCount * 2) / teamCount : null;
+    const timePerTeam = matchesPerTeam != null ? matchesPerTeam * duration : null;
+    const totalMinutes = Number(summary?.totalMinutes);
+    let waitTime = null;
+    if (Number.isFinite(totalMinutes) && Number.isFinite(matchesPerTeam) && matchesPerTeam > 0) {
+      waitTime = Math.max(totalMinutes / matchesPerTeam - duration, 0);
+    }
+    let engagement = null;
+    if (Number.isFinite(totalMinutes) && totalMinutes > 0 && Number.isFinite(timePerTeam)) {
+      engagement = (timePerTeam / totalMinutes) * 100;
+    }
+    const totalActiveSlots = Number.isFinite(activePlayersPerRotation) ? activePlayersPerRotation * rotationsForAverage : null;
+    const indicator = classifyEngagementLevel(engagement);
+    return {
+      kind: 'ladder-limited',
+      teamCount,
+      sessionMode,
+      rotationCount: rotationsForAverage,
+      matchesPerRotation,
+      activePlayersPerRotation,
+      restingPlayersPerRotation,
+      timePerActivePlayer,
+      averageTimePerPlayerPerRotation,
+      engagementPerRotation,
+      matchesPerTeam,
+      timePerTeam,
+      waitTime,
+      engagement,
+      minMatchesPerPlayer: totalActiveSlots != null ? Math.floor(totalActiveSlots / teamCount) : null,
+      maxMatchesPerPlayer: totalActiveSlots != null ? Math.ceil(totalActiveSlots / teamCount) : null,
+      indicator,
+      guidance: buildLadderPedagogyGuidance({
+        restingPlayersPerRotation,
+        engagement,
+        perRotation: false,
+      }),
+    };
+  }
   const matchCount = Number(meta.matchCount);
   const teamCount = Number(meta.teamCount);
   const duration = Number(options?.duration);
@@ -2325,6 +3664,65 @@ function buildPedagogyMetrics(meta, summary, options) {
   return { matchesPerTeam, timePerTeam, waitTime, engagement, indicator };
 }
 
+function getOpenLadderSessionEstimate(options) {
+  const availableInfo = getAvailableWindow(options || {});
+  const availableMinutes = availableInfo.availableMinutes;
+  const duration = Number(options?.duration);
+  if (availableMinutes == null || !Number.isFinite(duration) || duration <= 0) {
+    return { ...availableInfo, rotationEstimate: null, estimatedTotalMinutes: null, estimatedEnd: null };
+  }
+  const turnaround = Math.max(Number(options?.turnaround) || 0, 0);
+  const breakMinutes = Math.max(Number(options?.breakMinutes) || 0, 0);
+  const usableMinutes = Math.max(availableMinutes - breakMinutes, 0);
+  if (usableMinutes < duration) {
+    return { ...availableInfo, rotationEstimate: 0, estimatedTotalMinutes: breakMinutes, estimatedEnd: null };
+  }
+  const rotationEstimate = Math.max(1, Math.floor((usableMinutes + turnaround) / (duration + turnaround)));
+  const estimatedTotalMinutes = rotationEstimate * duration + Math.max(rotationEstimate - 1, 0) * turnaround + breakMinutes;
+  const estimatedEnd = availableInfo.startMinutes != null ? formatTime(availableInfo.startMinutes + estimatedTotalMinutes) : null;
+  return { ...availableInfo, rotationEstimate, estimatedTotalMinutes, estimatedEnd };
+}
+
+function classifyLadderPerRotationLevel(value) {
+  if (!Number.isFinite(value)) {
+    return { label: 'Rendement moteur non évalué', level: 'neutral' };
+  }
+  if (value >= 85) {
+    return { label: 'Très bon rendement moteur', level: 'high' };
+  }
+  if (value >= 70) {
+    return { label: 'Rendement moteur correct', level: 'medium' };
+  }
+  return { label: 'Rendement moteur faible', level: 'low' };
+}
+
+function buildLadderPedagogyGuidance({ restingPlayersPerRotation, engagement, perRotation }) {
+  const lines = [];
+  if (Number(restingPlayersPerRotation) === 1) {
+    lines.push("Un joueur est au repos à chaque rotation : pensez à faire tourner l'élève en attente à chaque cycle.");
+  } else if (Number(restingPlayersPerRotation) > 1) {
+    lines.push('Pensez à faire tourner les élèves au repos à chaque cycle.');
+  }
+  if (Number(restingPlayersPerRotation) >= 3) {
+    lines.push("Beaucoup d'attente : augmentez le nombre de terrains, réduisez le nombre de joueurs actifs ou passez en rotations limitées.");
+  }
+  if (!Number.isFinite(engagement)) {
+    return lines;
+  }
+  const highThreshold = perRotation ? 85 : 40;
+  const lowThreshold = perRotation ? 70 : 25;
+  if (engagement >= highThreshold) {
+    lines.push('Très bon rendement moteur.');
+  } else if (engagement < lowThreshold) {
+    lines.push(
+      perRotation
+        ? 'Engagement moteur faible : augmentez le nombre de terrains ou réduisez le temps de rotation.'
+        : "Augmentez le nombre de terrains ou réduisez le temps d'attente."
+    );
+  }
+  return lines;
+}
+
 function classifyEngagementLevel(value) {
   if (!Number.isFinite(value)) {
     return { label: 'Engagement non évalué', level: 'neutral' };
@@ -2343,6 +3741,17 @@ function formatMinutesLabel(value) {
   return humanizeDuration(Math.round(value));
 }
 
+function formatPedagogyMinutesLabel(value) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  if (Math.abs(value - Math.round(value)) < 0.05) {
+    return `${Math.round(value)} min`;
+  }
+  if (value < 60) {
+    return `${value.toFixed(1).replace('.', ',')} min`;
+  }
+  return humanizeDuration(Math.round(value));
+}
+
 function formatEngagementPercent(value) {
   if (!Number.isFinite(value)) return '—';
   return `${Math.round(value)}%`;
@@ -2350,6 +3759,59 @@ function formatEngagementPercent(value) {
 
 function buildAnalysisListHTML(metrics) {
   if (!metrics) return '<ul class="analysis-list"><li>Données insuffisantes.</li></ul>';
+  if (metrics.kind === 'ladder-open-per-rotation') {
+    const guidance = (metrics.guidance || []).map(line => `<li>${line}</li>`).join('');
+    return `
+      <ul class="analysis-list">
+        <li>Session libre — indicateurs par rotation</li>
+        <li>Joueurs actifs / total : ${Math.round(metrics.activePlayersPerRotation || 0)} / ${metrics.teamCount}</li>
+        <li>Joueurs au repos par rotation : ${Math.round(metrics.restingPlayersPerRotation || 0)}</li>
+        <li>Temps de jeu joueur actif : ${formatPedagogyMinutesLabel(metrics.timePerActivePlayer)}</li>
+        <li>Temps moyen par joueur : ${formatPedagogyMinutesLabel(metrics.averageTimePerPlayerPerRotation)} par rotation</li>
+        <li>Engagement moteur par rotation : ${formatEngagementPercent(metrics.engagementPerRotation)}</li>
+      </ul>
+      ${guidance ? `<p><strong>Guidage enseignant</strong></p><ul class="analysis-list">${guidance}</ul>` : ''}
+    `;
+  }
+  if (metrics.kind === 'ladder-open-estimated') {
+    const distribution =
+      metrics.minMatchesPerPlayer != null && metrics.maxMatchesPerPlayer != null
+        ? `Répartition estimée : ${metrics.minMatchesPerPlayer}-${metrics.maxMatchesPerPlayer} matchs par joueur`
+        : null;
+    const guidance = (metrics.guidance || []).map(line => `<li>${line}</li>`).join('');
+    return `
+      <ul class="analysis-list">
+        <li>Session libre — estimation sur ${metrics.rotationEstimate} rotations possibles</li>
+        <li>Joueurs actifs / total : ${Math.round(metrics.activePlayersPerRotation || 0)} / ${metrics.teamCount}</li>
+        <li>Joueurs au repos par rotation : ${Math.round(metrics.restingPlayersPerRotation || 0)}</li>
+        <li>Temps de jeu joueur actif : ${formatPedagogyMinutesLabel(metrics.timePerActivePlayer)}</li>
+        <li>Temps moyen par joueur : ${formatPedagogyMinutesLabel(metrics.averageTimePerPlayerPerRotation)} par rotation</li>
+        <li>Matchs estimés par joueur : ${formatMatchesDisplay(metrics.matchesPerTeam)}</li>
+        <li>Temps de jeu estimé par joueur : ${formatPedagogyMinutesLabel(metrics.timePerTeam)}</li>
+        <li>Engagement moteur estimé : ${formatEngagementPercent(metrics.engagement)}</li>
+        ${distribution ? `<li>${distribution}</li>` : ''}
+      </ul>
+      ${guidance ? `<p><strong>Guidage enseignant</strong></p><ul class="analysis-list">${guidance}</ul>` : ''}
+    `;
+  }
+  if (metrics.kind === 'ladder-limited') {
+    const distribution =
+      metrics.minMatchesPerPlayer != null && metrics.maxMatchesPerPlayer != null
+        ? `${metrics.minMatchesPerPlayer}-${metrics.maxMatchesPerPlayer} matchs / joueur`
+        : '—';
+    const guidance = (metrics.guidance || []).map(line => `<li>${line}</li>`).join('');
+    return `
+      <ul class="analysis-list">
+        <li>Session limitée : ${metrics.rotationCount} rotations prévues</li>
+        <li>Matchs moyens par joueur : ${formatMatchesDisplay(metrics.matchesPerTeam)}</li>
+        <li>Temps de jeu moyen par joueur : ${formatPedagogyMinutesLabel(metrics.timePerTeam)}</li>
+        <li>Temps moyen d'attente : ${formatPedagogyMinutesLabel(metrics.waitTime)}</li>
+        <li>Engagement moteur estimé : ${formatEngagementPercent(metrics.engagement)}</li>
+        <li>Répartition estimée : ${distribution}</li>
+        ${guidance}
+      </ul>
+    `;
+  }
   const matchValue = formatMatchesDisplay(metrics.matchesPerTeam);
   const matchLabel = `Matchs par équipe : ${matchValue}`;
   const playLabel =
@@ -2377,6 +3839,63 @@ function buildAnalysisTagHTML(metrics) {
     return '<p class="analysis-tag neutral">Engagement non évalué</p>';
   }
   return `<p class="analysis-tag ${metrics.indicator.level}">${metrics.indicator.label}</p>`;
+}
+
+function buildPracticeStatsHTML(metrics, practiceStats) {
+  if (metrics?.kind === 'ladder-open-per-rotation') {
+    return `
+      <ul class="practice-stats">
+        <li><span>Session libre</span><strong>Indicateurs par rotation</strong></li>
+        <li><span>Joueurs actifs / total</span><strong>${Math.round(metrics.activePlayersPerRotation || 0)} / ${metrics.teamCount}</strong></li>
+        <li><span>Joueurs au repos</span><strong>${Math.round(metrics.restingPlayersPerRotation || 0)}</strong></li>
+        <li><span>Temps joueur actif</span><strong>${formatPedagogyMinutesLabel(metrics.timePerActivePlayer)}</strong></li>
+        <li><span>Temps moyen / joueur</span><strong>${formatPedagogyMinutesLabel(metrics.averageTimePerPlayerPerRotation)} / rotation</strong></li>
+        <li><span>Engagement / rotation</span><strong>${formatEngagementPercent(metrics.engagementPerRotation)}</strong></li>
+      </ul>
+    `;
+  }
+  if (metrics?.kind === 'ladder-open-estimated') {
+    return `
+      <ul class="practice-stats">
+        <li><span>Session libre</span><strong>Estimation sur ${metrics.rotationEstimate} rotations</strong></li>
+        <li><span>Joueurs actifs / total</span><strong>${Math.round(metrics.activePlayersPerRotation || 0)} / ${metrics.teamCount}</strong></li>
+        <li><span>Joueurs au repos</span><strong>${Math.round(metrics.restingPlayersPerRotation || 0)}</strong></li>
+        <li><span>Temps joueur actif</span><strong>${formatPedagogyMinutesLabel(metrics.timePerActivePlayer)}</strong></li>
+        <li><span>Temps moyen / joueur</span><strong>${formatPedagogyMinutesLabel(metrics.averageTimePerPlayerPerRotation)} / rotation</strong></li>
+        <li><span>Engagement estimé</span><strong>${formatEngagementPercent(metrics.engagement)}</strong></li>
+      </ul>
+    `;
+  }
+  if (metrics?.kind === 'ladder-limited') {
+    const distribution =
+      metrics.minMatchesPerPlayer != null && metrics.maxMatchesPerPlayer != null
+        ? `${metrics.minMatchesPerPlayer}-${metrics.maxMatchesPerPlayer} matchs`
+        : '—';
+    return `
+      <ul class="practice-stats">
+        <li><span>Rotations prévues</span><strong>${metrics.rotationCount}</strong></li>
+        <li><span>Matchs moyens / joueur</span><strong>${formatMatchesDisplay(metrics.matchesPerTeam)}</strong></li>
+        <li><span>Temps moyen / joueur</span><strong>${formatPedagogyMinutesLabel(metrics.timePerTeam)}</strong></li>
+        <li><span>Attente moyenne</span><strong>${formatPedagogyMinutesLabel(metrics.waitTime)}</strong></li>
+        <li><span>Engagement estimé</span><strong>${formatEngagementPercent(metrics.engagement)}</strong></li>
+        <li><span>Répartition min/max</span><strong>${distribution}</strong></li>
+      </ul>
+    `;
+  }
+  const practiceTotalLabel = practiceStats?.practiceTotal != null ? `${humanizeDuration(practiceStats.practiceTotal)} (cumulées)` : '—';
+  const practicePerTeamLabel = practiceStats?.practicePerTeam != null ? formatMinutesLabel(practiceStats.practicePerTeam) : '—';
+  const waitLabel = practiceStats?.waitTime != null ? formatMinutesLabel(practiceStats.waitTime) : '—';
+  const engagementLabel = practiceStats?.engagement != null ? formatEngagementPercent(practiceStats.engagement) : '—';
+  const marginLabel = formatMarginLabel(practiceStats?.margin);
+  return `
+    <ul class="practice-stats">
+      <li><span>Temps de pratique total</span><strong>${practiceTotalLabel}</strong></li>
+      <li><span>Temps moyen par équipe</span><strong>${practicePerTeamLabel}</strong></li>
+      <li><span>Attente moyenne</span><strong>${waitLabel}</strong></li>
+      <li><span>Engagement moteur</span><strong>${engagementLabel}</strong></li>
+      <li><span>Marge restante</span><strong>${marginLabel}</strong></li>
+    </ul>
+  `;
 }
 
 function applyRecommendedConfiguration(strategyId = null) {
@@ -2429,6 +3948,8 @@ function handleOptionsReset() {
   state.options.vibration = defaults.vibration;
   state.options.roleSettings = { ...DEFAULT_ROLE_SETTINGS };
   state.options.ladder = {
+    mode: defaults.ladder?.mode ?? 'free',
+    courtMode: defaults.ladder?.courtMode ?? 'optimized',
     refereeCourts: defaults.ladder?.refereeCourts ?? 0,
     freeCourts: defaults.ladder?.freeCourts ?? 0,
   };
@@ -2469,6 +3990,7 @@ function handleOptionsReset() {
   if (elements.ladderFreeCourts) {
     elements.ladderFreeCourts.value = state.options.ladder.freeCourts;
   }
+  updateLadderSettingsVisibility();
   updateRoleControlsState();
   persistState();
   hideAnalysisPanels();
@@ -2747,26 +4269,23 @@ function renderRecommendationResult(payload) {
   const secondary = strategies.filter(entry => entry.id !== primary.id);
   const primaryOptions = primary.options;
   const availableLabel = payload.available?.label ?? 'Non renseigné';
-  const durationTotalLabel = primary.summary ? humanizeDuration(primary.summary.totalMinutes) : '—';
-  const endLabel = primary.summary?.estimatedEnd ?? '—';
+  const openEstimate = primary.metrics?.kind === 'ladder-open-estimated' ? getOpenLadderSessionEstimate(primaryOptions) : null;
+  const durationTotalLabel =
+    primary.metrics?.kind === 'ladder-open-estimated'
+      ? openEstimate?.estimatedTotalMinutes != null
+        ? humanizeDuration(openEstimate.estimatedTotalMinutes)
+        : '—'
+      : primary.summary
+        ? humanizeDuration(primary.summary.totalMinutes)
+        : '—';
+  const endLabel =
+    primary.metrics?.kind === 'ladder-open-estimated' ? openEstimate?.estimatedEnd ?? '—' : primary.summary?.estimatedEnd ?? '—';
   const marginLabel = formatMarginLabel(primary.practiceStats.margin);
-  const practiceTotalLabel = primary.practiceStats.practiceTotal != null ? `${humanizeDuration(primary.practiceStats.practiceTotal)} (cumulées)` : '—';
-  const practicePerTeamLabel = primary.practiceStats.practicePerTeam != null ? formatMinutesLabel(primary.practiceStats.practicePerTeam) : '—';
-  const waitLabel = primary.practiceStats.waitTime != null ? formatMinutesLabel(primary.practiceStats.waitTime) : '—';
-  const engagementLabel = primary.practiceStats.engagement != null ? formatEngagementPercent(primary.practiceStats.engagement) : '—';
   const statusLine = primary.feasible
     ? `✓ Profil ${primary.label} : ajusté au créneau`
     : `⚠ Profil ${primary.label} dépasse le créneau (${marginLabel}).`;
   const feedbackClass = recommendationApplied ? 'show' : '';
-  const practiceStatsList = `
-    <ul class="practice-stats">
-      <li><span>Temps de pratique total</span><strong>${practiceTotalLabel}</strong></li>
-      <li><span>Temps moyen par équipe</span><strong>${practicePerTeamLabel}</strong></li>
-      <li><span>Attente moyenne</span><strong>${waitLabel}</strong></li>
-      <li><span>Engagement moteur</span><strong>${engagementLabel}</strong></li>
-      <li><span>Marge restante</span><strong>${marginLabel}</strong></li>
-    </ul>
-  `;
+  const practiceStatsList = buildPracticeStatsHTML(primary.metrics, primary.practiceStats);
   const secondaryHtml = secondary.length
     ? `
       <div class="recommendation-variants">
@@ -2816,7 +4335,13 @@ function renderRecommendationResult(payload) {
       </div>
     </div>
     <p class="recommendation-note">${statusLine}</p>
-    <p class="recommendation-note">Durée estimée : ${durationTotalLabel} · Fin prévue : ${endLabel}</p>
+    <p class="recommendation-note">${
+      primary.metrics?.kind === 'ladder-open-per-rotation'
+        ? 'Session libre : les indicateurs ci-dessous sont calculés par rotation, pas sur toute la séance.'
+        : primary.metrics?.kind === 'ladder-open-estimated'
+          ? `Session libre : estimation sur ${primary.metrics.rotationEstimate} rotations possibles · ${durationTotalLabel} · fin estimée ${endLabel}`
+          : `Durée estimée : ${durationTotalLabel} · Fin prévue : ${endLabel}`
+    }</p>
     ${practiceStatsList}
     <div class="simulation-analysis">
       <h5>Analyse pédagogique</h5>
@@ -2847,6 +4372,7 @@ function buildMatchListHTML(rotation, practiceType, roleAssignments) {
       const awayLabel = decorateNameWithStatus(participants.away);
       const disabledAttr = neutralized ? 'disabled' : '';
       const neutralBadge = neutralized ? `<span class="status-pill unavailable">Indisponible</span>` : '';
+      const matchFieldToken = buildFieldToken(matchId);
       return `
       <li>
         <div class="match-label">
@@ -2855,9 +4381,9 @@ function buildMatchListHTML(rotation, practiceType, roleAssignments) {
           <span class="field-label">${fieldText}</span>
         </div>
         <div class="score-inputs" aria-label="Score ${participants.home} ${participants.away}">
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" ${disabledAttr} />
+          <input type="number" min="0" inputmode="numeric" id="results-score-${matchFieldToken}-home" name="results-score-${matchFieldToken}-home" aria-label="Score ${participants.home}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="home" value="${formatScoreValue(getScoreValue(matchId, 'home'))}" ${disabledAttr} />
           <span>:</span>
-          <input type="number" min="0" inputmode="numeric" aria-label="Score ${participants.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" ${disabledAttr} />
+          <input type="number" min="0" inputmode="numeric" id="results-score-${matchFieldToken}-away" name="results-score-${matchFieldToken}-away" aria-label="Score ${participants.away}" data-rotation="${rotation.number}" data-match-id="${matchId}" data-score-input="away" value="${formatScoreValue(getScoreValue(matchId, 'away'))}" ${disabledAttr} />
         </div>
         ${roles || ''}
       </li>`;
@@ -2907,18 +4433,19 @@ function getLadderCourtProfile(fieldNumber) {
   if (!state.schedule || state.schedule.format !== 'ladder') return null;
   if (!Number.isFinite(fieldNumber)) return null;
   const ladder = state.schedule.ladder || {};
+  const refereeFields = Array.isArray(ladder.refereeFields) ? ladder.refereeFields : [];
+  if (refereeFields.length) {
+    return refereeFields.includes(fieldNumber) ? 'arbiter' : 'free';
+  }
   const refereeCourts = Number(ladder.refereeCourts) || 0;
-  const freeCourts = Number(ladder.freeCourts) || 0;
   const index = fieldNumber - 1;
   if (index < 0) return null;
-  if (index < refereeCourts) return 'arbiter';
-  if (index < refereeCourts + freeCourts) return 'free';
-  return null;
+  return index < refereeCourts ? 'arbiter' : 'free';
 }
 
 function renderRotationView(rotations) {
   const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
-  elements.rotationView.innerHTML = rotations
+  const rotationCards = rotations
     .map(rotation => {
       const roleAssignments = computeRoleAssignments(rotation);
       const matches = buildMatchListHTML(rotation, practiceType, roleAssignments);
@@ -2944,6 +4471,14 @@ function renderRotationView(rotations) {
       `;
     })
     .join('');
+  if (state.schedule?.format === 'ladder') {
+    elements.rotationView.innerHTML = `
+      ${buildLadderResultsFocusCard()}
+      ${rotationCards}
+    `;
+    return;
+  }
+  elements.rotationView.innerHTML = rotationCards;
 }
 
 function buildTeamEntriesFromSchedule(schedule) {
@@ -3024,8 +4559,29 @@ function renderRankingView(schedule) {
     elements.rankingView.innerHTML = '';
     return;
   }
+  if (schedule.format === 'swiss') {
+    const rows = updateSwissRanking(schedule);
+    if (!rows.length) {
+      elements.rankingView.innerHTML = '<p>Aucun classement Ronde Suisse disponible.</p>';
+      return;
+    }
+    elements.rankingView.innerHTML = `
+      <article class="ranking-card swiss-ranking-card">
+        <header>
+          <h3>Classement Ronde Suisse</h3>
+          <span class="ranking-status">Ronde ${schedule.swiss?.round || 1}</span>
+        </header>
+        ${buildSwissRankingTable(rows)}
+      </article>
+    `;
+    return;
+  }
   if (schedule.format === 'challenge') {
     renderChallengeRanking(schedule);
+    return;
+  }
+  if (schedule.format === 'ladder') {
+    renderLadderRanking(schedule);
     return;
   }
   if (schedule.format && schedule.format !== 'round-robin') {
@@ -3082,6 +4638,53 @@ function renderRankingView(schedule) {
   elements.rankingView.innerHTML = cards;
 }
 
+function renderLadderRanking(schedule) {
+  if (!elements.rankingView) return;
+  const rows = computeLadderStandings(schedule);
+  if (!rows.length) {
+    elements.rankingView.innerHTML = '<p>Aucun classement montée-descente disponible.</p>';
+    return;
+  }
+  const tableRows = rows
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.losses}</td>
+          <td>${row.pointsFor}</td>
+          <td>${row.pointsAgainst}</td>
+          <td>${row.status}</td>
+        </tr>`
+    )
+    .join('');
+  elements.rankingView.innerHTML = `
+    <article class="ranking-card ladder-ranking-card">
+      <header>
+        <h3>Classement Montée-descente</h3>
+        <span class="ranking-status">${formatLadderModeLabel(getLadderMode())}</span>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nom</th>
+            <th>MJ</th>
+            <th>G</th>
+            <th>P</th>
+            <th>PM</th>
+            <th>PE</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </article>
+  `;
+}
+
 function renderChallengeRanking(schedule) {
   if (!elements.rankingView) return;
   const challenge = schedule.challenge;
@@ -3089,81 +4692,118 @@ function renderChallengeRanking(schedule) {
     elements.rankingView.innerHTML = '<p>Aucun classement pour le moment.</p>';
     return;
   }
-  ensureChallengeRoster(schedule);
-  const players = getChallengePlayers(schedule);
-  const rows = players.map((player, position) => {
-    if (!player) return '';
-    return `<li><span>${position + 1}</span><span>${player.name}</span></li>`;
-  });
+  const rows = buildChallengeRankingRows(schedule)
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.played}</td>
+          <td>${row.points}</td>
+          <td>${row.pointsFor}</td>
+          <td>${row.pointsAgainst}</td>
+        </tr>`
+    )
+    .join('');
   elements.rankingView.innerHTML = `
     <article class="ranking-card">
       <header>
         <h3>Classement Défi</h3>
         <span class="ranking-status">Mise à jour manuelle</span>
       </header>
-      <ul class="challenge-ranking-list">
-        ${rows.join('')}
-      </ul>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Joueur</th>
+            <th>MJ</th>
+            <th>Pts</th>
+            <th>PM</th>
+            <th>PE</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
     </article>
   `;
 }
 
-function renderChallengeBoard(schedule) {
+function renderChallengeBoard(schedule = state.schedule) {
   if (!elements.rotationView) return;
-  const challenge = schedule.challenge;
-  if (!challenge || !challenge.names.length) {
-    elements.rotationView.innerHTML =
-      '<section class="challenge-shell"><p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p></section>';
+  if (!schedule || schedule.format !== 'challenge') {
+    elements.rotationView.innerHTML = '';
     return;
   }
   ensureChallengeRoster(schedule);
-  const players = getChallengePlayers(schedule);
-  resetChallengeSelection();
-  const rows = players
+  const challenge = schedule.challenge;
+  const range = getChallengeRange();
+  const className = String(state.options.challengeClassName || '').trim();
+  const classSnapshot = className ? loadChallengeClassSnapshot(className) : null;
+  const lastSavedLabel = classSnapshot?.savedAt
+    ? new Date(classSnapshot.savedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+    : 'Aucune';
+  if (!challenge || !challenge.names.length) {
+    elements.rotationView.innerHTML =
+      '<section class="challenge-shell challenge-clean"><p class="challenge-empty">Ajoutez des participants pour activer le mode Défi.</p></section>';
+    return;
+  }
+  const rows = getChallengePlayers(schedule)
     .map((player, position) => {
-      if (!player) return '';
-      const name = player.name;
-      const statusKey = getEntityStatusByName(name);
+      const statusKey = getEntityStatusByName(player.name);
       const isInactive = isEntityInactive(statusKey);
-      const inactiveClass = isInactive ? 'inactive' : '';
-      const actionDisabled = isInactive ? 'disabled' : '';
+      const safeName = escapeChallengeDataValue(player.name);
       return `
-        <div class="challenge-row ${inactiveClass}" data-player-id="${player.id}">
+        <article class="challenge-row${isInactive ? ' inactive' : ''}" data-player-id="${player.id}" data-player-position="${position}" data-player-name="${safeName}">
           <span class="challenge-rank">${position + 1}</span>
-          <button type="button" class="challenge-name" data-player-id="${player.id}">
-            ${decorateNameWithStatus(name)}
+          <button type="button" class="challenge-name" data-challenge-select data-player-id="${player.id}">
+            ${decorateNameWithStatus(player.name)}
           </button>
-          <button type="button" class="challenge-action" data-challenge-open data-player-id="${player.id}" ${actionDisabled}>
+          <button
+            type="button"
+            class="challenge-action"
+            data-challenge-open
+            data-player-id="${player.id}"
+            ${isInactive ? 'disabled' : ''}
+          >
             Défi
           </button>
-        </div>
+        </article>
       `;
     })
     .join('');
-  const historyHtml = buildChallengeHistoryBlock(challenge);
+
   elements.rotationView.innerHTML = `
-    <section class="challenge-shell" aria-live="polite">
+    <section class="challenge-shell challenge-clean" aria-live="polite">
       <header class="challenge-shell-header">
         <div>
           <p class="eyebrow">Mode Défi</p>
-          <h3>Classement · fenêtre ±5</h3>
-          <p class="challenge-shell-hint">Tap = surbrillance (3 s) · Tap à nouveau ou « Défi » = saisie · Joueurs indisponibles grisés.</p>
+          <h3>Classement · fenêtre ±${range}</h3>
         </div>
         <div class="challenge-shell-actions">
-          <button class="btn ghost small" data-challenge-nav="back">Quitter</button>
-          <div class="challenge-quick-links">
-            <button class="chip-link" data-challenge-nav="results">Résultats</button>
-            <button class="chip-link" data-challenge-nav="projection">Projection</button>
-            <button class="chip-link" data-challenge-nav="options">Paramètres</button>
-          </div>
+          <p class="challenge-shell-hint">
+            Touchez un joueur pour voir ses adversaires · Touchez deux fois ou “Défi” pour saisir
+          </p>
+          <button type="button" class="btn ghost small" data-challenge-export>Exporter CSV</button>
         </div>
       </header>
-      ${historyHtml}
+      <div class="challenge-history-card">
+        <div>
+          <strong>Classe : ${escapeHtml(className || 'Non renseignée')}</strong>
+          <p class="challenge-history-meta">Dernière sauvegarde : ${escapeHtml(lastSavedLabel)}</p>
+        </div>
+        <div class="challenge-shell-actions">
+          <button type="button" class="btn success small" data-challenge-save-class ${className ? '' : 'disabled'}>
+            Sauvegarder la classe
+          </button>
+        </div>
+      </div>
+      ${buildChallengeHistoryBlock(challenge)}
       <div class="challenge-board" id="challengeBoard">
         ${rows}
       </div>
     </section>
   `;
+  applyChallengeSelectionState(schedule);
 }
 
 function buildChallengeHistoryBlock(challenge) {
@@ -3179,13 +4819,19 @@ function buildChallengeHistoryBlock(challenge) {
       </div>
     `;
   }
-  const score = `${lastEntry.challengerScore} – ${lastEntry.opponentScore}`;
-  const timestamp = formatChallengeTimestamp(lastEntry.timestamp);
+  const challengerName = getChallengePlayerLabel(lastEntry.challengerId, {
+    schedule: state.schedule,
+    fallbackPosition: lastEntry.challengerPos,
+  });
+  const opponentName = getChallengePlayerLabel(lastEntry.opponentId, {
+    schedule: state.schedule,
+    fallbackPosition: lastEntry.opponentPos,
+  });
   return `
     <div class="challenge-history-card">
       <div>
-        <strong>${lastEntry.challenger}</strong> vs <strong>${lastEntry.opponent}</strong> • ${score}
-        <p class="challenge-history-meta">Validé ${timestamp}</p>
+        <strong>${escapeHtml(challengerName)}</strong> vs <strong>${escapeHtml(opponentName)}</strong> • ${lastEntry.challengerScore} – ${lastEntry.opponentScore}
+        <p class="challenge-history-meta">Validé ${formatChallengeTimestamp(lastEntry.timestamp)}</p>
       </div>
       <button class="btn ghost small" data-challenge-edit-last>Modifier</button>
     </div>
@@ -3200,66 +4846,94 @@ function getLastChallengeHistoryEntry(challenge) {
 function formatChallengeTimestamp(isoString) {
   if (!isoString) return 'il y a un instant';
   try {
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(isoString).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   } catch (error) {
     return 'il y a un instant';
   }
 }
 
+function escapeChallengeDataValue(value) {
+  return escapeHtml(value);
+}
+
+function createChallengeStats() {
+  return {
+    played: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    points: 0,
+    pointsFor: 0,
+    pointsAgainst: 0,
+  };
+}
+
+function normalizeChallengeStats(stats) {
+  const base = createChallengeStats();
+  if (!stats || typeof stats !== 'object') return base;
+  return {
+    played: Number.isFinite(Number(stats.played)) ? Number(stats.played) : base.played,
+    wins: Number.isFinite(Number(stats.wins)) ? Number(stats.wins) : base.wins,
+    losses: Number.isFinite(Number(stats.losses)) ? Number(stats.losses) : base.losses,
+    draws: Number.isFinite(Number(stats.draws)) ? Number(stats.draws) : base.draws,
+    points: Number.isFinite(Number(stats.points)) ? Number(stats.points) : base.points,
+    pointsFor: Number.isFinite(Number(stats.pointsFor)) ? Number(stats.pointsFor) : base.pointsFor,
+    pointsAgainst: Number.isFinite(Number(stats.pointsAgainst)) ? Number(stats.pointsAgainst) : base.pointsAgainst,
+  };
+}
+
+function ensureChallengePlayerStats(player) {
+  if (!player) return createChallengeStats();
+  player.stats = normalizeChallengeStats(player.stats);
+  return player.stats;
+}
+
 function ensureChallengeRoster(schedule = state.schedule) {
-  if (!schedule || schedule.format !== 'challenge') return;
-  if (!schedule.challenge) return;
+  if (!schedule || schedule.format !== 'challenge' || !schedule.challenge) return;
   const challenge = schedule.challenge;
+  challenge.names = Array.isArray(challenge.names) ? challenge.names : (schedule.teams || []).map(team => team.name);
+  challenge.range = clampNumber(Number(state.options.challengeRange ?? challenge.range) || 5, 1, 10, 5);
   const previousRoster = Array.isArray(challenge.roster) ? challenge.roster : [];
   const maxExistingId = previousRoster.reduce((max, player) => {
     const value = Number(player?.id);
-    return Number.isFinite(value) ? Math.max(max, value) : max;
+    return Number.isInteger(value) ? Math.max(max, value) : max;
   }, challengeIdSeed);
   challengeIdSeed = Math.max(challengeIdSeed, maxExistingId);
-  const usedPrevious = new Set();
-  const pickPrevious = (index, name) => {
-    const direct = previousRoster[index];
-    if (direct && Number.isFinite(direct.id) && !usedPrevious.has(direct.id)) {
-      usedPrevious.add(direct.id);
-      return direct.id;
-    }
-    for (let i = 0; i < previousRoster.length; i += 1) {
-      const candidate = previousRoster[i];
-      if (!candidate || !Number.isFinite(candidate.id) || usedPrevious.has(candidate.id)) continue;
-      if (candidate.name === name) {
-        usedPrevious.add(candidate.id);
-        return candidate.id;
+
+  const usedIds = new Set();
+  const nextRoster = challenge.names.map((name, index) => {
+    let previousPlayer =
+      previousRoster.find(
+        candidate => candidate && !usedIds.has(Number(candidate.id)) && Number.isInteger(Number(candidate.id)) && candidate.name === name
+      ) || null;
+    if (!previousPlayer) {
+      const direct = previousRoster[index];
+      if (direct && !usedIds.has(Number(direct.id)) && Number.isInteger(Number(direct.id))) {
+        previousPlayer = direct;
       }
     }
-    return null;
-  };
-  const nextRoster = (challenge.names || []).map((name, index) => {
-    const reusedId = pickPrevious(index, name);
-    const id = Number.isFinite(reusedId) ? reusedId : generateChallengePlayerId();
-    return { id, name };
+    const id = previousPlayer ? Number(previousPlayer.id) : generateChallengePlayerId();
+    usedIds.add(id);
+    return {
+      id,
+      name,
+      stats: normalizeChallengeStats(previousPlayer?.stats),
+    };
   });
+
   challenge.roster = nextRoster;
   const rosterIds = nextRoster.map(player => player.id);
-  const idSet = new Set(rosterIds);
-  const indexToId = new Map(nextRoster.map((player, index) => [index, player.id]));
-  const normalizeEntry = entry => {
-    if (entry == null) return null;
-    const numeric = Number(entry);
-    if (!Number.isFinite(numeric)) return null;
-    if (idSet.has(numeric)) return numeric;
-    if (indexToId.has(numeric)) return indexToId.get(numeric);
-    return null;
-  };
-  let normalizedOrder = Array.isArray(challenge.order)
-    ? challenge.order.map(normalizeEntry).filter(id => Number.isFinite(id))
-    : [];
+  const rosterIdSet = new Set(rosterIds);
+  const normalizedOrder = [];
   const seen = new Set();
-  normalizedOrder = normalizedOrder.filter(id => {
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
+  if (Array.isArray(challenge.order)) {
+    challenge.order.forEach(entry => {
+      const id = Number(entry);
+      if (!Number.isInteger(id) || !rosterIdSet.has(id) || seen.has(id)) return;
+      normalizedOrder.push(id);
+      seen.add(id);
+    });
+  }
   rosterIds.forEach(id => {
     if (!seen.has(id)) {
       normalizedOrder.push(id);
@@ -3267,33 +4941,46 @@ function ensureChallengeRoster(schedule = state.schedule) {
     }
   });
   challenge.order = normalizedOrder;
+  challenge.history = Array.isArray(challenge.history) ? challenge.history.slice(-20) : [];
+}
+
+function getChallengeOrder(schedule = state.schedule) {
+  ensureChallengeRoster(schedule);
+  const order = Array.isArray(schedule?.challenge?.order) ? schedule.challenge.order : [];
+  return order.map(Number).filter(Number.isInteger);
+}
+
+function getChallengePosition(playerId, schedule = state.schedule) {
+  const id = Number(playerId);
+  if (!Number.isInteger(id)) return -1;
+  return getChallengeOrder(schedule).indexOf(id);
+}
+
+function getChallengePositionMap(schedule = state.schedule) {
+  const map = new Map();
+  getChallengeOrder(schedule).forEach((playerId, index) => map.set(playerId, index));
+  return map;
 }
 
 function getChallengeRoster(schedule = state.schedule) {
-  if (!schedule?.challenge || !Array.isArray(schedule.challenge.roster)) return [];
-  return schedule.challenge.roster;
+  ensureChallengeRoster(schedule);
+  return Array.isArray(schedule?.challenge?.roster) ? schedule.challenge.roster : [];
 }
 
 function getChallengePlayerMap(schedule = state.schedule) {
   const map = new Map();
   getChallengeRoster(schedule).forEach(player => {
-    if (player && player.id != null) {
-      map.set(player.id, player);
-    }
+    const id = Number(player?.id);
+    if (!Number.isInteger(id)) return;
+    map.set(id, player);
   });
   return map;
 }
 
-function getChallengePlayers(schedule = state.schedule) {
-  ensureChallengeRoster(schedule);
-  const order = schedule?.challenge?.order || [];
-  const map = getChallengePlayerMap(schedule);
-  return order.map(id => map.get(id)).filter(Boolean);
-}
-
 function getChallengePlayerById(playerId, schedule = state.schedule) {
-  const map = getChallengePlayerMap(schedule);
-  return map.get(playerId) || null;
+  const id = Number(playerId);
+  if (!Number.isInteger(id)) return null;
+  return getChallengePlayerMap(schedule).get(id) || null;
 }
 
 function getChallengePlayerName(playerId, schedule = state.schedule) {
@@ -3302,21 +4989,288 @@ function getChallengePlayerName(playerId, schedule = state.schedule) {
 
 function getChallengePlayerLabel(playerId, options = {}) {
   const schedule = options.schedule || state.schedule;
-  const fallbackPosition = Number.isInteger(options.fallbackPosition) ? options.fallbackPosition : null;
   const player = getChallengePlayerById(playerId, schedule);
-  if (player && player.name) {
-    return player.name;
-  }
-  if (fallbackPosition != null) {
-    const practiceType = getPracticeTypeFromMeta(schedule?.meta);
-    const fallbackBase = formatParticipantLabel({ practiceType, capitalized: true });
-    return `${fallbackBase} ${fallbackPosition + 1}`;
+  if (player?.name) return player.name;
+  if (Number.isInteger(options.fallbackPosition)) {
+    const fallbackBase = formatParticipantLabel({
+      practiceType: getPracticeTypeFromMeta(schedule?.meta),
+      capitalized: true,
+    });
+    return `${fallbackBase} ${options.fallbackPosition + 1}`;
   }
   return 'Participant';
 }
 
+function getChallengePlayers(schedule = state.schedule) {
+  const order = getChallengeOrder(schedule);
+  const playerMap = getChallengePlayerMap(schedule);
+  return order.map(id => playerMap.get(id)).filter(Boolean);
+}
+
+function getChallengeNames(schedule = state.schedule) {
+  ensureChallengeRoster(schedule);
+  return Array.isArray(schedule?.challenge?.names) ? schedule.challenge.names : [];
+}
+
+function buildChallengeRankingRows(schedule = state.schedule) {
+  return getChallengePlayers(schedule).map(player => {
+    const stats = ensureChallengePlayerStats(player);
+    return {
+      id: player.id,
+      name: player.name,
+      played: stats.played,
+      points: stats.points,
+      pointsFor: stats.pointsFor,
+      pointsAgainst: stats.pointsAgainst,
+      wins: stats.wins,
+      draws: stats.draws,
+      losses: stats.losses,
+      goalDiff: stats.pointsFor - stats.pointsAgainst,
+    };
+  });
+}
+
+function restoreChallengePlayerStats(playerId, statsSnapshot, schedule = state.schedule) {
+  const player = getChallengePlayerById(playerId, schedule);
+  if (!player) return;
+  player.stats = normalizeChallengeStats(statsSnapshot);
+}
+
+function applyChallengeScoreToStats(challengerPlayer, opponentPlayer, challengerScore, opponentScore) {
+  const challengerStats = ensureChallengePlayerStats(challengerPlayer);
+  const opponentStats = ensureChallengePlayerStats(opponentPlayer);
+  challengerStats.played += 1;
+  opponentStats.played += 1;
+  challengerStats.pointsFor += challengerScore;
+  challengerStats.pointsAgainst += opponentScore;
+  opponentStats.pointsFor += opponentScore;
+  opponentStats.pointsAgainst += challengerScore;
+  if (challengerScore > opponentScore) {
+    challengerStats.wins += 1;
+    challengerStats.points += 3;
+    opponentStats.losses += 1;
+  } else if (challengerScore < opponentScore) {
+    opponentStats.wins += 1;
+    opponentStats.points += 3;
+    challengerStats.losses += 1;
+  } else {
+    challengerStats.draws += 1;
+    opponentStats.draws += 1;
+    challengerStats.points += 1;
+    opponentStats.points += 1;
+  }
+}
+
+function applyChallengeSelectionState(schedule = state.schedule) {
+  const board = document.getElementById('challengeBoard');
+  if (!board) return;
+  board.querySelectorAll('.challenge-row').forEach(row => row.classList.remove('selected', 'highlight', 'challenge-out-of-range'));
+  if (!Number.isInteger(_challengeSelectedId)) return;
+  const selectedPlayer = getChallengePlayerById(_challengeSelectedId, schedule);
+  if (!selectedPlayer || isEntityInactive(getEntityStatusByName(selectedPlayer.name))) {
+    _challengeSelectedId = null;
+    return;
+  }
+  const selectedPosition = getChallengePosition(_challengeSelectedId, schedule);
+  if (selectedPosition < 0) {
+    _challengeSelectedId = null;
+    return;
+  }
+  const range = getChallengeRange();
+  const start = Math.max(0, selectedPosition - range);
+  const end = Math.min(getChallengeOrder(schedule).length - 1, selectedPosition + range);
+  board.querySelectorAll('.challenge-row').forEach(row => {
+    const playerId = Number(row.dataset.playerId);
+    const position = getChallengePosition(playerId, schedule);
+    if (!Number.isInteger(playerId) || position < 0) return;
+    const player = getChallengePlayerById(playerId, schedule);
+    if (player && isEntityInactive(getEntityStatusByName(player.name))) {
+      row.classList.add('challenge-out-of-range');
+      return;
+    }
+    if (playerId === _challengeSelectedId) {
+      row.classList.add('selected');
+      return;
+    }
+    if (position >= start && position <= end) {
+      row.classList.add('highlight');
+    } else {
+      row.classList.add('challenge-out-of-range');
+    }
+  });
+}
+
+function clearChallengeAutoResetTimer() {
+  if (_challengeAutoReset) {
+    clearTimeout(_challengeAutoReset);
+    _challengeAutoReset = null;
+  }
+}
+
+function clearChallengeSelection() {
+  clearChallengeAutoResetTimer();
+  _challengeSelectedId = null;
+  const board = document.getElementById('challengeBoard');
+  if (!board) return;
+  board.querySelectorAll('.challenge-row').forEach(row => row.classList.remove('selected', 'highlight', 'challenge-out-of-range'));
+}
+
+function clearChallengeHighlights() {
+  clearChallengeSelection();
+}
+
+function resetChallengeSelection() {
+  clearChallengeSelection();
+}
+
+function isChallengeSelectionActive() {
+  return Number.isInteger(_challengeSelectedId);
+}
+
+function getChallengeOpponents(playerId, schedule = state.schedule) {
+  const challengerId = Number(playerId);
+  if (!Number.isInteger(challengerId)) return [];
+  const challengerPosition = getChallengePosition(challengerId, schedule);
+  if (challengerPosition < 0) return [];
+  const order = getChallengeOrder(schedule);
+  const range = getChallengeRange();
+  const start = Math.max(0, challengerPosition - range);
+  const end = Math.min(order.length - 1, challengerPosition + range);
+  const opponents = [];
+  for (let position = start; position <= end; position += 1) {
+    const opponentId = Number(order[position]);
+    if (!Number.isInteger(opponentId) || opponentId === challengerId) continue;
+    const opponent = getChallengePlayerById(opponentId, schedule);
+    if (!opponent || isEntityInactive(getEntityStatusByName(opponent.name))) continue;
+    opponents.push({
+      id: opponentId,
+      label: `${position + 1}. ${opponent.name}`,
+      position,
+    });
+  }
+  return opponents;
+}
+
+function selectChallengePlayer(playerId) {
+  const id = Number(playerId);
+  if (!Number.isInteger(id)) return;
+  const player = getChallengePlayerById(id);
+  if (!player || isEntityInactive(getEntityStatusByName(player.name))) return;
+  if (_challengeSelectedId === id) {
+    clearChallengeSelection();
+    openChallengeDialog(id);
+    return;
+  }
+  clearChallengeAutoResetTimer();
+  _challengeSelectedId = id;
+  applyChallengeSelectionState();
+  _challengeAutoReset = setTimeout(() => {
+    clearChallengeSelection();
+  }, 3000);
+}
+
+function getChallengeRowContextFromEventTarget(target) {
+  const row = target.closest('.challenge-row');
+  if (!row) return null;
+  const playerId = Number(row.dataset.playerId);
+  if (!Number.isInteger(playerId)) return null;
+  const player = getChallengePlayerById(playerId);
+  const position = getChallengePosition(playerId);
+  if (!player || position < 0) return null;
+  return { row, playerId, player, position };
+}
+
+function openChallengeDialog(playerId, options = {}) {
+  if (!isChallengeModeActive()) return;
+  if (!elements.challengeModal || !elements.challengeForm) return;
+  ensureChallengeRoster(state.schedule);
+  const challengerId = Number(playerId);
+  const challenger = getChallengePlayerById(challengerId);
+  const position = getChallengePosition(challengerId);
+  if (!challenger || position < 0 || isEntityInactive(getEntityStatusByName(challenger.name))) {
+    alert('Le joueur sélectionné est introuvable ou indisponible.');
+    return;
+  }
+
+  const form = elements.challengeForm;
+  const select = form.elements.opponentIndex;
+  const { presetOpponentId = null, presetScores = null, editContext = null } = options;
+  const opponents = getChallengeOpponents(challengerId);
+  if (!editContext && !opponents.length) {
+    alert(`Aucun adversaire disponible dans la fenêtre ±${getChallengeRange()}.`);
+    return;
+  }
+
+  form.dataset.playerId = String(challengerId);
+  form.dataset.playerPosition = String(position);
+  if (form.elements.challengerIndex) {
+    form.elements.challengerIndex.value = String(position);
+  }
+  const challengerScoreLabel = form.querySelector('label[for="challengeChallengerScore"] span');
+  const opponentScoreLabel = form.querySelector('label[for="challengeOpponentScore"] span');
+  const syncScoreLabels = () => {
+    if (challengerScoreLabel) {
+      challengerScoreLabel.textContent = `Score ${challenger.name}`;
+    }
+    if (opponentScoreLabel) {
+      const selectedOpponentId = Number(select.value);
+      const selectedOpponent = getChallengePlayerById(selectedOpponentId);
+      opponentScoreLabel.textContent = `Score ${selectedOpponent?.name || 'adversaire'}`;
+    }
+  };
+
+  if (editContext) {
+    const opponentId = Number(presetOpponentId ?? editContext.opponentId);
+    const opponent = getChallengePlayerById(opponentId);
+    if (!Number.isInteger(opponentId) || !opponent) {
+      alert('Impossible de rouvrir le dernier défi.');
+      clearChallengeEditContext();
+      return;
+    }
+    select.disabled = true;
+    select.innerHTML = `<option value="${opponentId}">${escapeHtml(opponent.name)}</option>`;
+    select.value = String(opponentId);
+    form.elements.challengerScore.value = String(Number.isFinite(presetScores?.challenger) ? presetScores.challenger : editContext.challengerScore || 0);
+    form.elements.opponentScore.value = String(Number.isFinite(presetScores?.opponent) ? presetScores.opponent : editContext.opponentScore || 0);
+    updateChallengeDialogText(`Corriger · ${challenger.name}`, 'Mode correction : ce duel remplacera le précédent.');
+    syncScoreLabels();
+  } else {
+    select.disabled = false;
+    select.innerHTML = opponents.map(opponent => `<option value="${opponent.id}">${escapeHtml(opponent.label)}</option>`).join('');
+    if (Number.isInteger(Number(presetOpponentId)) && opponents.some(opponent => opponent.id === Number(presetOpponentId))) {
+      select.value = String(Number(presetOpponentId));
+    } else {
+      select.selectedIndex = 0;
+    }
+    form.elements.challengerScore.value = '0';
+    form.elements.opponentScore.value = '0';
+    updateChallengeDialogText(`Défi · ${challenger.name}`, `Choisissez un adversaire dans la fenêtre ±${getChallengeRange()} puis validez le score.`);
+    syncScoreLabels();
+  }
+
+  select.onchange = () => {
+    syncScoreLabels();
+  };
+
+  clearChallengeAutoResetTimer();
+  elements.challengeModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
 function handleChallengeClick(event) {
   if (!isChallengeModeActive()) return;
+  const saveClassBtn = event.target.closest('[data-challenge-save-class]');
+  if (saveClassBtn) {
+    event.preventDefault();
+    saveCurrentChallengeClass();
+    return;
+  }
+  const exportBtn = event.target.closest('[data-challenge-export]');
+  if (exportBtn) {
+    event.preventDefault();
+    exportChallengeRankingCsv();
+    return;
+  }
   const navBtn = event.target.closest('[data-challenge-nav]');
   if (navBtn) {
     event.preventDefault();
@@ -3329,71 +5283,49 @@ function handleChallengeClick(event) {
     startChallengeHistoryEdit();
     return;
   }
-  const quickOpen = event.target.closest('[data-challenge-open]');
-  if (quickOpen) {
+  const openBtn = event.target.closest('[data-challenge-open]');
+  if (openBtn) {
     event.preventDefault();
-    const playerId = getPlayerIdFromElement(quickOpen);
-    if (Number.isInteger(playerId)) {
-      highlightChallengeWindow(playerId);
-      openChallengeDialog({ playerId });
-    }
+    event.stopPropagation();
+    const playerId = Number(openBtn.dataset.playerId);
+    const player = getChallengePlayerById(playerId);
+    if (!player || isEntityInactive(getEntityStatusByName(player.name))) return;
+    clearChallengeSelection();
+    openChallengeDialog(playerId);
     return;
   }
-  const row = event.target.closest('.challenge-row');
-  const playerId = getPlayerIdFromElement(event.target);
-  if (!row || !Number.isInteger(playerId) || row.classList.contains('inactive')) return;
-  if (event.detail && event.detail > 1) return;
-  if (!isChallengeSelectionActive()) {
-    highlightChallengeWindow(playerId);
-    return;
-  }
-  if (challengeSelection.playerId === playerId) {
-    openChallengeDialog({ playerId });
-    return;
-  }
-  if (challengeSelection.allowedIds.includes(playerId)) {
-    openChallengeDialog({
-      playerId: challengeSelection.playerId,
-      presetOpponentTeamIndex: playerId,
-    });
-    return;
-  }
-  highlightChallengeWindow(playerId);
+  const context = getChallengeRowContextFromEventTarget(event.target);
+  const clickTarget = event.target.closest('[data-challenge-select], .challenge-row');
+  if (!context || !clickTarget) return;
+  if (isEntityInactive(getEntityStatusByName(context.player.name))) return;
+  event.preventDefault();
+  selectChallengePlayer(context.playerId);
 }
 
 function handleChallengeDoubleClick(event) {
   if (!isChallengeModeActive()) return;
-  const row = event.target.closest('.challenge-row');
-  const playerId = getPlayerIdFromElement(event.target);
-  if (!row || !Number.isInteger(playerId) || row.classList.contains('inactive')) return;
+  const context = getChallengeRowContextFromEventTarget(event.target);
+  const clickTarget = event.target.closest('.challenge-row, .challenge-name');
+  if (!context || !clickTarget) return;
+  if (isEntityInactive(getEntityStatusByName(context.player.name))) return;
   event.preventDefault();
-  highlightChallengeWindow(playerId);
-  openChallengeDialog({ playerId });
+  clearChallengeSelection();
+  openChallengeDialog(context.playerId);
 }
 
 function startChallengeHistoryEdit() {
   if (!isChallengeModeActive()) return;
-  const challenge = state.schedule.challenge;
-  const lastEntry = getLastChallengeHistoryEntry(challenge);
+  const lastEntry = getLastChallengeHistoryEntry(state.schedule?.challenge);
   if (!lastEntry) {
     alert('Aucun défi à modifier pour le moment.');
-    return;
-  }
-  const challengerId = Number.isInteger(lastEntry.challengerId)
-    ? lastEntry.challengerId
-    : Number(lastEntry.challengerTeamIndex);
-  const opponentId = Number.isInteger(lastEntry.opponentId) ? lastEntry.opponentId : Number(lastEntry.opponentTeamIndex);
-  if (!Number.isInteger(challengerId) || !Number.isInteger(opponentId)) {
-    alert('Impossible de rouvrir le dernier défi.');
     return;
   }
   challengeEditContext = {
     ...lastEntry,
     orderBefore: Array.isArray(lastEntry.orderBefore) ? [...lastEntry.orderBefore] : null,
   };
-  openChallengeDialog({
-    playerId: challengerId,
-    presetOpponentTeamIndex: opponentId,
+  openChallengeDialog(lastEntry.challengerId, {
+    presetOpponentId: lastEntry.opponentId,
     presetScores: {
       challenger: lastEntry.challengerScore,
       opponent: lastEntry.opponentScore,
@@ -3402,152 +5334,11 @@ function startChallengeHistoryEdit() {
   });
 }
 
-function getChallengeOrder() {
-  ensureChallengeRoster(state.schedule);
-  return state.schedule?.challenge?.order || [];
-}
-
-function getChallengeNames() {
-  return state.schedule?.challenge?.names || [];
-}
-
-function getChallengePosition(teamIndex) {
-  const order = getChallengeOrder();
-  return order.indexOf(teamIndex);
-}
-
-function getChallengePositionMap() {
-  const map = new Map();
-  getChallengeOrder().forEach((teamIndex, position) => map.set(teamIndex, position));
-  return map;
-}
-
-function getPlayerIdFromElement(element) {
-  if (!element) return null;
-  const carrier = element.closest('[data-player-id]');
-  if (!carrier) return null;
-  const teamIndex = Number(carrier.dataset.playerId);
-  return Number.isInteger(teamIndex) ? teamIndex : null;
-}
-
-function highlightChallengeWindow(playerId) {
-  const board = document.getElementById('challengeBoard');
-  if (!board) return;
-  const order = getChallengeOrder();
-  const position = getChallengePosition(playerId);
-  if (!order.length || position === -1) return;
-  if (challengeHighlightTimeout) {
-    clearTimeout(challengeHighlightTimeout);
-  }
-  const positionMap = getChallengePositionMap();
-  const start = Math.max(0, position - 5);
-  const end = Math.min(order.length - 1, position + 5);
-  const allowedIds = getChallengeOpponents(playerId).map(option => option.teamIndex);
-  board.querySelectorAll('.challenge-row').forEach(row => {
-    const rowId = Number(row.dataset.playerId);
-    const rowPosition = positionMap.get(rowId);
-    row.classList.remove('highlight', 'selected');
-    if (rowPosition == null) return;
-    if (rowPosition >= start && rowPosition <= end) {
-      row.classList.add('highlight');
-    }
-    if (rowId === playerId) {
-      row.classList.add('selected');
-    }
-  });
-  challengeSelection = { playerId, allowedIds };
-  challengeHighlightTimeout = setTimeout(() => {
-    clearChallengeHighlights();
-    resetChallengeSelection();
-  }, 3000);
-}
-
-function clearChallengeHighlights() {
-  const board = document.getElementById('challengeBoard');
-  if (!board) return;
-  board.querySelectorAll('.challenge-row').forEach(row => row.classList.remove('highlight', 'selected'));
-}
-
-function resetChallengeSelection() {
-  if (challengeHighlightTimeout) {
-    clearTimeout(challengeHighlightTimeout);
-    challengeHighlightTimeout = null;
-  }
-  challengeSelection = { playerId: null, allowedIds: [] };
-}
-
-function isChallengeSelectionActive() {
-  return Number.isInteger(challengeSelection.playerId);
-}
-
-function openChallengeDialog(config = {}) {
-  if (!isChallengeModeActive()) return;
-  if (!elements.challengeModal || !elements.challengeForm) return;
-  const { playerId, presetOpponentTeamIndex, presetScores, editContext } = config;
-  if (!Number.isInteger(playerId)) return;
-  const form = elements.challengeForm;
-  const select = form.elements.opponentIndex;
-  const position = getChallengePosition(playerId);
-  if (position === -1) return;
-  select.disabled = false;
-  form.dataset.playerId = String(playerId);
-  if (form.elements.challengerIndex) {
-    form.elements.challengerIndex.value = position;
-  }
-  const challengerLabel = getChallengePlayerLabel(playerId, { fallbackPosition: position });
-
-  if (editContext) {
-    const opponentId = Number.isInteger(editContext.opponentId) ? editContext.opponentId : Number(presetOpponentTeamIndex);
-    const opponentPosition = getChallengePosition(opponentId);
-    if (!Number.isInteger(opponentId) || opponentPosition === -1) {
-      alert('Impossible de rouvrir le dernier défi.');
-      clearChallengeEditContext();
-      return;
-    }
-    const opponentName =
-      editContext.opponent || getChallengePlayerLabel(opponentId, { fallbackPosition: opponentPosition });
-    select.innerHTML = `<option value="${opponentId}">${opponentName}</option>`;
-    select.value = String(opponentId);
-    select.disabled = true;
-    form.elements.challengerScore.value = String(
-      Number.isFinite(presetScores?.challenger) ? presetScores.challenger : editContext.challengerScore || 0
-    );
-    form.elements.opponentScore.value = String(
-      Number.isFinite(presetScores?.opponent) ? presetScores.opponent : editContext.opponentScore || 0
-    );
-    const challengerName = editContext.challenger || challengerLabel;
-    updateChallengeDialogText(`Corriger · ${challengerName}`, 'Mode correction : ce duel remplacera le précédent.');
-  } else {
-    const opponents = getChallengeOpponents(playerId);
-    if (!opponents.length) {
-      alert('Aucun adversaire disponible dans la fenêtre ±5.');
-      return;
-    }
-    select.innerHTML = opponents.map(option => `<option value="${option.teamIndex}">${option.label}</option>`).join('');
-    const preset = Number(presetOpponentTeamIndex);
-    if (Number.isInteger(preset) && opponents.some(option => option.teamIndex === preset)) {
-      select.value = String(preset);
-    } else {
-      select.selectedIndex = 0;
-    }
-    form.elements.challengerScore.value = '0';
-    form.elements.opponentScore.value = '0';
-    updateChallengeDialogText(
-      `Défi · ${challengerLabel}`,
-      'Choisissez un adversaire dans la fenêtre ±5 puis validez le score.'
-    );
-  }
-
-  elements.challengeModal.classList.remove('hidden');
-  syncBodyModalState();
-}
-
 function closeChallengeDialog() {
   if (!elements.challengeModal || elements.challengeModal.classList.contains('hidden')) return;
   elements.challengeModal.classList.add('hidden');
   clearChallengeEditContext();
-  clearChallengeHighlights();
-  resetChallengeSelection();
+  clearChallengeSelection();
   syncBodyModalState();
 }
 
@@ -3595,44 +5386,56 @@ function updateChallengeDialogText(titleText, infoText) {
   }
   if (elements.challengeDialogInfo) {
     elements.challengeDialogInfo.textContent =
-      infoText || 'Choisissez un adversaire dans la fenêtre ±5 puis saisissez le score.';
+      infoText || `Choisissez un adversaire dans la fenêtre ±${getChallengeRange()} puis saisissez le score.`;
   }
+}
+
+function exportChallengeRankingCsv() {
+  if (!state.schedule || state.schedule.format !== 'challenge') return;
+  const rows = buildChallengeRankingRows(state.schedule);
+  if (!rows.length) return;
+  const header = ['rang', 'nom', 'matchs', 'victoires', 'nuls', 'defaites', 'points', 'points_pour', 'points_contre', 'difference'].join(';');
+  const body = rows
+    .map((row, index) =>
+      [
+        index + 1,
+        row.name,
+        row.played,
+        row.wins,
+        row.draws,
+        row.losses,
+        row.points,
+        row.pointsFor,
+        row.pointsAgainst,
+        row.goalDiff,
+      ].join(';')
+    )
+    .join('\n');
+  const csv = `\uFEFF${header}\n${body}`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `defi_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function clearChallengeEditContext() {
   challengeEditContext = null;
-  if (elements.challengeForm && elements.challengeForm.elements.opponentIndex) {
+  if (elements.challengeForm?.elements?.opponentIndex) {
     elements.challengeForm.elements.opponentIndex.disabled = false;
   }
-  if (elements.challengeForm && elements.challengeForm.dataset) {
+  if (elements.challengeForm?.elements?.challengerIndex) {
+    elements.challengeForm.elements.challengerIndex.value = '';
+  }
+  if (elements.challengeForm?.dataset) {
     delete elements.challengeForm.dataset.playerId;
+    delete elements.challengeForm.dataset.playerPosition;
   }
   updateChallengeDialogText(null, null);
-}
-
-function getChallengeOpponents(teamIndex, options = {}) {
-  const includeInactive = Boolean(options.includeInactive);
-  const order = getChallengeOrder();
-  const position = getChallengePosition(teamIndex);
-  if (position === -1) return [];
-  const start = Math.max(0, position - 5);
-  const end = Math.min(order.length - 1, position + 5);
-  const opponents = [];
-  for (let pos = start; pos <= end; pos += 1) {
-    if (pos === position) continue;
-    const opponentTeamIndex = order[pos];
-    const opponentPlayer = getChallengePlayerById(opponentTeamIndex);
-    const opponentName =
-      opponentPlayer?.name || getChallengePlayerLabel(opponentTeamIndex, { fallbackPosition: pos });
-    const statusKey = getEntityStatusByName(opponentPlayer?.name || opponentName);
-    if (!includeInactive && isEntityInactive(statusKey)) continue;
-    opponents.push({
-      teamIndex: opponentTeamIndex,
-      label: `${pos + 1}. ${opponentName}`,
-      position: pos,
-    });
-  }
-  return opponents;
 }
 
 function handleChallengeFormSubmit(event) {
@@ -3642,85 +5445,119 @@ function handleChallengeFormSubmit(event) {
   const form = event.target;
   const challengerId = Number(form.dataset.playerId);
   const opponentId = Number(form.elements.opponentIndex.value);
-  const challengerIndex = getChallengePosition(challengerId);
-  const opponentIndex = getChallengePosition(opponentId);
-  if (!Number.isInteger(challengerIndex) || !Number.isInteger(opponentIndex)) {
-    alert('Le classement vient de changer. Réessayez en sélectionnant à nouveau le joueur.');
+  const challenger = getChallengePlayerById(challengerId);
+  const opponent = getChallengePlayerById(opponentId);
+  if (!challenger || !opponent) {
+    alert('Le classement vient de changer. Réessayez.');
+    closeChallengeDialog();
+    return;
+  }
+  const challengerPos = getChallengePosition(challengerId);
+  const opponentPos = getChallengePosition(opponentId);
+  if (challengerPos < 0 || opponentPos < 0 || challengerId === opponentId) {
+    alert('Le classement vient de changer. Réessayez.');
+    closeChallengeDialog();
+    return;
+  }
+  const range = getChallengeRange();
+  if (Math.abs(challengerPos - opponentPos) > range) {
+    alert(`Adversaire non autorisé : la fenêtre actuelle est ±${range}.`);
+    closeChallengeDialog();
+    return;
+  }
+  const allowedOpponentIds = getChallengeOpponents(challengerId).map(entry => entry.id);
+  if (!allowedOpponentIds.includes(opponentId)) {
+    alert('Cet adversaire n’est plus disponible pour ce défi.');
     closeChallengeDialog();
     return;
   }
   const challengerScore = Number(form.elements.challengerScore.value);
   const opponentScore = Number(form.elements.opponentScore.value);
-  const editContext = challengeEditContext ? { ...challengeEditContext } : null;
   applyChallengeResult(
-    { challengerId, opponentId, challengerIndex, opponentIndex, challengerScore, opponentScore },
-    { editContext }
+    {
+      challengerId,
+      opponentId,
+      challengerScore,
+      opponentScore,
+    },
+    { editContext: challengeEditContext ? { ...challengeEditContext } : null }
   );
+  saveChallengeClassSnapshot();
+  persistState();
   closeChallengeDialog();
+  renderChallengeBoard(state.schedule);
+  renderRankingView(state.schedule);
+  renderLiveRankingForChallenge();
 }
 
 function applyChallengeResult(payload, options = {}) {
   if (!isChallengeModeActive()) return;
   ensureChallengeRoster(state.schedule);
-  const { challengerId, opponentId, challengerIndex, opponentIndex, challengerScore, opponentScore } = payload;
   const challenge = state.schedule.challenge;
-  if (!challenge.history) {
-    challenge.history = [];
-  }
-  if (!challenge.order) {
-    const roster = getChallengeRoster(state.schedule);
-    challenge.order = roster.map(player => player.id);
-  }
+  challenge.history = Array.isArray(challenge.history) ? challenge.history : [];
+  challenge.order = getChallengeOrder(state.schedule);
+
   const editContext = options.editContext || null;
   if (editContext && Array.isArray(editContext.orderBefore) && challenge.history.length) {
     challenge.order = [...editContext.orderBefore];
+    restoreChallengePlayerStats(editContext.challengerId, editContext.challengerStatsBefore);
+    restoreChallengePlayerStats(editContext.opponentId, editContext.opponentStatsBefore);
     challenge.history.pop();
   }
-  const order = challenge.order;
-  const resolvedChallengerIndex = Number.isInteger(challengerIndex) ? challengerIndex : getChallengePosition(challengerId);
-  const resolvedOpponentIndex = Number.isInteger(opponentIndex) ? opponentIndex : getChallengePosition(opponentId);
+
+  const challengerId = Number(payload.challengerId);
+  const opponentId = Number(payload.opponentId);
+  const challengerScore = Number(payload.challengerScore);
+  const opponentScore = Number(payload.opponentScore);
+  const order = [...challenge.order];
+  const challengerPos = order.indexOf(challengerId);
+  const opponentPos = order.indexOf(opponentId);
   if (
-    resolvedChallengerIndex < 0 ||
-    resolvedOpponentIndex < 0 ||
-    resolvedChallengerIndex >= order.length ||
-    resolvedOpponentIndex >= order.length ||
-    resolvedChallengerIndex === resolvedOpponentIndex
+    !Number.isInteger(challengerId) ||
+    !Number.isInteger(opponentId) ||
+    !Number.isFinite(challengerScore) ||
+    !Number.isFinite(opponentScore) ||
+    challengerPos < 0 ||
+    opponentPos < 0 ||
+    challengerPos === opponentPos
   ) {
     return;
   }
-  if (!Number.isFinite(challengerScore) || !Number.isFinite(opponentScore)) return;
-  if (challengerScore <= opponentScore) {
-    // Victoire obligatoire pour modifier le classement
-    return;
+
+  const snapshotBefore = [...order];
+  const challengerPlayer = getChallengePlayerById(challengerId);
+  const opponentPlayer = getChallengePlayerById(opponentId);
+  if (!challengerPlayer || !opponentPlayer) return;
+
+  const challengerStatsBefore = normalizeChallengeStats(challengerPlayer.stats);
+  const opponentStatsBefore = normalizeChallengeStats(opponentPlayer.stats);
+  applyChallengeScoreToStats(challengerPlayer, opponentPlayer, challengerScore, opponentScore);
+
+  if (challengerScore > opponentScore && opponentPos < challengerPos) {
+    order[opponentPos] = challengerId;
+    order[challengerPos] = opponentId;
+  } else if (challengerScore < opponentScore && opponentPos > challengerPos) {
+    order[challengerPos] = opponentId;
+    order[opponentPos] = challengerId;
   }
-  if (resolvedOpponentIndex >= resolvedChallengerIndex) {
-    // Le challenger bat un joueur moins bien classé : aucune modification
-    return;
-  }
-  challenge.history = challenge.history || [];
-  const snapshotBefore = order.slice();
-  const challengerTeamId = snapshotBefore[resolvedChallengerIndex];
-  const opponentTeamId = snapshotBefore[resolvedOpponentIndex];
-  const challengerName = getChallengePlayerLabel(challengerTeamId, { fallbackPosition: resolvedChallengerIndex });
-  const opponentName = getChallengePlayerLabel(opponentTeamId, { fallbackPosition: resolvedOpponentIndex });
-  order[resolvedOpponentIndex] = snapshotBefore[resolvedChallengerIndex];
-  order[resolvedChallengerIndex] = snapshotBefore[resolvedOpponentIndex];
-  challenge.history.push({
-    challenger: challengerName,
-    opponent: opponentName,
+
+  state.schedule.challenge.order = order;
+
+  challenge.history.unshift({
+    challengerId,
+    opponentId,
     challengerScore,
     opponentScore,
-    timestamp: new Date().toISOString(),
-    challengerPosition: resolvedChallengerIndex,
-    opponentPosition: resolvedOpponentIndex,
-    challengerId: challengerTeamId,
-    opponentId: opponentTeamId,
+    challengerPos,
+    opponentPos,
     orderBefore: snapshotBefore,
+    timestamp: new Date().toISOString(),
+    challengerStatsBefore,
+    opponentStatsBefore,
   });
-  challenge.history = challenge.history.slice(-20);
-  persistState();
-  renderChallengeBoard(state.schedule);
-  renderRankingView(state.schedule);
+  if (challenge.history.length > 20) {
+    challenge.history.pop();
+  }
 }
 
 function renderGroupRankingCards(schedule) {
@@ -3844,8 +5681,52 @@ function renderLiveRankingPanel(uptoRotation) {
     }
     return;
   }
+  if (state.schedule.format === 'ladder') {
+    renderLiveRankingForLadder();
+    return;
+  }
   if (state.schedule.format === 'challenge') {
     renderLiveRankingForChallenge();
+    return;
+  }
+  if (state.schedule.format === 'swiss') {
+    const rows = updateSwissRanking(state.schedule);
+    if (elements.liveRankingTitle) {
+      elements.liveRankingTitle.textContent = 'Rang · Joueur · Pts';
+    }
+    if (!rows.length) {
+      elements.liveRankingTable.innerHTML = '<p>Aucun classement Ronde Suisse disponible.</p>';
+      return;
+    }
+    const body = rows
+      .slice(0, Math.min(rows.length, 12))
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.name)}</td>
+            <td>${row.points}</td>
+            <td>${row.wins}</td>
+            <td>${row.played}</td>
+          </tr>
+        `
+      )
+      .join('');
+    elements.liveRankingTable.innerHTML = `
+      <p class="live-ranking-meta">Ronde ${state.schedule.swiss?.round || 1}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nom</th>
+            <th>Pts</th>
+            <th>G</th>
+            <th>MJ</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    `;
     return;
   }
   const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
@@ -3894,22 +5775,27 @@ function renderLiveRankingPanel(uptoRotation) {
   `;
 }
 
-function renderLiveRankingForChallenge() {
+function renderLiveRankingForLadder() {
   if (!elements.liveRankingTable) return;
-  const rows = buildRankingModalRows();
+  const rows = computeLadderStandings();
   if (!rows.length) {
-    elements.liveRankingTable.innerHTML = '<p>Le classement Défi sera visible après l’ajout de participants.</p>';
+    elements.liveRankingTable.innerHTML = '<p>Le classement montée-descente s’affichera après la première rotation.</p>';
     return;
   }
   if (elements.liveRankingTitle) {
-    elements.liveRankingTitle.textContent = 'Pos · Joueur';
+    elements.liveRankingTitle.textContent = 'Rang · Joueur · MJ';
   }
   const list = rows
+    .slice(0, Math.min(rows.length, 12))
     .map(
       (row, index) => `
         <tr>
           <td>${index + 1}</td>
           <td>${row.name}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.losses}</td>
+          <td>${row.status}</td>
         </tr>`
     )
     .join('');
@@ -3919,6 +5805,51 @@ function renderLiveRankingForChallenge() {
         <tr>
           <th>#</th>
           <th>Joueur</th>
+          <th>MJ</th>
+          <th>G</th>
+          <th>P</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>${list}</tbody>
+    </table>
+    <p class="live-ranking-note">Vue rapide terrain : touchez “Vue complète” pour le détail.</p>
+  `;
+}
+
+function renderLiveRankingForChallenge() {
+  if (!elements.liveRankingTable) return;
+  const rows = buildChallengeRankingRows();
+  if (!rows.length) {
+    elements.liveRankingTable.innerHTML = '<p>Le classement Défi sera visible après l’ajout de participants.</p>';
+    return;
+  }
+  if (elements.liveRankingTitle) {
+    elements.liveRankingTitle.textContent = 'Pos · Joueur · Pts';
+  }
+  const list = rows
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.played}</td>
+          <td>${row.points}</td>
+          <td>${row.pointsFor}</td>
+          <td>${row.pointsAgainst}</td>
+        </tr>`
+    )
+    .join('');
+  elements.liveRankingTable.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Joueur</th>
+          <th>MJ</th>
+          <th>Pts</th>
+          <th>PM</th>
+          <th>PE</th>
         </tr>
       </thead>
       <tbody>${list}</tbody>
@@ -3929,13 +5860,22 @@ function renderLiveRankingForChallenge() {
 
 function handleLiveFinish() {
   if (!state.schedule) return;
+  const finishLabel = isLadderLiveMode(state.schedule) ? 'terminer la montée-descente' : 'terminer le tournoi';
   const confirmed = window.confirm(
-    'Êtes-vous sûr de vouloir terminer le tournoi ? Les matchs non complétés resteront affichés comme incomplets.'
+    `Êtes-vous sûr de vouloir ${finishLabel} ? Les matchs non complétés resteront affichés comme incomplets.`
   );
   if (!confirmed) return;
   timerController.pause();
+  if (isLadderLiveMode(state.schedule)) {
+    state.schedule.meta = state.schedule.meta || {};
+    state.schedule.meta.sessionEnded = true;
+    persistState();
+  }
   const finalRotation =
-    (state.schedule.meta && state.schedule.meta.rotationCount) || state.schedule.rotations.length || 1;
+    (state.schedule.rotations[state.liveRotationIndex] && state.schedule.rotations[state.liveRotationIndex].number) ||
+    (state.schedule.meta && state.schedule.meta.rotationCount) ||
+    state.schedule.rotations.length ||
+    1;
   showFinalRankingModal(finalRotation);
 }
 
@@ -3946,8 +5886,14 @@ function showFinalRankingModal(uptoRotation) {
   const upto =
     uptoRotation ||
     (state.schedule.rotations[state.liveRotationIndex] && state.schedule.rotations[state.liveRotationIndex].number) ||
-    state.schedule.meta.rotationCount;
-  finalRankingSnapshot = computeRankingSnapshot(state.schedule, upto);
+    state.schedule.meta.rotationCount ||
+    state.schedule.rotations.length;
+  finalRankingSnapshot =
+    state.schedule.format === 'ladder'
+      ? { kind: 'ladder', table: computeLadderStandings(state.schedule), complete: true, uptoRotation: upto }
+      : state.schedule.format === 'swiss'
+        ? { kind: 'swiss', table: updateSwissRanking(state.schedule), complete: true, uptoRotation: upto }
+      : computeRankingSnapshot(state.schedule, upto);
   renderFinalRankingTable(finalRankingSnapshot, upto);
   elements.finalRankingModal.classList.remove('hidden');
   syncBodyModalState();
@@ -3968,6 +5914,85 @@ function renderFinalRankingTable(snapshot, upto) {
   }
   const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
   const columnLabel = formatParticipantLabel({ practiceType, capitalized: true });
+  if (state.schedule?.format === 'ladder') {
+    const rows = snapshot.table
+      .map(
+        (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.losses}</td>
+          <td>${row.points}</td>
+          <td>${row.pointsFor}</td>
+          <td>${row.pointsAgainst}</td>
+          <td>${row.status}</td>
+        </tr>`
+      )
+      .join('');
+    const note = `Classement final après ${upto} rotation(s).`;
+    elements.finalRankingTable.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Pos</th>
+            <th>${columnLabel}</th>
+            <th>MJ</th>
+            <th>G</th>
+            <th>P</th>
+            <th>Pts</th>
+            <th>PM</th>
+            <th>PE</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="note">${note}</p>
+    `;
+    if (elements.finalRankingCsvBtn) {
+      elements.finalRankingCsvBtn.disabled = false;
+    }
+    return;
+  }
+  if (state.schedule?.format === 'swiss') {
+    const rows = snapshot.table
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.name)}</td>
+            <td>${row.points}</td>
+            <td>${row.played}</td>
+            <td>${row.wins}</td>
+            <td>${row.losses}</td>
+            <td>${row.bye}</td>
+          </tr>`
+      )
+      .join('');
+    elements.finalRankingTable.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Pos</th>
+            <th>${columnLabel}</th>
+            <th>Pts</th>
+            <th>MJ</th>
+            <th>G</th>
+            <th>P</th>
+            <th>Exempt</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="note">Classement Ronde Suisse après ${upto} ronde(s).</p>
+    `;
+    if (elements.finalRankingCsvBtn) {
+      elements.finalRankingCsvBtn.disabled = false;
+    }
+    return;
+  }
   const rows = snapshot.table
     .map(
       (row, index) => `
@@ -4015,8 +6040,19 @@ function renderFinalRankingTable(snapshot, upto) {
 
 function downloadFinalRankingCsv() {
   if (!state.schedule) return;
+  if (state.schedule.format === 'swiss') {
+    exportSwissRankingCsv();
+    return;
+  }
   if (!finalRankingSnapshot) {
-    finalRankingSnapshot = computeRankingSnapshot(state.schedule, state.schedule.meta.rotationCount);
+    const upto =
+      (state.schedule.rotations[state.liveRotationIndex] && state.schedule.rotations[state.liveRotationIndex].number) ||
+      state.schedule.meta.rotationCount ||
+      state.schedule.rotations.length;
+    finalRankingSnapshot =
+      state.schedule.format === 'ladder'
+        ? { kind: 'ladder', table: computeLadderStandings(state.schedule), complete: true, uptoRotation: upto }
+        : computeRankingSnapshot(state.schedule, upto);
   }
   if (!finalRankingSnapshot || !finalRankingSnapshot.table.length) return;
   const csv = buildFinalRankingCsv(finalRankingSnapshot);
@@ -4024,7 +6060,13 @@ function downloadFinalRankingCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `classement-final-${Date.now()}.csv`;
+  const today = new Date().toISOString().slice(0, 10);
+  link.download =
+    state.schedule?.format === 'ladder'
+      ? `montee-descente_${today}.csv`
+      : state.schedule?.format === 'swiss'
+        ? `ronde-suisse_${today}.csv`
+        : `classement-final-${Date.now()}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -4034,6 +6076,31 @@ function downloadFinalRankingCsv() {
 function buildFinalRankingCsv(snapshot) {
   const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
   const columnLabel = formatParticipantLabel({ practiceType, capitalized: true });
+  if (state.schedule?.format === 'swiss') {
+    const playerMap = getSwissPlayerMap(state.schedule);
+    const header = ['rang', 'nom', 'points', 'matchs', 'victoires', 'defaites', 'exempt', 'adversaires'].join(';');
+    const rows = snapshot.table.map((row, index) => {
+      const player = playerMap.get(Number(row.id));
+      const opponents = (player?.opponents || [])
+        .map(opponentId => playerMap.get(Number(opponentId))?.name)
+        .filter(Boolean)
+        .join('|');
+      return [index + 1, row.name, row.points, row.played, row.wins, row.losses, row.bye, opponents].join(';');
+    });
+    return [header, ...rows].join('\n');
+  }
+  if (state.schedule?.format === 'ladder') {
+    const duration = state.schedule.meta?.durationMinutes || state.options.duration || '';
+    const refereeFields = Array.isArray(state.schedule.ladder?.refereeFields) ? state.schedule.ladder.refereeFields.join('|') : '';
+    const date = new Date().toISOString().slice(0, 10);
+    const header = ['rang', 'nom', 'terrain_final', 'position', 'matchs', 'victoires', 'defaites', 'date', 'mode', 'duree_match', 'terrains_avec_arbitre'].join(';');
+    const rows = snapshot.table.map((row, index) => {
+      const terrainFinal = Math.floor(index / 2) + 1;
+      const position = index % 2 === 0 ? 'haut' : 'bas';
+      return [index + 1, row.name, terrainFinal, position, row.played, row.wins, row.losses, date, 'montee-descente', duration, refereeFields].join(';');
+    });
+    return [header, ...rows].join('\n');
+  }
   const header = ['Pos', columnLabel, 'Points', 'Joués', 'G', 'N', 'P', 'BP', 'BC', 'Diff'].join(';');
   const rows = snapshot.table.map((row, index) =>
     [
@@ -4100,6 +6167,105 @@ function renderRankingModal() {
   }
   const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
   const label = formatParticipantLabel({ practiceType, capitalized: true });
+  if (state.schedule.format === 'ladder') {
+    const tableRows = rows
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${row.name}</td>
+            <td>${row.played}</td>
+            <td>${row.wins}</td>
+            <td>${row.losses}</td>
+            <td>${row.pointsFor}</td>
+            <td>${row.pointsAgainst}</td>
+            <td>${row.status}</td>
+          </tr>`
+      )
+      .join('');
+    elements.rankingModalBody.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${label}</th>
+            <th>MJ</th>
+            <th>G</th>
+            <th>P</th>
+            <th>PM</th>
+            <th>PE</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    `;
+    return;
+  }
+  if (state.schedule.format === 'challenge' && state.schedule.challenge) {
+    const tableRows = rows
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${row.name}</td>
+            <td>${row.played}</td>
+            <td>${row.points}</td>
+            <td>${row.pointsFor}</td>
+            <td>${row.pointsAgainst}</td>
+          </tr>`
+      )
+      .join('');
+    elements.rankingModalBody.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${label}</th>
+            <th>MJ</th>
+            <th>Pts</th>
+            <th>PM</th>
+            <th>PE</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    `;
+    return;
+  }
+  if (state.schedule.format === 'swiss' && state.schedule.swiss) {
+    const tableRows = rows
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.name)}</td>
+            <td>${row.points}</td>
+            <td>${row.played}</td>
+            <td>${row.wins}</td>
+            <td>${row.losses}</td>
+            <td>${row.bye}</td>
+          </tr>`
+      )
+      .join('');
+    elements.rankingModalBody.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${label}</th>
+            <th>Pts</th>
+            <th>MJ</th>
+            <th>G</th>
+            <th>P</th>
+            <th>Exempt</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    `;
+    return;
+  }
   const tableRows = rows
     .map(
       (row, index) => `
@@ -4137,29 +6303,13 @@ function renderRankingModal() {
 function buildRankingModalRows() {
   if (!state.schedule) return [];
   if (state.schedule.format === 'ladder' && state.schedule.ladder) {
-    const names = state.schedule.ladder.names || [];
-    const order = ensureLadderOrder(state.schedule.ladder, names.length);
-    return order.map(index => ({
-      name: names[index],
-      points: null,
-      played: null,
-      wins: null,
-      draws: null,
-      losses: null,
-      goalDiff: null,
-    }));
+    return computeLadderStandings(state.schedule);
   }
   if (state.schedule.format === 'challenge' && state.schedule.challenge) {
-    const players = getChallengePlayers(state.schedule);
-    return players.map(player => ({
-      name: player?.name || 'Participant',
-      points: null,
-      played: null,
-      wins: null,
-      draws: null,
-      losses: null,
-      goalDiff: null,
-    }));
+    return buildChallengeRankingRows(state.schedule);
+  }
+  if (state.schedule.format === 'swiss' && state.schedule.swiss) {
+    return updateSwissRanking(state.schedule);
   }
   if (state.schedule.format === 'round-robin' || !state.schedule.groups?.length) {
     const snapshot = computeRankingSnapshot(state.schedule, state.schedule.meta?.rotationCount || Number.MAX_SAFE_INTEGER);
@@ -4233,6 +6383,12 @@ function handleContextTab(context) {
   elements.contextTabs.querySelectorAll('[data-context]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.context === context);
   });
+  if (state.schedule?.format === 'swiss' && (context === 'live' || context === 'projection')) {
+    goTo('results');
+    setActiveView('rotations');
+    alert('La Ronde Suisse se pilote directement dans le planning.');
+    return;
+  }
   if (context === 'manage') {
     goTo('results');
     setActiveView('rotations');
@@ -4337,6 +6493,32 @@ function closeOverflowPanels() {
 }
 
 function handleGlobalMenuClick(event) {
+  const trigger = event.target.closest('.info-trigger');
+  const existingTooltip = trigger?.parentElement?.querySelector('.info-tooltip');
+  document.querySelectorAll('.info-tooltip').forEach(tooltip => tooltip.remove());
+  if (trigger) {
+    event.preventDefault();
+    if (existingTooltip) return;
+    const tip = document.createElement('div');
+    tip.className = 'info-tooltip';
+    tip.textContent = trigger.dataset.tip || '';
+    trigger.parentElement.style.position = 'relative';
+    trigger.parentElement.appendChild(tip);
+  }
+  const toggle = event.target.closest('.collapsible-toggle');
+  if (toggle) {
+    event.preventDefault();
+    const targetId = toggle.dataset.collapsibleTarget;
+    if (!targetId) return;
+    const body = document.getElementById(targetId);
+    if (!body) return;
+    const collapsed = body.classList.toggle('collapsed');
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    const icon = toggle.querySelector('.collapsible-icon');
+    if (icon) {
+      icon.textContent = collapsed ? '▸' : '▾';
+    }
+  }
   if (elements.resultsMorePanel && !elements.resultsMorePanel.classList.contains('hidden')) {
     if (!event.target.closest('.results-tertiary-cta')) {
       closeResultsMorePanel();
@@ -4363,16 +6545,239 @@ function startLiveMode() {
   renderLiveRotation();
 }
 
+function isLadderLiveMode(schedule = state.schedule) {
+  return Boolean(
+    state.activeModeId === 'raquettes-montee-descente' ||
+      schedule?.format === 'ladder' ||
+      schedule?.rotations?.some(rotation => rotation.matches?.some(match => Array.isArray(match.ladderSlots)))
+  );
+}
+
+function updateLadderLiveLayout(isLadder) {
+  if (!elements.liveShell) return;
+  elements.liveShell.classList.toggle('ladder-live-mode', Boolean(isLadder));
+  if (elements.liveScorePanel) {
+    elements.liveScorePanel.classList.toggle('hidden', Boolean(isLadder));
+  }
+  if (elements.liveLadderSecondary) {
+    elements.liveLadderSecondary.classList.toggle('hidden', !Boolean(isLadder));
+  }
+}
+
+function isLadderPilotModalOpen() {
+  return state.currentScreen === 'ladder-pilot';
+}
+
+function isSwissPilotScreenOpen() {
+  return state.currentScreen === 'swiss-pilot';
+}
+
+function renderLadderPilotModal() {
+  if (!elements.ladderPilotBody || !isLadderLiveMode(state.schedule)) return;
+  const summary = buildLadderCurrentRotationSummary(state.schedule);
+  if (!summary) {
+    elements.ladderPilotBody.innerHTML = '<p class="live-empty">Aucune rotation disponible pour le pilotage.</p>';
+    if (elements.ladderPilotMeta) elements.ladderPilotMeta.textContent = '';
+    if (elements.ladderPilotNextBtn) elements.ladderPilotNextBtn.disabled = true;
+    return;
+  }
+  const rotation = summary.rotation;
+  const roleAssignments = computeRoleAssignments(rotation);
+  const metaParts = [
+    formatLadderRotationLabel(rotation, state.schedule),
+    `${summary.activeFields} terrains`,
+    `${summary.completed} / ${summary.activeFields} scores saisis`,
+  ];
+  if (summary.timer) metaParts.push(`Temps restant ${summary.timer}`);
+  else if (rotation.durationLabel) metaParts.push(rotation.durationLabel);
+  if (elements.ladderPilotMeta) {
+    elements.ladderPilotMeta.textContent = metaParts.join(' • ');
+  }
+  if (elements.ladderPilotTitle) {
+    elements.ladderPilotTitle.textContent = formatLadderRotationLabel(rotation, state.schedule);
+  }
+  if (elements.ladderPilotNextBtn) {
+    const limitedLast = !isLadderOpenSession(state.schedule) && summary.total && rotation.number >= summary.total;
+    elements.ladderPilotNextBtn.disabled = summary.stateKey !== 'ready' || isLadderSessionEnded(state.schedule);
+    elements.ladderPilotNextBtn.textContent = isLadderSessionEnded(state.schedule)
+      ? 'Séance terminée'
+      : limitedLast
+        ? 'Terminer le tournoi'
+        : 'Rotation suivante';
+  }
+  if (elements.ladderPilotFinishBtn) {
+    elements.ladderPilotFinishBtn.disabled = isLadderSessionEnded(state.schedule);
+    elements.ladderPilotFinishBtn.textContent = isLadderSessionEnded(state.schedule)
+      ? 'Montée-descente terminée'
+      : 'Terminer la montée-descente';
+  }
+  const cards = rotation.matches.map(match => buildLadderPilotCard(rotation, match, roleAssignments)).join('');
+  elements.ladderPilotBody.innerHTML = `
+    <div class="ladder-focus-card ladder-focus-card-results ladder-pilot-summary-card">
+      <div class="ladder-focus-copy">
+        <p class="eyebrow">Console EPS</p>
+        <h3>${formatLadderRotationLabel(rotation, state.schedule)}</h3>
+        <div class="ladder-focus-stats">
+          <span class="ladder-summary-pill">${summary.activeFields} terrains utilisés</span>
+          <span class="ladder-summary-pill">${summary.completed} matchs saisis / ${summary.activeFields}</span>
+          <span class="ladder-summary-pill">${summary.playerCount} joueurs</span>
+          <span class="ladder-summary-pill">max possible : ${summary.maxCourts} terrains</span>
+        </div>
+      </div>
+      <div class="ladder-focus-actions">
+        <span class="state-pill ${summary.stateKey === 'ready' ? 'live' : 'next'}">${summary.stateLabel}</span>
+      </div>
+    </div>
+    <div class="ladder-pilot-console">
+      <div class="ladder-pilot-modal-list">${cards}</div>
+    </div>
+  `;
+}
+
+function openLadderPilotModal() {
+  if (!isLadderLiveMode(state.schedule) || !elements.ladderPilotModal) return;
+  closeOverflowPanels();
+  goTo('ladder-pilot');
+  try {
+    renderLadderPilotModal();
+  } catch (error) {
+    console.error('Impossible d’ouvrir le pilotage montée-descente', error);
+    goTo('results');
+    alert('Impossible d’ouvrir le pilotage montée-descente.');
+  }
+}
+
+function isSwissWinnerResolved(match) {
+  if (!match) return false;
+  if (match.bye) return true;
+  const winnerId = Number(match.winnerId);
+  const p1Id = Number(match.p1Id);
+  const p2Id = Number(match.p2Id);
+  return Number.isInteger(winnerId) && winnerId !== 0 && (winnerId === p1Id || winnerId === p2Id);
+}
+
+function renderSwissPilotScreen() {
+  if (!elements.swissPilotBody || state.schedule?.format !== 'swiss' || !state.schedule?.swiss) return;
+  const schedule = state.schedule;
+  const currentRound = schedule.swiss.round || 1;
+  const playerMap = getSwissPlayerMap(schedule);
+  const remainingCount = (schedule.swiss.currentMatches || []).filter(match => !isSwissWinnerResolved(match)).length;
+  const matches = (schedule.swiss.currentMatches || [])
+    .map(match => {
+      if (match.bye) {
+        const player = playerMap.get(Number(match.p1Id));
+        if (!player) return '';
+        return `
+          <article class="swiss-match-card swiss-match-card-bye">
+            <header>
+              <p class="eyebrow">Exempt</p>
+              <h3>${escapeHtml(player.name)}</h3>
+            </header>
+            <p class="swiss-bye-player">Exemption automatique · +1 point</p>
+          </article>
+        `;
+      }
+      const p1 = playerMap.get(Number(match.p1Id));
+      const p2 = playerMap.get(Number(match.p2Id));
+      if (!p1 || !p2) return '';
+      const winnerId = Number(match.winnerId);
+      const p1State = winnerId === p1.id ? 'winner' : winnerId === p2.id ? 'loser' : '';
+      const p2State = winnerId === p2.id ? 'winner' : winnerId === p1.id ? 'loser' : '';
+      return `
+        <article class="swiss-match-card ${isSwissWinnerResolved(match) ? 'validated' : ''}" data-swiss-match-id="${match.id}">
+          <header>
+            <p class="eyebrow">Terrain ${match.field || '—'}</p>
+            <h3>Match</h3>
+          </header>
+          <div class="swiss-match-players">
+            <button type="button" class="swiss-player-btn ${p1State}" data-swiss-winner="${p1.id}" data-swiss-match-id="${match.id}">
+              <span class="swiss-player-name">${escapeHtml(p1.name)}</span>
+              <span class="swiss-player-points">${p1.points} pt${p1.points > 1 ? 's' : ''}</span>
+            </button>
+            <span class="swiss-versus">VS</span>
+            <button type="button" class="swiss-player-btn ${p2State}" data-swiss-winner="${p2.id}" data-swiss-match-id="${match.id}">
+              <span class="swiss-player-name">${escapeHtml(p2.name)}</span>
+              <span class="swiss-player-points">${p2.points} pt${p2.points > 1 ? 's' : ''}</span>
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+  const resolvedCount = (schedule.swiss.currentMatches || []).filter(match => isSwissWinnerResolved(match)).length;
+  const totalCount = (schedule.swiss.currentMatches || []).length;
+  const canValidate = totalCount > 0 && (schedule.swiss.currentMatches || []).every(match => isSwissWinnerResolved(match));
+  if (elements.swissPilotTitle) {
+    elements.swissPilotTitle.textContent = `Ronde Suisse — Ronde ${currentRound}`;
+  }
+  if (elements.swissPilotMeta) {
+    elements.swissPilotMeta.textContent = `${resolvedCount} / ${totalCount} match(s) résolus`;
+  }
+  elements.swissPilotBody.innerHTML = `
+    <div class="swiss-shell swiss-pilot-layout">
+      <header class="swiss-board-header">
+        <div>
+          <p class="eyebrow">Ronde Suisse</p>
+          <h3>Ronde ${currentRound}</h3>
+          <p class="swiss-board-meta">${remainingCount} match(s) restant(s) · ${resolvedCount} / ${totalCount} résolu(s)</p>
+        </div>
+      </header>
+      <div class="swiss-board-layout">
+        <section class="swiss-match-list">${matches || '<p class="live-empty">Aucun match pour cette ronde.</p>'}</section>
+      </div>
+      ${
+        canValidate
+          ? `
+            <section class="swiss-pilot-cta swiss-validation-cta">
+              <button type="button" class="btn primary xl" data-swiss-validate-round>
+                Valider la ronde et passer à la suivante
+              </button>
+            </section>
+          `
+          : ''
+      }
+    </div>
+  `;
+}
+
+function openSwissPilotScreen() {
+  if (state.schedule?.format !== 'swiss' || !elements.swissPilotScreen) return;
+  closeOverflowPanels();
+  goTo('swiss-pilot');
+  renderSwissPilotScreen();
+}
+
+function closeSwissPilotScreen() {
+  if (!elements.swissPilotScreen) return;
+  goTo('results');
+  setActiveView('rotations');
+}
+
+function closeLadderPilotModal() {
+  goTo('options');
+}
+
+function refreshLadderPilotModalIfOpen() {
+  if (!isLadderPilotModalOpen()) return;
+  renderLadderPilotModal();
+}
+
 function renderLiveRotation() {
   if (!elements.liveRotationContent) return;
   setLiveTimerPanelEnabled(Boolean(state.schedule && state.options.timer));
   if (state.schedule) {
     hydrateScheduleForSpecialModes(state.schedule);
   }
+  const ladderLiveMode = isLadderLiveMode(state.schedule);
   if (!state.schedule) {
+    updateLadderLiveLayout(ladderLiveMode);
+    renderLadderCurrentRotationCard();
     elements.liveRotationTitle.textContent = 'Rotation';
     renderLiveMeta(null);
     elements.liveRotationContent.innerHTML = '<p>Générez un planning avant de lancer les rotations.</p>';
+    if (elements.liveLadderSecondary) {
+      elements.liveLadderSecondary.innerHTML = '';
+    }
     if (elements.liveStatus) elements.liveStatus.textContent = '';
     if (elements.liveNextBtn) elements.liveNextBtn.disabled = true;
     renderLiveFieldBoard(null);
@@ -4383,7 +6788,12 @@ function renderLiveRotation() {
   }
   const rotation = state.schedule.rotations[state.liveRotationIndex] || state.schedule.rotations[0];
   if (!rotation) {
+    updateLadderLiveLayout(false);
+    renderLadderCurrentRotationCard();
     elements.liveRotationContent.innerHTML = '<p>Aucune rotation à afficher.</p>';
+    if (elements.liveLadderSecondary) {
+      elements.liveLadderSecondary.innerHTML = '';
+    }
     if (elements.liveStatus) elements.liveStatus.textContent = '';
     if (elements.liveNextBtn) elements.liveNextBtn.disabled = true;
     renderLiveFieldBoard(null);
@@ -4392,13 +6802,42 @@ function renderLiveRotation() {
     renderNextRotationPreview();
     return;
   }
-  const total = state.schedule.meta.rotationCount;
-  const baseTitle = rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotation.number}` : `Rotation ${rotation.number}`;
-  elements.liveRotationTitle.textContent = `${baseTitle} / ${total}`;
+  elements.liveRotationTitle.textContent = isLadderLiveMode(state.schedule)
+    ? formatLadderRotationLabel(rotation, state.schedule)
+    : rotation.groupLabel
+      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${state.schedule.meta.rotationCount}`
+      : `Rotation ${rotation.number} / ${state.schedule.meta.rotationCount}`;
   renderLiveMeta(state.schedule.meta);
   elements.liveRotationContent.dataset.rotation = rotation.number;
+  renderLadderCurrentRotationCard();
   const roleAssignments = computeRoleAssignments(rotation);
-  elements.liveRotationContent.innerHTML = buildLiveMatchCards(rotation, roleAssignments);
+  if (ladderLiveMode) {
+    updateLadderLiveLayout(true);
+    if (elements.liveNowLabel) elements.liveNowLabel.textContent = 'Terrains pilotables';
+    if (elements.liveScoreEyebrow) elements.liveScoreEyebrow.textContent = 'Mouvements';
+    if (elements.liveScoreTitle) elements.liveScoreTitle.textContent = 'Après validation';
+    if (elements.liveLadderSecondary) {
+      elements.liveLadderSecondary.innerHTML = `
+        <div class="live-ladder-secondary-panel">
+          <header class="live-score-header">
+            <p class="eyebrow">Mouvements</p>
+            <h3>Après validation</h3>
+          </header>
+          <div class="live-ladder-movements">${buildLadderMovementPanel(rotation, roleAssignments)}</div>
+        </div>
+      `;
+    }
+    elements.liveRotationContent.innerHTML = '';
+  } else {
+    updateLadderLiveLayout(false);
+    if (elements.liveNowLabel) elements.liveNowLabel.textContent = 'Terrains en jeu';
+    if (elements.liveScoreEyebrow) elements.liveScoreEyebrow.textContent = 'Scores en direct';
+    if (elements.liveScoreTitle) elements.liveScoreTitle.textContent = 'Gestion des matchs';
+    if (elements.liveLadderSecondary) {
+      elements.liveLadderSecondary.innerHTML = '';
+    }
+    elements.liveRotationContent.innerHTML = buildLiveMatchCards(rotation, roleAssignments);
+  }
   renderLiveFieldBoard(rotation, roleAssignments);
   renderLiveRest(rotation.byes, roleAssignments);
   renderNextRotationPreview();
@@ -4420,6 +6859,9 @@ function renderLiveMeta(meta) {
   }
   const parts = [];
   if (meta.formatLabel) parts.push(meta.formatLabel);
+  if (meta.format === 'ladder') {
+    parts.push(meta.sessionMode === 'limited' ? `${meta.rotationLimit || meta.rotationCount || 0} rotations` : 'Session libre');
+  }
   if (meta.groupCount) parts.push(`${meta.groupCount} groupe${meta.groupCount > 1 ? 's' : ''}`);
   if (meta.fieldCount) {
     const fieldLabel = formatFieldLabel({
@@ -4437,6 +6879,53 @@ function buildLiveMatchCards(rotation, roleAssignments) {
     return '<p class="live-empty">Aucun match prévu pour cette rotation.</p>';
   }
   return rotation.matches.map(match => buildLiveMatchCard(rotation, match, roleAssignments)).join('');
+}
+
+function buildLadderMovementPanel(rotation, roleAssignments) {
+  const items = computeLadderMovementFeed(state.schedule, rotation, roleAssignments);
+  if (!items.length) {
+    return `
+      <article class="ladder-movement-card">
+        <span class="ladder-movement-icon">•</span>
+        <div>
+          <strong>En attente de résultat</strong>
+          <p>Validez un terrain pour afficher les montées, descentes et transitions visibles.</p>
+        </div>
+      </article>
+    `;
+  }
+  const iconMap = {
+    up: '⬆️',
+    down: '⬇️',
+    arbiter: '🟨',
+    play: '▶️',
+    rest: '⏸️',
+    unavailable: '⛔',
+    steady: '•',
+  };
+  const titleMap = {
+    up: 'Monte',
+    down: 'Descend',
+    arbiter: 'Arbitre',
+    play: 'Entre en jeu',
+    rest: 'Repos',
+    unavailable: 'Indisponible',
+    steady: 'Stable',
+  };
+  return items
+    .map(item => {
+      const kind = item.type || 'steady';
+      return `
+        <article class="ladder-movement-card ${kind}">
+          <span class="ladder-movement-icon">${iconMap[kind] || '•'}</span>
+          <div>
+            <strong>${titleMap[kind] || 'Info'}</strong>
+            <p>${item.label}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
 }
 
 function buildLiveMatchCard(rotation, match, roleAssignments) {
@@ -4499,12 +6988,13 @@ function buildLiveTeamColumn(side, name, score, matchId, options = {}) {
   const disabled = options.disabled ? 'disabled' : '';
   const minusLabel = `Diminuer le score de ${name}`;
   const plusLabel = `Augmenter le score de ${name}`;
+  const matchFieldToken = buildFieldToken(matchId);
   return `
     <div class="live-team">
       <strong>${decorateNameWithStatus(name)}</strong>
       <div class="live-score-pad">
         <button type="button" class="score-adjust" aria-label="${minusLabel}" data-score-side="${side}" data-score-step="-1" data-match-id="${matchId}" ${disabled}>−</button>
-        <input type="number" min="0" inputmode="numeric" aria-label="Score ${name}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" ${disabled} />
+        <input type="number" min="0" inputmode="numeric" id="live-score-${matchFieldToken}-${side}" name="live-score-${matchFieldToken}-${side}" aria-label="Score ${name}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" ${disabled} />
         <button type="button" class="score-adjust" aria-label="${plusLabel}" data-score-side="${side}" data-score-step="1" data-match-id="${matchId}" ${disabled}>+</button>
       </div>
     </div>
@@ -4513,6 +7003,50 @@ function buildLiveTeamColumn(side, name, score, matchId, options = {}) {
 
 function renderLiveRest(byes = [], roleAssignments) {
   if (!elements.liveRestNotice) return;
+  if (state.schedule?.format === 'ladder') {
+    const bench = computeLadderBenchData(state.schedule, getCurrentLadderRotation(state.schedule), roleAssignments);
+    const buildStatusButtons = (name, activeLabel = 'Neutraliser', inactiveLabel = 'Réactiver') => {
+      const inactive = isEntityInactive(getEntityStatusByName(name));
+      const nextStatus = inactive ? STATUS_TYPES.active.key : STATUS_TYPES.unavailable.key;
+      const label = inactive ? inactiveLabel : activeLabel;
+      return `
+        <button type="button" class="btn ghost tiny" data-status-player="${escapeHtml(name)}" data-status-value="${nextStatus}">
+          ${label}
+        </button>
+      `;
+    };
+    const renderPersonList = (title, names, emptyMessage) => `
+      <article class="ladder-bench-card">
+        <header>
+          <h4>${title}</h4>
+          <span>${names.length}</span>
+        </header>
+        ${
+          names.length
+            ? `<div class="ladder-bench-list">${names
+                .map(
+                  name => `
+                    <div class="ladder-bench-item">
+                      <strong>${name}</strong>
+                      ${buildStatusButtons(name)}
+                    </div>
+                  `
+                )
+                .join('')}</div>`
+            : `<p class="ladder-bench-empty">${emptyMessage}</p>`
+        }
+      </article>
+    `;
+    elements.liveRestNotice.innerHTML = `
+      <div class="ladder-bench-grid">
+        ${renderPersonList('En attente', bench.waiting, 'Aucun joueur en attente.')}
+        ${renderPersonList('Prochains entrants', bench.nextEntrants, 'La rotation suivante garde les mêmes joueurs.')}
+        ${renderPersonList('Indisponibles', bench.unavailable, 'Aucun joueur neutralisé.')}
+      </div>
+    `;
+    elements.liveRestNotice.classList.remove('hidden');
+    return;
+  }
   const waiting = filterRestTeams(byes || [], roleAssignments);
   const roleTeams = collectRoleTeams(roleAssignments);
   const hasWaiting = waiting.length > 0;
@@ -4535,6 +7069,9 @@ function renderLiveRest(byes = [], roleAssignments) {
 
 function computeRoleAssignments(rotation) {
   if (!rotation || !state.schedule) return null;
+  if (state.schedule.format === 'ladder') {
+    return computeLadderRoleAssignments(rotation);
+  }
   const settings = getRoleSettings();
   if (!settings.enabled) return null;
   const matches = rotation.matches.map(match => {
@@ -4585,6 +7122,35 @@ function computeRoleAssignments(rotation) {
       attachRole(entry.id, 'coach', { mode: 'self', teams: [entry.participants.home, entry.participants.away] });
     });
   }
+  return assignments.size ? assignments : null;
+}
+
+function computeLadderRoleAssignments(rotation) {
+  if (!rotation || !state.schedule || state.schedule.format !== 'ladder') return null;
+  if (rotation.fieldReferees && typeof rotation.fieldReferees === 'object') {
+    const assignments = new Map();
+    rotation.matches.forEach(match => {
+      const arbiter = rotation.fieldReferees[String(match.field)] || rotation.fieldReferees[match.field];
+      if (!arbiter || isEntityInactive(getEntityStatusByName(arbiter))) return;
+      const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+      match.id = matchId;
+      assignments.set(matchId, { arbitre: arbiter });
+    });
+    if (assignments.size) return assignments;
+  }
+  const waitingPool = Array.isArray(rotation.byes)
+    ? rotation.byes.filter(name => !isEntityInactive(getEntityStatusByName(name)))
+    : [];
+  const assignments = new Map();
+  rotation.matches.forEach(match => {
+    const fieldNumber = Number(match.field);
+    if (getLadderCourtProfile(fieldNumber) !== 'arbiter') return;
+    const arbiter = waitingPool.shift();
+    if (!arbiter) return;
+    const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+    match.id = matchId;
+    assignments.set(matchId, { arbitre: arbiter });
+  });
   return assignments.size ? assignments : null;
 }
 
@@ -4670,8 +7236,144 @@ function renderRoleLines(roleData) {
   return parts.length ? `<div class="role-lines">${parts.join('')}</div>` : '';
 }
 
+function buildLadderQuickResult(matchId, outcome) {
+  if (!matchId || !outcome) return;
+  const presets = {
+    home: { home: 1, away: 0 },
+    away: { home: 0, away: 1 },
+    draw: { home: 1, away: 1 },
+  };
+  const preset = presets[outcome];
+  if (!preset) return;
+  setScoreValue(matchId, 'home', preset.home);
+  setScoreValue(matchId, 'away', preset.away);
+  setMatchValidated(matchId, true);
+  invalidateStandingsCache();
+  persistState();
+  updateMatchCompletionState(matchId);
+  syncScoreInputs(matchId, 'home', preset.home);
+  syncScoreInputs(matchId, 'away', preset.away);
+  if (state.schedule) {
+    renderRankingView(state.schedule);
+    renderLiveRankingPanel();
+    updateLiveControls();
+    renderChronoScreen();
+    renderProjectionScreen();
+    renderLiveRotation();
+    const teamsView = buildTeamEntriesFromSchedule(state.schedule);
+    state.schedule.teams = teamsView;
+    renderTeamView(teamsView);
+  }
+  refreshLadderPilotModalIfOpen();
+}
+
+function getValidatedLadderMatchOutcome(matchId, participants) {
+  if (!matchId || !participants || isMatchNeutralized(participants) || !isMatchValidated(matchId)) return null;
+  const record = state.scores?.[matchId];
+  if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away) || record.home === record.away) return null;
+  return record.home > record.away ? { winner: 'home', loser: 'away' } : { winner: 'away', loser: 'home' };
+}
+
+function buildLadderPilotCard(rotation, match, roleAssignments, options = {}) {
+  const inlineScoreEditor = Boolean(options.inlineScoreEditor);
+  const participants = resolveMatchParticipants(match, state.schedule);
+  const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
+  match.id = matchId;
+  const profile = getLadderCourtProfile(Number(match.field));
+  const arbiter = roleAssignments?.get(matchId)?.arbitre || '';
+  const profileLabel = arbiter ? `Arbitre · ${arbiter}` : profile === 'arbiter' ? 'Avec arbitre' : 'Sans arbitre';
+  const neutralized = isMatchNeutralized(participants);
+  const validated = isMatchValidated(matchId);
+  const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
+  const awayScore = formatScoreValue(getScoreValue(matchId, 'away'));
+  const disabledAttr = neutralized ? 'disabled' : '';
+  const homeInactive = isEntityInactive(getEntityStatusByName(participants.home));
+  const awayInactive = isEntityInactive(getEntityStatusByName(participants.away));
+  const editorHiddenClass = inlineScoreEditor ? '' : ' hidden';
+  const statusTag = neutralized ? 'Neutralisé' : validated ? 'Validé' : '';
+  const toggleLabel = validated ? 'Modifier le score' : 'Entrer le score';
+  const validatedOutcome = getValidatedLadderMatchOutcome(matchId, participants);
+  const homeResultClass =
+    validatedOutcome?.winner === 'home' ? 'result-winner' : validatedOutcome?.loser === 'home' ? 'result-loser' : '';
+  const awayResultClass =
+    validatedOutcome?.winner === 'away' ? 'result-winner' : validatedOutcome?.loser === 'away' ? 'result-loser' : '';
+  return `
+    <article class="live-match-card ladder-pilot-card ${validated ? 'validated' : 'active'} ${neutralized ? 'neutralized' : ''}" data-match-id="${matchId}">
+      <header class="ladder-pilot-head">
+        <div>
+          <p class="eyebrow">Terrain ${match.field}</p>
+          <h4 class="ladder-player-line">
+            <span class="ladder-player-chip ${homeResultClass}">${escapeHtml(participants.home)}</span>
+            <span class="ladder-versus">vs</span>
+            <span class="ladder-player-chip ${awayResultClass}">${escapeHtml(participants.away)}</span>
+          </h4>
+        </div>
+        <div class="ladder-pilot-tags">
+          <span class="state-pill ${profile === 'arbiter' ? 'next' : 'rest'}">${profileLabel}</span>
+          ${statusTag ? `<span class="state-pill ${neutralized ? 'rest' : 'live'}">${statusTag}</span>` : ''}
+        </div>
+      </header>
+      <div class="ladder-quick-actions">
+        <button type="button" class="btn primary" data-ladder-quick="home" data-match-id="${matchId}" ${disabledAttr}>
+          Victoire ${participants.home}
+        </button>
+        <button type="button" class="btn primary" data-ladder-quick="away" data-match-id="${matchId}" ${disabledAttr}>
+          Victoire ${participants.away}
+        </button>
+        <button type="button" class="btn secondary" data-ladder-quick="draw" data-match-id="${matchId}" ${disabledAttr}>
+          Match nul
+        </button>
+      </div>
+      <div class="ladder-pilot-secondary">
+        <button type="button" class="btn ghost tiny" data-ladder-score-toggle data-match-id="${matchId}" ${disabledAttr}>
+          ${toggleLabel}
+        </button>
+        <div class="ladder-status-actions">
+          <button type="button" class="btn ghost tiny" data-status-player="${escapeHtml(participants.home)}" data-status-value="${
+          homeInactive ? STATUS_TYPES.active.key : STATUS_TYPES.unavailable.key
+        }">
+          ${homeInactive ? 'Réactiver' : 'Neutraliser'} · ${participants.home}
+          </button>
+          <button type="button" class="btn ghost tiny" data-status-player="${escapeHtml(participants.away)}" data-status-value="${
+          awayInactive ? STATUS_TYPES.active.key : STATUS_TYPES.unavailable.key
+        }">
+          ${awayInactive ? 'Réactiver' : 'Neutraliser'} · ${participants.away}
+          </button>
+        </div>
+      </div>
+      <div class="ladder-score-editor${editorHiddenClass}" data-ladder-score-editor="${matchId}">
+        <div class="teams">
+          ${buildLiveTeamColumn('home', participants.home, homeScore, matchId, { disabled: validated || neutralized })}
+          ${buildLiveTeamColumn('away', participants.away, awayScore, matchId, { disabled: validated || neutralized })}
+        </div>
+        <div class="live-card-actions">
+          <button type="button" class="btn ghost tiny live-validate ${validated || neutralized ? 'hidden' : ''}" data-validate-match="${matchId}" ${
+            neutralized || isMatchCompleteById(matchId) ? '' : 'disabled'
+          }>Valider</button>
+          <button type="button" class="btn ghost tiny live-edit ${validated && !neutralized ? '' : 'hidden'}" data-edit-match="${matchId}">Modifier</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderLadderFieldBoard(rotation, roleAssignments) {
+  if (!elements.liveFieldBoard) return;
+  if (!rotation || !rotation.matches?.length) {
+    elements.liveFieldBoard.innerHTML = '<p class="live-board-empty">Aucun terrain actif pour cette rotation.</p>';
+    return;
+  }
+  elements.liveFieldBoard.innerHTML = rotation.matches
+    .map(match => buildLadderPilotCard(rotation, match, roleAssignments))
+    .join('');
+}
+
 function renderLiveFieldBoard(rotation, roleAssignments) {
   if (!elements.liveFieldBoard) return;
+  if (isLadderLiveMode(state.schedule)) {
+    renderLadderFieldBoard(rotation, roleAssignments);
+    return;
+  }
   if (!rotation || !rotation.matches || !rotation.matches.length) {
     const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
     const pluralFields = formatFieldLabel({ practiceType, plural: true });
@@ -4732,15 +7434,12 @@ function renderNextRotationPreview() {
     if (elements.liveNextLabel) elements.liveNextLabel.textContent = '';
     return;
   }
-  const total =
-    state.schedule.meta && state.schedule.meta.rotationCount
-      ? state.schedule.meta.rotationCount
-      : state.schedule.rotations.length;
   if (elements.liveNextLabel) {
-    const nextLabel = nextRotation.groupLabel
-      ? `${nextRotation.groupLabel} · Rotation ${nextRotation.number}`
-      : `Rotation ${nextRotation.number}`;
-    elements.liveNextLabel.textContent = `${nextLabel} / ${total}`;
+    elements.liveNextLabel.textContent = isLadderLiveMode(state.schedule)
+      ? formatLadderRotationLabel(nextRotation, state.schedule)
+      : nextRotation.groupLabel
+        ? `${nextRotation.groupLabel} · Rotation ${nextRotation.number} / ${state.schedule.meta.rotationCount || state.schedule.rotations.length}`
+        : `Rotation ${nextRotation.number} / ${state.schedule.meta.rotationCount || state.schedule.rotations.length}`;
   }
   const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
   const fieldLabel = formatFieldLabel({ practiceType, capitalized: true });
@@ -4779,7 +7478,7 @@ function renderChronoScreen() {
       state.schedule && state.schedule.format === 'challenge'
         ? 'Le mode Défi ne dispose pas de chronomètre dédié.'
         : 'Générez un planning puis activez le chronomètre pour utiliser ce mode.';
-    elements.chronoRotationLabel.textContent = 'Rotation -- / --';
+    elements.chronoRotationLabel.textContent = 'Rotation --';
     if (elements.chronoMatchMeta) {
       elements.chronoMatchMeta.textContent = message;
     }
@@ -4801,15 +7500,15 @@ function renderChronoScreen() {
     return;
   }
   const roleAssignments = computeRoleAssignments(rotation);
-  const total =
-    state.schedule.meta && state.schedule.meta.rotationCount
-      ? state.schedule.meta.rotationCount
-      : state.schedule.rotations.length;
-  const labelBase = rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotation.number}` : `Rotation ${rotation.number}`;
-  elements.chronoRotationLabel.textContent = `${labelBase} / ${total}`;
+  const total = getLadderRotationTotal(state.schedule) || state.schedule.rotations.length;
+  elements.chronoRotationLabel.textContent = isLadderLiveMode(state.schedule)
+    ? formatLadderRotationLabel(rotation, state.schedule)
+    : rotation.groupLabel
+      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${total}`
+      : `Rotation ${rotation.number} / ${total}`;
   const missing = countMissingScores(rotation.number);
   const isComplete = rotation.matches.length > 0 && missing === 0;
-  const isLast = rotation.number === total;
+  const isLast = isLadderOpenSession(state.schedule) ? false : rotation.number === total;
   const metaParts = [];
   if (rotation.startLabel) metaParts.push(rotation.startLabel);
   if (rotation.durationLabel) metaParts.push(rotation.durationLabel);
@@ -4861,7 +7560,7 @@ function renderProjectionScreen() {
       state.schedule && state.schedule.format === 'challenge'
         ? 'Le mode Défi utilise le tableau interactif, projection désactivée.'
         : 'Générez un planning pour activer la projection.';
-    elements.projectionRotation.textContent = 'Rotation -- / --';
+    elements.projectionRotation.textContent = 'Rotation --';
     elements.projectionFields.innerHTML = `<p class="projection-empty">${message}</p>`;
     if (elements.projectionNext) {
       elements.projectionNext.innerHTML = '';
@@ -4871,17 +7570,133 @@ function renderProjectionScreen() {
       elements.projectionRest.innerHTML = '';
       elements.projectionRest.classList.add('hidden');
     }
+    if (elements.projectionRanking) {
+      elements.projectionRanking.innerHTML = '';
+      elements.projectionRanking.classList.add('hidden');
+    }
     return;
   }
   const rotation = state.schedule.rotations[state.liveRotationIndex] || state.schedule.rotations[0];
-  const total = state.schedule.meta.rotationCount || state.schedule.rotations.length;
+  const total = getLadderRotationTotal(state.schedule) || state.schedule.rotations.length;
   const practiceType = getPracticeTypeFromMeta(state.schedule.meta);
   const fieldLabel = formatFieldLabel({ practiceType, capitalized: true });
   const roleAssignments = computeRoleAssignments(rotation);
-  const rotationLabel = rotation.groupLabel
-    ? `${rotation.groupLabel} · Rotation ${rotation.number}`
-    : `Rotation ${rotation.number}`;
-  elements.projectionRotation.textContent = `${rotationLabel} / ${total}`;
+  elements.projectionRotation.textContent = isLadderLiveMode(state.schedule)
+    ? formatLadderRotationLabel(rotation, state.schedule)
+    : rotation.groupLabel
+      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${total}`
+      : `Rotation ${rotation.number} / ${total}`;
+  if (state.schedule.format === 'ladder') {
+    const movementFeed = computeLadderMovementFeed(state.schedule, rotation, roleAssignments);
+    const bench = computeLadderBenchData(state.schedule, rotation, roleAssignments);
+    const standings = computeLadderStandings(state.schedule).slice(0, 8);
+    elements.projectionFields.innerHTML = rotation.matches.length
+      ? rotation.matches
+          .map(match => {
+            const participants = resolveMatchParticipants(match, state.schedule);
+            const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
+            const arbiter = roleAssignments?.get(matchId)?.arbitre || 'Sans arbitre';
+            const profile = getLadderCourtProfile(Number(match.field)) === 'arbiter' ? 'Avec arbitre' : 'Sans arbitre';
+            return `
+              <article class="projection-field in-play ladder-projection-field">
+                <div class="projection-field-head">
+                  <h3>Terrain ${match.field}</h3>
+                  <span class="state-pill live">${profile}</span>
+                </div>
+                <div class="projection-match">
+                  <p>${participants.home} <span>vs</span> ${participants.away}</p>
+                  <div class="ladder-projection-meta">
+                    <span>Arbitre : ${arbiter}</span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join('')
+      : '<p class="projection-empty">Aucun terrain actif.</p>';
+    if (elements.projectionNext) {
+      elements.projectionNext.innerHTML = `
+        <header>
+          <div class="projection-section-meta">
+            <h4>Mouvements</h4>
+            <span>Ce qui change maintenant</span>
+          </div>
+          <span class="state-pill next">Transitions</span>
+        </header>
+        <div class="projection-next-list ladder-projection-moves">
+          ${
+            movementFeed.length
+              ? movementFeed
+                  .map(item => `<div class="projection-next-card"><strong>${item.label}</strong></div>`)
+                  .join('')
+              : '<p class="projection-empty">Les mouvements apparaîtront après validation des terrains.</p>'
+          }
+        </div>
+      `;
+      elements.projectionNext.classList.remove('hidden');
+    }
+    if (elements.projectionRest) {
+      elements.projectionRest.innerHTML = `
+        <header>
+          <div class="projection-section-meta">
+            <h4>Flux de classe</h4>
+            <span>Attente, entrées, indisponibles</span>
+          </div>
+          <span class="state-pill rest">Organisation</span>
+        </header>
+        <div class="ladder-projection-rest">
+          <p><strong>En attente :</strong> ${bench.waiting.length ? bench.waiting.join(', ') : 'Personne'}</p>
+          <p><strong>Prochains entrants :</strong> ${bench.nextEntrants.length ? bench.nextEntrants.join(', ') : 'Aucun changement'}</p>
+          <p><strong>Indisponibles :</strong> ${bench.unavailable.length ? bench.unavailable.join(', ') : 'Aucun'}</p>
+        </div>
+      `;
+      elements.projectionRest.classList.remove('hidden');
+    }
+    if (elements.projectionRanking) {
+      elements.projectionRanking.innerHTML = `
+        <header>
+          <div class="projection-section-meta">
+            <h4>Classement résumé</h4>
+            <span>Top visible pour la projection</span>
+          </div>
+          <span class="state-pill live">Classement</span>
+        </header>
+        <div class="projection-ranking-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Rang</th>
+                <th>Nom</th>
+                <th>MJ</th>
+                <th>G</th>
+                <th>P</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${standings
+                .map(
+                  (row, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${row.name}</td>
+                      <td>${row.played}</td>
+                      <td>${row.wins}</td>
+                      <td>${row.losses}</td>
+                    </tr>
+                  `
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      elements.projectionRanking.classList.remove('hidden');
+    }
+    if (elements.projectionTimer) {
+      elements.projectionTimer.textContent = formatSeconds(timerState.remainingSeconds || timerState.baseSeconds);
+    }
+    return;
+  }
   if (rotation.matches.length) {
     const board = new Map();
     rotation.matches.forEach(match => {
@@ -4992,6 +7807,10 @@ function renderProjectionScreen() {
       elements.projectionRest.classList.add('hidden');
     }
   }
+  if (elements.projectionRanking) {
+    elements.projectionRanking.innerHTML = '';
+    elements.projectionRanking.classList.add('hidden');
+  }
   if (elements.projectionTimer) {
     elements.projectionTimer.textContent = formatSeconds(timerState.remainingSeconds || timerState.baseSeconds);
   }
@@ -5051,18 +7870,39 @@ function validateMatch(matchId) {
     return;
   }
   setMatchValidated(matchId, true);
+  invalidateStandingsCache();
   persistState();
   updateMatchCompletionState(matchId);
+  if (state.schedule) {
+    renderRankingView(state.schedule);
+    renderLiveRankingPanel();
+    updateLiveControls();
+    renderProjectionScreen();
+    renderLiveRotation();
+  }
   renderChronoScreen();
+  refreshLadderPilotModalIfOpen();
 }
 
-function unlockValidatedMatch(matchId) {
-  const confirmEdit = window.confirm('Modifier ce score validé ?');
+function unlockValidatedMatch(matchId, options = {}) {
+  const confirmEdit = options.skipConfirm ? true : window.confirm('Modifier ce score validé ?');
   if (!confirmEdit) return;
   setMatchValidated(matchId, false);
+  invalidateStandingsCache();
   persistState();
   updateMatchCompletionState(matchId);
+  if (state.schedule) {
+    renderRankingView(state.schedule);
+    renderLiveRankingPanel();
+    updateLiveControls();
+    renderProjectionScreen();
+    renderLiveRotation();
+  }
   renderChronoScreen();
+  refreshLadderPilotModalIfOpen();
+  if (options.openEditor) {
+    toggleLadderScoreEditor(matchId, { forceOpen: true });
+  }
 }
 
 function updateLiveControls() {
@@ -5074,35 +7914,70 @@ function updateLiveControls() {
     return;
   }
   const rotation = state.schedule.rotations.find(r => r.number === rotationNumber);
-  const total = state.schedule.meta.rotationCount;
+  const total = getLadderRotationTotal(state.schedule) || state.schedule.rotations.length;
   const missing = countMissingScores(rotationNumber);
   const isComplete = rotation ? missing === 0 && rotation.matches.length > 0 : false;
-  const isLast = rotationNumber === total;
+  const ladderOpen = isLadderLiveMode(state.schedule) && isLadderOpenSession(state.schedule);
+  const sessionEnded = isLadderSessionEnded(state.schedule);
+  const isLast = ladderOpen ? false : rotationNumber === total;
   if (elements.liveNextBtn) {
-    elements.liveNextBtn.disabled = !isComplete || isLast;
-    elements.liveNextBtn.textContent = 'Rotation suivante';
+    elements.liveNextBtn.disabled = !isComplete || sessionEnded;
+    elements.liveNextBtn.textContent =
+      sessionEnded
+        ? 'Séance terminée'
+        : !ladderOpen && isLast
+          ? 'Terminer le tournoi'
+          : 'Rotation suivante';
   }
   const timerNextBtn = getTimerNextButton();
   if (timerNextBtn) {
-    timerNextBtn.disabled = !isComplete || isLast;
+    timerNextBtn.disabled = !isComplete || sessionEnded;
   }
   if (elements.liveFinishBtn) {
     elements.liveFinishBtn.disabled = !state.schedule;
   }
   if (elements.liveStatus) {
-    const rotationLabel = rotation && rotation.groupLabel ? `${rotation.groupLabel} · Rotation ${rotationNumber}` : `Rotation ${rotationNumber}`;
+    const rotationLabel = rotation ? formatLadderRotationLabel(rotation, state.schedule) : `Rotation ${rotationNumber}`;
     const status = isComplete
-      ? `${rotationLabel} / ${total} validée`
-      : `${rotationLabel} / ${total} · ${missing} score(s) à saisir`;
+      ? `${rotationLabel} validée`
+      : `${rotationLabel} · ${missing} score(s) à saisir`;
     elements.liveStatus.textContent = status;
   }
-  setChronoNextAvailability(Boolean(state.schedule && !isLast && isComplete));
+  setChronoNextAvailability(Boolean(state.schedule && !sessionEnded && isComplete));
 }
 
 function advanceLiveRotation(options = {}) {
   if (!state.schedule) return false;
+  if (isLadderLiveMode(state.schedule) && isLadderSessionEnded(state.schedule)) return false;
   const rotation = state.schedule.rotations[state.liveRotationIndex];
   if (!rotation || !isRotationComplete(rotation.number)) return false;
+  if (isLadderLiveMode(state.schedule)) {
+    const total = getLadderRotationTotal(state.schedule) || state.schedule.rotations.length;
+    const isLimitedLast = !isLadderOpenSession(state.schedule) && rotation.number >= total;
+    if (isLimitedLast) {
+      state.schedule.meta = state.schedule.meta || {};
+      state.schedule.meta.sessionEnded = true;
+      state.liveRotationIndex = Math.min(state.liveRotationIndex, state.schedule.rotations.length - 1);
+      persistState();
+      showFinalRankingModal(rotation.number);
+      return true;
+    }
+    if (isLadderOpenSession(state.schedule)) {
+      state.schedule.rotations = state.schedule.rotations.slice(0, state.liveRotationIndex + 1);
+      appendNextLadderRotation(state.schedule);
+    } else if (state.liveRotationIndex >= state.schedule.rotations.length - 1) {
+      appendNextLadderRotation(state.schedule);
+    }
+    state.liveRotationIndex = Math.min(state.liveRotationIndex + 1, state.schedule.rotations.length - 1);
+    persistState();
+    renderLiveRotation();
+    if (state.options.timer && !options.viaTimer && state.schedule) {
+      const nextRotationNumber = state.schedule.rotations[state.liveRotationIndex].number;
+      timerController.syncRotation(nextRotationNumber);
+    }
+    setLiveModeAvailability(true);
+    return true;
+  }
   const lastIndex = state.schedule.rotations.length - 1;
   if (state.liveRotationIndex >= lastIndex) {
     state.liveRotationIndex = lastIndex;
@@ -5407,6 +8282,56 @@ function updateTimerFabVisibility() {
 }
 
 function handleLiveClick(event) {
+  const openCurrentButton = event.target.closest('[data-open-current-rotation]');
+  if (openCurrentButton) {
+    if (isLadderLiveMode(state.schedule)) {
+      openLadderPilotModal();
+    } else {
+      focusCurrentLadderRotation();
+    }
+    return;
+  }
+  const closeCurrentButton = event.target.closest('[data-close-current-rotation]');
+  if (closeCurrentButton) {
+    if (!closeCurrentButton.disabled) {
+      advanceLiveRotation();
+    }
+    return;
+  }
+  const rankingButton = event.target.closest('[data-open-current-ranking]');
+  if (rankingButton) {
+    goTo('results');
+    setActiveView('rankings');
+    return;
+  }
+  const statusButton = event.target.closest('[data-status-player]');
+  if (statusButton) {
+    const playerName = statusButton.dataset.statusPlayer || '';
+    const statusValue = statusButton.dataset.statusValue || STATUS_TYPES.active.key;
+    if (playerName) {
+      setEntityStatusByName(playerName, statusValue);
+      renderLiveRotation();
+    }
+    return;
+  }
+  const quickButton = event.target.closest('[data-ladder-quick]');
+  if (quickButton) {
+    const matchId = quickButton.dataset.matchId;
+    const outcome = quickButton.dataset.ladderQuick;
+    buildLadderQuickResult(matchId, outcome);
+    return;
+  }
+  const scoreToggle = event.target.closest('[data-ladder-score-toggle]');
+  if (scoreToggle) {
+    const matchId = scoreToggle.dataset.matchId;
+    if (!matchId) return;
+    if (isMatchValidated(matchId)) {
+      unlockValidatedMatch(matchId, { skipConfirm: true, openEditor: true });
+      return;
+    }
+    toggleLadderScoreEditor(matchId);
+    return;
+  }
   const validateButton = event.target.closest('[data-validate-match]');
   if (validateButton) {
     const matchId = validateButton.dataset.validateMatch;
@@ -5448,10 +8373,12 @@ function applyScoreChange(matchId, side, value) {
     renderLiveRankingPanel();
     updateLiveControls();
     renderChronoScreen();
+    renderProjectionScreen();
     const teamsView = buildTeamEntriesFromSchedule(state.schedule);
     state.schedule.teams = teamsView;
     renderTeamView(teamsView);
   }
+  refreshLadderPilotModalIfOpen();
 }
 
 function syncScoreInputs(matchId, side, value) {
@@ -5521,6 +8448,47 @@ function isMatchCompleteById(matchId) {
   if (!state.scores || !state.scores[matchId]) return false;
   const record = state.scores[matchId];
   return Number.isFinite(record.home) && Number.isFinite(record.away);
+}
+
+function getLadderScoreToggleLabel(matchId, isOpen = false) {
+  if (isOpen) return 'Masquer le score';
+  return isMatchValidated(matchId) ? 'Modifier le score' : 'Entrer le score';
+}
+
+function findLadderScoreEditors(matchId) {
+  return Array.from(document.querySelectorAll('[data-ladder-score-editor]')).filter(
+    node => node.dataset.ladderScoreEditor === matchId
+  );
+}
+
+function findLadderScoreToggleButtons(matchId) {
+  return Array.from(document.querySelectorAll('[data-ladder-score-toggle]')).filter(
+    node => node.dataset.matchId === matchId
+  );
+}
+
+function toggleLadderScoreEditor(matchId, options = {}) {
+  if (!matchId) return;
+  const forceOpen = options.forceOpen === true;
+  const forceClose = options.forceClose === true;
+  const editors = findLadderScoreEditors(matchId);
+  if (!editors.length) return;
+  const shouldOpen = forceOpen ? true : forceClose ? false : editors.every(editor => editor.classList.contains('hidden'));
+  editors.forEach(editor => {
+    editor.classList.toggle('hidden', !shouldOpen);
+  });
+  findLadderScoreToggleButtons(matchId).forEach(button => {
+    button.textContent = getLadderScoreToggleLabel(matchId, shouldOpen);
+  });
+  if (!shouldOpen) return;
+  const focusTarget = editors.find(editor => editor.offsetParent !== null) || editors[0];
+  const firstInput = focusTarget?.querySelector('input[data-score-input]');
+  if (firstInput && typeof firstInput.focus === 'function') {
+    firstInput.focus();
+    if (typeof firstInput.select === 'function') {
+      firstInput.select();
+    }
+  }
 }
 
 function getTimerNextButton() {
@@ -5617,6 +8585,9 @@ function generateSchedule(teams, options) {
   if (format === 'challenge') {
     return buildChallengeBoard(teams, options);
   }
+  if (format === 'swiss') {
+    return initializeSwissMode(teams, options);
+  }
   const groupOptions = { finals: format === 'groups-finals' };
   if (format === 'groups-finals') {
     const targetGroups = getWorldCupGroupTarget();
@@ -5629,6 +8600,419 @@ function generateSchedule(teams, options) {
     return buildSinglePoolSchedule(teams, options);
   }
   return buildGroupedSchedule(groups, teams, options, { finals: format === 'groups-finals' });
+}
+
+function createLadderRotationEntry(rotationNumber, fieldCount, duration, playerCount) {
+  const matches = [];
+  const activeCourts = Math.min(fieldCount, Math.floor(Math.max(0, Number(playerCount) || 0) / 2));
+  for (let fieldIndex = 0; fieldIndex < activeCourts; fieldIndex += 1) {
+    const slotA = fieldIndex * 2;
+    const slotB = slotA + 1;
+    matches.push({
+      id: `ladder-${rotationNumber}-${fieldIndex + 1}`,
+      phase: 'ladder',
+      ladderSlots: [slotA, slotB],
+    });
+  }
+  return {
+    number: rotationNumber,
+    phase: 'ladder',
+    title: `Rotation ${rotationNumber}`,
+    matches,
+    byes: [],
+    startLabel: null,
+    durationLabel: `${duration} min`,
+    fieldAssignments: [],
+  };
+}
+
+function getLadderConfiguredCourts(schedule = state.schedule) {
+  return clampNumber(
+    Number(schedule?.ladder?.configuredCourts) || Number(schedule?.meta?.configuredCourts) || Number(schedule?.meta?.fieldCount) || 1,
+    1,
+    16,
+    1
+  );
+}
+
+function buildConfiguredLadderRotation(schedule, currentOrder, nextNumber, previousRotation = null) {
+  if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return null;
+  if (previousRotation) {
+    return buildNextLadderRotationFromPreviousFieldState(schedule, previousRotation, nextNumber);
+  }
+  const names = schedule.ladder.names || [];
+  const configuredCourts = getLadderConfiguredCourts(schedule);
+  const ladderSource = {
+    ladder: {
+      ...schedule.ladder,
+      mode: schedule.ladder.mode || getScheduleLadderMode(schedule),
+      courtMode: schedule.ladder.courtMode || getLadderCourtMode(),
+      configuredCourts,
+    },
+  };
+  const activeEntries = currentOrder
+    .map((playerIndex, orderIndex) => ({
+      playerIndex,
+      orderIndex,
+      name: names[playerIndex] || `Participant ${playerIndex + 1}`,
+    }))
+    .filter(entry => !isEntityInactive(getEntityStatusByName(entry.name)));
+  const summary = computeLadderSetupSummary(activeEntries.length, configuredCourts, ladderSource);
+  if (!summary.activeCourts) return null;
+  const previousAssignments = previousRotation ? computeLadderRoleAssignments(previousRotation) : null;
+  const previousRefByField = new Map();
+  if (previousRotation && previousAssignments?.size) {
+    previousRotation.matches.forEach(match => {
+      const matchId = match.id || buildMatchKey(previousRotation.number, match.home, match.away);
+      const arbiter = previousAssignments.get(matchId)?.arbitre;
+      if (arbiter && !isEntityInactive(getEntityStatusByName(arbiter))) {
+        previousRefByField.set(Number(match.field), arbiter);
+      }
+    });
+  }
+  const entryByName = new Map(activeEntries.map(entry => [entry.name, entry]));
+  const reservedRefNames = new Set(Array.from(previousRefByField.values()));
+  const usedNames = new Set();
+  const takeNextEntry = (allowReserved = false) =>
+    activeEntries.find(entry => {
+      if (usedNames.has(entry.name)) return false;
+      if (!allowReserved && reservedRefNames.has(entry.name)) return false;
+      return true;
+    });
+  const matches = [];
+  for (let fieldNumber = 1; fieldNumber <= summary.activeCourts; fieldNumber += 1) {
+    const players = [];
+    const returningRef = summary.refereeFields.includes(fieldNumber) ? previousRefByField.get(fieldNumber) : null;
+    if (returningRef && entryByName.has(returningRef) && !usedNames.has(returningRef)) {
+      players.push(entryByName.get(returningRef));
+      usedNames.add(returningRef);
+    }
+    while (players.length < 2) {
+      const nextEntry = takeNextEntry(false) || takeNextEntry(true);
+      if (!nextEntry) break;
+      players.push(nextEntry);
+      usedNames.add(nextEntry.name);
+    }
+    if (players.length < 2) break;
+    matches.push({
+      id: `ladder-${nextNumber}-${fieldNumber}`,
+      phase: 'ladder',
+      field: fieldNumber,
+      order: 1,
+      home: players[0].name,
+      away: players[1].name,
+      ladderSlots: [players[0].orderIndex, players[1].orderIndex],
+      explicitPlayers: true,
+    });
+  }
+  const remainingEntries = activeEntries.filter(entry => !usedNames.has(entry.name));
+  const fieldReferees = {};
+  const orderSnapshot = [];
+  summary.refereeFields.forEach(fieldNumber => {
+    if (fieldNumber > matches.length) return;
+    const nextRef = remainingEntries.shift();
+    if (nextRef) {
+      fieldReferees[fieldNumber] = nextRef.name;
+    }
+  });
+  const duration = clampNumber(Number(schedule.meta?.durationMinutes) || Number(state.options.duration) || 12, 4, 30, 12);
+  matches.forEach(match => {
+    const referee = fieldReferees[match.field];
+    if (referee) {
+      orderSnapshot.push(referee, match.home, match.away);
+    } else {
+      orderSnapshot.push(match.home, match.away);
+    }
+  });
+  return {
+    number: nextNumber,
+    phase: 'ladder',
+    title: `Rotation ${nextNumber}`,
+    matches,
+    byes: remainingEntries.map(entry => entry.name),
+    fieldReferees,
+    refereeFields: [...summary.refereeFields],
+    orderSnapshot: [...orderSnapshot, ...remainingEntries.map(entry => entry.name)],
+    startLabel: null,
+    durationLabel: `${duration} min`,
+    fieldAssignments: matches.map(match => ({
+      label: `Terrain ${match.field}`,
+      matches: [match],
+    })),
+  };
+}
+
+function resolveLadderFieldOutcome(match, schedule = state.schedule) {
+  const participants = resolveMatchParticipants(match, schedule);
+  const topName = participants.home;
+  const bottomName = participants.away;
+  const neutralized = isMatchNeutralized(participants);
+  const record = state.scores?.[match.id];
+  const base = {
+    match,
+    field: Number(match.field) || 0,
+    topName,
+    bottomName,
+    baseHighName: topName,
+    baseLowName: bottomName,
+    winnerName: null,
+    loserName: null,
+    resolved: false,
+    status: 'unresolved',
+  };
+  if (neutralized) {
+    return { ...base, status: 'neutralized' };
+  }
+  if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) {
+    return base;
+  }
+  if (record.home === record.away) {
+    return { ...base, status: 'draw' };
+  }
+  const bottomWins = record.away > record.home;
+  return {
+    ...base,
+    baseHighName: bottomWins ? bottomName : topName,
+    baseLowName: bottomWins ? topName : bottomName,
+    winnerName: bottomWins ? bottomName : topName,
+    loserName: bottomWins ? topName : bottomName,
+    resolved: true,
+    status: bottomWins ? 'bottom-win' : 'top-win',
+  };
+}
+
+function computeLadderFieldRoundState(rotation, schedule = state.schedule) {
+  const courts = (rotation?.matches || [])
+    .map(match => resolveLadderFieldOutcome(match, schedule))
+    .filter(Boolean)
+    .sort((a, b) => a.field - b.field);
+  if (!courts.length) {
+    return { courts: [], boundarySwaps: [] };
+  }
+  const boundarySwaps = courts.slice(0, -1).map((court, index) => {
+    const lowerCourt = courts[index + 1];
+    const swapped = Boolean(court.resolved && lowerCourt.resolved);
+    return {
+      upperField: court.field,
+      lowerField: lowerCourt.field,
+      swapped,
+      movingUpName: swapped ? lowerCourt.baseHighName : null,
+      movingDownName: swapped ? court.baseLowName : null,
+    };
+  });
+  courts.forEach((court, index) => {
+    court.finalHighName = index > 0 && boundarySwaps[index - 1]?.swapped ? courts[index - 1].baseLowName : court.baseHighName;
+    court.finalLowName = index < boundarySwaps.length && boundarySwaps[index]?.swapped ? courts[index + 1].baseHighName : court.baseLowName;
+  });
+  return { courts, boundarySwaps };
+}
+
+function buildNextLadderRotationFromPreviousFieldState(schedule, previousRotation, nextNumber) {
+  if (!schedule || schedule.format !== 'ladder' || !previousRotation) return null;
+  const configuredCourts = getLadderConfiguredCourts(schedule);
+  const mode = getScheduleLadderMode(schedule);
+  const activeNames = (schedule.ladder?.names || []).filter(name => !isEntityInactive(getEntityStatusByName(name)));
+  const ladderSource = {
+    ladder: {
+      ...schedule.ladder,
+      mode,
+      courtMode: schedule.ladder.courtMode || getLadderCourtMode(),
+      configuredCourts,
+    },
+  };
+  const summary = computeLadderSetupSummary(activeNames.length, configuredCourts, ladderSource);
+  const roundState = computeLadderFieldRoundState(previousRotation, schedule);
+  const previousAssignments = computeLadderRoleAssignments(previousRotation);
+  const previousReferees = new Map();
+  previousRotation.matches.forEach(match => {
+    const matchId = match.id || buildMatchKey(previousRotation.number, match.home, match.away);
+    const referee = previousAssignments?.get(matchId)?.arbitre;
+    if (referee && !isEntityInactive(getEntityStatusByName(referee))) {
+      previousReferees.set(Number(match.field), referee);
+    }
+  });
+  const requestedRefereeFields = Array.isArray(previousRotation.refereeFields) && previousRotation.refereeFields.length
+    ? [...previousRotation.refereeFields]
+    : Array.isArray(schedule.ladder?.refereeFields)
+      ? [...schedule.ladder.refereeFields]
+      : [];
+  const targetFieldCount = Math.max(1, Math.min(summary.activeCourts, roundState.courts.length || summary.activeCourts));
+  const refereeFieldSet = new Set(
+    requestedRefereeFields.filter(field => Number.isInteger(field) && field >= 1 && field <= targetFieldCount && mode !== 'free')
+  );
+
+  // Chaque terrain est reconstruit depuis l'état du terrain précédent :
+  // arbitre -> joueur du même terrain, gagnant monte, perdant descend, banc complète.
+  const nextCourts = Array.from({ length: targetFieldCount }, (_, index) => ({
+    field: index + 1,
+    hasRefereeSlot: refereeFieldSet.has(index + 1),
+    playerCandidates: [],
+    refereeCandidate: null,
+  }));
+  const pushCandidate = (fieldIndex, name, source, priority) => {
+    if (fieldIndex < 0 || fieldIndex >= nextCourts.length || !name || isEntityInactive(getEntityStatusByName(name))) return;
+    nextCourts[fieldIndex].playerCandidates.push({ name, source, priority });
+  };
+
+  roundState.courts.slice(0, targetFieldCount).forEach((court, index) => {
+    const nextCourt = nextCourts[index];
+    const previousReferee = previousReferees.get(court.field);
+    if (nextCourt.hasRefereeSlot && previousReferee) {
+      pushCandidate(index, previousReferee, 'prev-referee', 0);
+    }
+
+    const winner = court.resolved ? court.winnerName : court.baseHighName;
+    const loser = court.resolved ? court.loserName : court.baseLowName;
+    const isFirst = index === 0;
+    const isLast = index === targetFieldCount - 1;
+
+    if (winner) {
+      if (isFirst) {
+        if (nextCourt.hasRefereeSlot) {
+          nextCourt.refereeCandidate = nextCourt.refereeCandidate || winner;
+        } else {
+          pushCandidate(index, winner, 'stay-top', 1);
+        }
+      } else {
+        pushCandidate(index - 1, winner, 'winner-up', 3);
+      }
+    }
+
+    if (loser) {
+      if (isLast) {
+        if (nextCourt.hasRefereeSlot) {
+          nextCourt.refereeCandidate = nextCourt.refereeCandidate || loser;
+        } else {
+          pushCandidate(index, loser, 'stay-bottom', 4);
+        }
+      } else {
+        pushCandidate(index + 1, loser, 'loser-down', 1);
+      }
+    }
+  });
+
+  const previousBench = Array.isArray(previousRotation.byes)
+    ? previousRotation.byes.filter(name => name && !isEntityInactive(getEntityStatusByName(name)))
+    : [];
+  const usedNames = new Set();
+  const overflow = [];
+  const fieldReferees = {};
+  const matches = [];
+  const orderSnapshot = [];
+
+  const consumeCandidate = (candidates, acceptedSources) => {
+    const match = candidates.find(candidate => !usedNames.has(candidate.name) && acceptedSources.includes(candidate.source));
+    if (!match) return null;
+    usedNames.add(match.name);
+    return match.name;
+  };
+
+  nextCourts.forEach(court => {
+    const dedupedCandidates = [];
+    const seenCandidateNames = new Set();
+    court.playerCandidates
+      .sort((a, b) => a.priority - b.priority)
+      .forEach(candidate => {
+        if (seenCandidateNames.has(candidate.name)) return;
+        dedupedCandidates.push(candidate);
+        seenCandidateNames.add(candidate.name);
+      });
+    court.playerCandidates = dedupedCandidates;
+
+    let referee = court.refereeCandidate;
+    if (referee && usedNames.has(referee)) {
+      referee = null;
+    }
+    if (referee) {
+      usedNames.add(referee);
+    } else if (court.hasRefereeSlot) {
+      const promotedRef = consumeCandidate(court.playerCandidates, ['winner-up', 'stay-top', 'stay-bottom', 'loser-down']);
+      if (promotedRef) {
+        referee = promotedRef;
+      }
+    }
+
+    const players = [];
+    const firstPlayer = court.hasRefereeSlot
+      ? consumeCandidate(court.playerCandidates, ['prev-referee', 'loser-down', 'winner-up', 'stay-top', 'stay-bottom'])
+      : consumeCandidate(court.playerCandidates, ['winner-up', 'stay-top', 'loser-down', 'stay-bottom', 'prev-referee']);
+    if (firstPlayer) players.push(firstPlayer);
+    const secondPlayer = consumeCandidate(court.playerCandidates, ['loser-down', 'winner-up', 'stay-top', 'stay-bottom', 'prev-referee']);
+    if (secondPlayer) players.push(secondPlayer);
+
+    court.playerCandidates.forEach(candidate => {
+      if (!usedNames.has(candidate.name)) {
+        overflow.push(candidate.name);
+      }
+    });
+
+    court.players = players;
+    court.referee = referee;
+  });
+
+  const waitingPool = Array.from(
+    new Set([
+      ...previousBench,
+      ...overflow,
+      ...activeNames.filter(name => !usedNames.has(name)),
+    ])
+  ).filter(name => !usedNames.has(name));
+
+  const takeFromBench = () => {
+    while (waitingPool.length) {
+      const name = waitingPool.shift();
+      if (!name || usedNames.has(name) || isEntityInactive(getEntityStatusByName(name))) continue;
+      usedNames.add(name);
+      return name;
+    }
+    return null;
+  };
+
+  nextCourts.forEach(court => {
+    while (court.players.length < 2) {
+      const benchPlayer = takeFromBench();
+      if (!benchPlayer) break;
+      court.players.push(benchPlayer);
+    }
+    if (court.hasRefereeSlot && !court.referee) {
+      court.referee = takeFromBench();
+    }
+    if (court.players.length < 2) return;
+    matches.push({
+      id: `ladder-${nextNumber}-${court.field}`,
+      phase: 'ladder',
+      field: court.field,
+      order: 1,
+      home: court.players[0],
+      away: court.players[1],
+      explicitPlayers: true,
+    });
+    if (court.referee) {
+      fieldReferees[court.field] = court.referee;
+      orderSnapshot.push(court.referee, court.players[0], court.players[1]);
+    } else {
+      orderSnapshot.push(court.players[0], court.players[1]);
+    }
+  });
+
+  const byes = activeNames.filter(name => !usedNames.has(name));
+  const duration = clampNumber(Number(schedule.meta?.durationMinutes) || Number(state.options.duration) || 12, 4, 30, 12);
+  return {
+    number: nextNumber,
+    phase: 'ladder',
+    title: `Rotation ${nextNumber}`,
+    matches,
+    byes,
+    fieldReferees,
+    refereeFields: Array.from(refereeFieldSet).filter(field => matches.some(match => match.field === field)),
+    orderSnapshot: [...orderSnapshot, ...byes],
+    startLabel: null,
+    durationLabel: `${duration} min`,
+    fieldAssignments: matches.map(match => ({
+      label: `Terrain ${match.field}`,
+      matches: [match],
+    })),
+  };
 }
 
 function getWorldCupGroupTarget() {
@@ -5673,58 +9057,59 @@ function buildGroupedSchedule(groups, allTeams, options, extras = {}) {
 
 function buildLadderSchedule(teams, options) {
   const names = [...teams];
-  const fields = clampNumber(Number(options.fields) || 1, 1, 8, 2);
-  const rotationCount = Math.max(3, Math.ceil((names.length - 1) / Math.max(1, fields)) + 1);
+  const configuredCourts = clampNumber(Number(options.fields) || 1, 1, 16, 2);
+  const summary = computeLadderSetupSummary(names.length, configuredCourts, { ladder: options?.ladder || state.options.ladder });
+  const sessionMode = getLadderSessionMode(options);
+  const rotationLimit = getLadderRotationLimit(options, names.length, configuredCourts);
   const duration = clampNumber(Number(options.duration) || 12, 4, 30, 12);
-  const rotations = Array.from({ length: rotationCount }, (_, rotationIndex) => {
-    const matches = [];
-    for (let fieldIndex = 0; fieldIndex < fields; fieldIndex += 1) {
-      const slotA = fieldIndex * 2;
-      const slotB = slotA + 1;
-      if (slotB >= names.length) break;
-      matches.push({
-        id: `ladder-${rotationIndex + 1}-${fieldIndex + 1}`,
-        phase: 'ladder',
-        ladderSlots: [slotA, slotB],
-      });
-    }
-    return {
-      number: rotationIndex + 1,
-      phase: 'ladder',
-      title: `Rotation ${rotationIndex + 1}`,
-      matches,
-      byes: [],
-      startLabel: null,
-      durationLabel: `${duration} min`,
-      fieldAssignments: [],
-    };
-  });
   const schedule = {
     format: 'ladder',
-    rotations,
+    rotations: [],
     teams: names.map(name => ({ name })),
     meta: {
+      format: 'ladder',
       teamCount: names.length,
-      rotationCount,
-      matchCount: rotations.reduce((acc, rotation) => acc + rotation.matches.length, 0),
-      fieldCount: fields,
+      rotationCount: sessionMode === 'limited' ? rotationLimit : null,
+      sessionMode,
+      rotationLimit: sessionMode === 'limited' ? rotationLimit : null,
+      sessionEnded: false,
+      matchCount: 0,
+      fieldCount: summary.activeCourts,
+      configuredCourts,
       formatLabel: TOURNAMENT_MODES.ladder.label,
       practiceType: options.practiceType || state.practiceType,
+      durationMinutes: duration,
     },
     ladder: {
       names,
       order: names.map((_, index) => index),
-      refereeCourts: clampNumber(Number(options?.ladder?.refereeCourts) || 0, 0, fields, 0),
-      freeCourts: clampNumber(Number(options?.ladder?.freeCourts) || 0, 0, fields, 0),
+      mode: options?.ladder?.mode || getLadderMode(),
+      sessionMode,
+      rotationLimit: sessionMode === 'limited' ? rotationLimit : null,
+      courtMode: options?.ladder?.courtMode || getLadderCourtMode(),
+      configuredCourts,
+      maxCourts: summary.maxCourts,
+      refereeCourts: summary.refereeCourts,
+      freeCourts: summary.freeCourts,
+      refereePlacement: normalizeLadderRefereePlacement(options?.ladder?.refereePlacement),
+      manualRefereeFields: normalizeManualRefereeFields(options?.ladder?.manualRefereeFields, configuredCourts),
+      refereeFields: [...summary.refereeFields],
     },
   };
+  const initialOrder = names.map((_, index) => index);
+  const firstRotation = buildConfiguredLadderRotation(schedule, initialOrder, 1);
+  if (firstRotation) {
+    schedule.rotations.push(firstRotation);
+    schedule.meta.matchCount = firstRotation.matches.length;
+  }
   hydrateLadderMatches(schedule);
   return schedule;
 }
 
 function buildChallengeBoard(teams, options) {
   const names = [...teams];
-  return {
+  challengeIdSeed = 0;
+  const schedule = {
     format: 'challenge',
     rotations: [],
     teams: names.map(name => ({ name })),
@@ -5738,10 +9123,488 @@ function buildChallengeBoard(teams, options) {
     },
     challenge: {
       names,
-      order: names.map((_, index) => index),
+      order: [],
       history: [],
     },
   };
+  return schedule;
+}
+
+function initializeSwissMode(teams, options) {
+  const names = [...teams];
+  const players = names.map((name, index) => ({
+    id: index + 1,
+    seed: index,
+    name,
+    points: 0,
+    matches: 0,
+    wins: 0,
+    losses: 0,
+    bye: 0,
+    opponents: [],
+  }));
+  const currentMatches = generateSwissPairings(players, []).map((match, index) => ({
+    ...match,
+    id: match.bye ? `swiss-bye-1-${match.p1Id}` : `swiss-1-${index + 1}`,
+    round: 1,
+  }));
+  const schedule = {
+    format: 'swiss',
+    rotations: [],
+    teams: names.map(name => ({ name })),
+    meta: {
+      format: 'swiss',
+      teamCount: names.length,
+      rotationCount: 1,
+      matchCount: currentMatches.filter(match => !match.bye).length,
+      fieldCount: Math.max(1, currentMatches.filter(match => !match.bye).length),
+      formatLabel: TOURNAMENT_MODES.swiss.label,
+      practiceType: options.practiceType || state.practiceType,
+      durationMinutes: clampNumber(Number(options.duration) || 12, 1, 180, 12),
+    },
+    swiss: {
+      round: 1,
+      players,
+      currentMatches,
+      history: [],
+      ranking: [],
+    },
+  };
+  syncSwissRotations(schedule);
+  updateSwissRanking(schedule);
+  return schedule;
+}
+
+function buildSwissRotation(roundNumber, matches, schedule) {
+  const playerMap = new Map((schedule?.swiss?.players || []).map(player => [player.id, player]));
+  const duration = clampNumber(Number(schedule?.meta?.durationMinutes) || Number(state.options.duration) || 12, 1, 180, 12);
+  const byes = matches
+    .filter(match => match.bye)
+    .map(match => playerMap.get(match.p1Id)?.name)
+    .filter(Boolean);
+  return {
+    number: roundNumber,
+    phase: 'swiss',
+    title: `Ronde ${roundNumber}`,
+    matches: matches
+      .filter(match => !match.bye)
+      .map(match => ({
+        id: match.id,
+        phase: 'swiss',
+        field: match.field,
+        order: 1,
+        home: playerMap.get(match.p1Id)?.name || '',
+        away: playerMap.get(match.p2Id)?.name || '',
+        swissMatchId: match.id,
+        swissIds: [match.p1Id, match.p2Id],
+        winnerId: match.winnerId ?? null,
+      })),
+    byes,
+    startLabel: null,
+    durationLabel: `${duration} min`,
+    fieldAssignments: matches
+      .filter(match => !match.bye)
+      .map(match => ({
+        label: `Terrain ${match.field}`,
+        matches: [
+          {
+            id: match.id,
+            phase: 'swiss',
+            field: match.field,
+            home: playerMap.get(match.p1Id)?.name || '',
+            away: playerMap.get(match.p2Id)?.name || '',
+          },
+        ],
+      })),
+  };
+}
+
+function syncSwissRotations(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'swiss' || !schedule.swiss) return;
+  const historyRounds = (schedule.swiss.history || []).map(round => buildSwissRotation(round.round, round.matches || [], schedule));
+  const currentRound = buildSwissRotation(schedule.swiss.round || historyRounds.length + 1, schedule.swiss.currentMatches || [], schedule);
+  schedule.rotations = [...historyRounds, currentRound];
+  schedule.meta = schedule.meta || {};
+  schedule.meta.rotationCount = schedule.swiss.round || 1;
+  schedule.meta.matchCount = historyRounds.reduce((total, rotation) => total + rotation.matches.length, currentRound.matches.length);
+  schedule.meta.fieldCount = Math.max(1, currentRound.matches.length);
+  schedule.meta.format = 'swiss';
+  schedule.meta.formatLabel = TOURNAMENT_MODES.swiss.label;
+}
+
+function buildSwissPreviousMatches(schedule = state.schedule) {
+  if (!schedule?.swiss) return [];
+  return (schedule.swiss.history || []).flatMap(round => round.matches || []);
+}
+
+function generateSwissPairings(players, previousMatches) {
+  const previousOpponentMap = new Map();
+  (previousMatches || []).forEach(match => {
+    if (match?.bye) return;
+    const p1Id = Number(match.p1Id);
+    const p2Id = Number(match.p2Id);
+    if (!Number.isInteger(p1Id) || !Number.isInteger(p2Id)) return;
+    if (!previousOpponentMap.has(p1Id)) previousOpponentMap.set(p1Id, new Set());
+    if (!previousOpponentMap.has(p2Id)) previousOpponentMap.set(p2Id, new Set());
+    previousOpponentMap.get(p1Id).add(p2Id);
+    previousOpponentMap.get(p2Id).add(p1Id);
+  });
+
+  const activePlayers = players
+    .filter(player => player && !isEntityInactive(getEntityStatusByName(player.name)))
+    .slice()
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (a.losses !== b.losses) return a.losses - b.losses;
+      return (a.seed ?? 0) - (b.seed ?? 0);
+    });
+
+  const matches = [];
+  let pairingPool = [...activePlayers];
+  if (pairingPool.length % 2 === 1) {
+    const byeCandidates = [...pairingPool].sort((a, b) => {
+      if (a.bye !== b.bye) return a.bye - b.bye;
+      if (a.points !== b.points) return a.points - b.points;
+      if (a.wins !== b.wins) return a.wins - b.wins;
+      return (b.seed ?? 0) - (a.seed ?? 0);
+    });
+    const byePlayer = byeCandidates[0];
+    pairingPool = pairingPool.filter(player => player.id !== byePlayer.id);
+    matches.push({
+      id: `swiss-bye-${(previousMatches?.length || 0) + 1}-${byePlayer.id}`,
+      round: 0,
+      p1Id: byePlayer.id,
+      p2Id: null,
+      winnerId: byePlayer.id,
+      bye: true,
+      field: null,
+    });
+  }
+
+  let field = 1;
+  while (pairingPool.length) {
+    const p1 = pairingPool.shift();
+    if (!p1) break;
+    let bestIndex = -1;
+    let bestScore = Number.POSITIVE_INFINITY;
+    pairingPool.forEach((candidate, index) => {
+      const alreadyPlayed = previousOpponentMap.get(p1.id)?.has(candidate.id) || false;
+      const scoreGap = Math.abs((candidate.points || 0) - (p1.points || 0));
+      const pairingScore = alreadyPlayed ? scoreGap + 100 : scoreGap;
+      if (pairingScore < bestScore) {
+        bestScore = pairingScore;
+        bestIndex = index;
+      }
+    });
+    const p2 = bestIndex === -1 ? pairingPool.shift() : pairingPool.splice(bestIndex, 1)[0];
+    if (!p2) break;
+    matches.push({
+      id: `swiss-${(previousMatches?.length || 0) + 1}-${field}`,
+      round: 0,
+      p1Id: p1.id,
+      p2Id: p2.id,
+      winnerId: null,
+      bye: false,
+      field,
+    });
+    field += 1;
+  }
+  return matches;
+}
+
+function getSwissPlayerMap(schedule = state.schedule) {
+  return new Map((schedule?.swiss?.players || []).map(player => [Number(player.id), player]));
+}
+
+function computeSwissRankingRows(schedule = state.schedule) {
+  if (!schedule?.swiss) return [];
+  const rows = (schedule.swiss.players || []).map(player => ({
+    id: Number(player.id),
+    name: player.name,
+    points: Number(player.points) || 0,
+    played: Number(player.matches) || 0,
+    wins: Number(player.wins) || 0,
+    losses: Number(player.losses) || 0,
+    bye: Number(player.bye) || 0,
+    opponents: Array.isArray(player.opponents) ? [...player.opponents] : [],
+    seed: Number(player.seed) || 0,
+  }));
+  const rowMap = new Map(rows.map(row => [row.id, row]));
+  (schedule.swiss.currentMatches || []).forEach(match => {
+    if (match.bye) {
+      const player = rowMap.get(Number(match.p1Id));
+      if (player) {
+        player.points += 1;
+        player.bye += 1;
+      }
+      return;
+    }
+    const p1 = rowMap.get(Number(match.p1Id));
+    const p2 = rowMap.get(Number(match.p2Id));
+    if (!p1 || !p2 || !isSwissWinnerResolved(match)) return;
+    const winnerId = Number(match.winnerId);
+    const loserId = winnerId === p1.id ? p2.id : p1.id;
+    const winner = rowMap.get(winnerId);
+    const loser = rowMap.get(loserId);
+    if (!winner || !loser) return;
+    winner.points += 1;
+    winner.played += 1;
+    winner.wins += 1;
+    loser.played += 1;
+    loser.losses += 1;
+  });
+  rows.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (a.losses !== b.losses) return a.losses - b.losses;
+    if (a.bye !== b.bye) return a.bye - b.bye;
+    return a.seed - b.seed;
+  });
+  return rows;
+}
+
+function updateSwissRanking(schedule = state.schedule) {
+  if (!schedule?.swiss) return [];
+  const ranking = computeSwissRankingRows(schedule);
+  schedule.swiss.ranking = ranking;
+  return ranking;
+}
+
+function buildSwissRankingTable(rows, options = {}) {
+  const compact = Boolean(options.compact);
+  const headers = compact
+    ? `
+      <tr>
+        <th>#</th>
+        <th>Nom</th>
+        <th>Pts</th>
+        <th>MJ</th>
+        <th>G</th>
+        <th>P</th>
+        <th>Exempt</th>
+      </tr>
+    `
+    : `
+      <tr>
+        <th>#</th>
+        <th>Nom</th>
+        <th>Pts</th>
+        <th>MJ</th>
+        <th>G</th>
+        <th>P</th>
+        <th>Exempt</th>
+      </tr>
+    `;
+  const body = rows
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtml(row.name)}</td>
+          <td>${row.points}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.losses}</td>
+          <td>${row.bye}</td>
+        </tr>
+      `
+    )
+    .join('');
+  return `
+    <table>
+      <thead>${headers}</thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function renderSwissBoard(schedule) {
+  if (!elements.rotationView || !schedule?.swiss) return;
+  const ranking = updateSwissRanking(schedule);
+  const playerMap = getSwissPlayerMap(schedule);
+  const currentRound = schedule.swiss.round || 1;
+  const remainingCount = (schedule.swiss.currentMatches || []).filter(match => !isSwissWinnerResolved(match)).length;
+  const matches = (schedule.swiss.currentMatches || [])
+    .map(match => {
+      if (match.bye) {
+        const player = playerMap.get(Number(match.p1Id));
+        if (!player) return '';
+        return `
+          <article class="swiss-match-card swiss-match-card-bye">
+            <header>
+              <p class="eyebrow">Ronde ${currentRound}</p>
+              <h3>Exempt</h3>
+            </header>
+            <p class="swiss-bye-player">${escapeHtml(player.name)} reçoit +1 point</p>
+          </article>
+        `;
+      }
+      const p1 = playerMap.get(Number(match.p1Id));
+      const p2 = playerMap.get(Number(match.p2Id));
+      if (!p1 || !p2) return '';
+      const winnerId = Number(match.winnerId);
+      const p1State = winnerId === p1.id ? 'winner' : winnerId === p2.id ? 'loser' : '';
+      const p2State = winnerId === p2.id ? 'winner' : winnerId === p1.id ? 'loser' : '';
+      return `
+        <article class="swiss-match-card ${isSwissWinnerResolved(match) ? 'validated' : ''}" data-swiss-match-id="${match.id}">
+          <header>
+            <p class="eyebrow">Terrain ${match.field || '—'}</p>
+            <h3>Match</h3>
+          </header>
+          <div class="swiss-match-players">
+            <button type="button" class="swiss-player-btn ${p1State}" data-swiss-winner="${p1.id}" data-swiss-match-id="${match.id}">
+              <span class="swiss-player-name">${escapeHtml(p1.name)}</span>
+              <span class="swiss-player-points">${p1.points} pt${p1.points > 1 ? 's' : ''}</span>
+            </button>
+            <span class="swiss-versus">VS</span>
+            <button type="button" class="swiss-player-btn ${p2State}" data-swiss-winner="${p2.id}" data-swiss-match-id="${match.id}">
+              <span class="swiss-player-name">${escapeHtml(p2.name)}</span>
+              <span class="swiss-player-points">${p2.points} pt${p2.points > 1 ? 's' : ''}</span>
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+  const readyToValidate = (schedule.swiss.currentMatches || []).every(match => isSwissWinnerResolved(match));
+  elements.rotationView.innerHTML = `
+    <section class="swiss-shell">
+      <header class="swiss-board-header">
+        <div>
+          <p class="eyebrow">Ronde Suisse</p>
+          <h3>Ronde ${currentRound}</h3>
+          <p class="swiss-board-meta">${remainingCount} match(s) restant(s) · ${schedule.swiss.currentMatches.filter(match => !match.bye).length} match(s) · ${schedule.swiss.currentMatches.filter(match => match.bye).length} exempt(s)</p>
+        </div>
+        <div class="swiss-board-actions">
+          <button type="button" class="btn secondary" data-swiss-export>Exporter CSV</button>
+        </div>
+      </header>
+      <div class="swiss-board-layout">
+        <section class="swiss-match-list">${matches || '<p class="live-empty">Aucun match pour cette ronde.</p>'}</section>
+        <section class="swiss-ranking-panel">
+          <header>
+            <p class="eyebrow">Classement live</p>
+            <h3>Points et bilan</h3>
+          </header>
+          ${buildSwissRankingTable(ranking)}
+        </section>
+      </div>
+      ${
+        readyToValidate
+          ? `
+            <section class="swiss-pilot-cta swiss-validation-cta">
+              <button type="button" class="btn primary xl" data-swiss-validate-round>
+                Valider la ronde et passer à la suivante
+              </button>
+            </section>
+          `
+          : ''
+      }
+    </section>
+  `;
+}
+
+function setSwissWinner(matchId, winnerId) {
+  if (!state.schedule?.swiss) return;
+  const match = state.schedule.swiss.currentMatches.find(entry => entry.id === matchId);
+  const numericWinnerId = Number(winnerId);
+  if (!match || match.bye || !Number.isInteger(numericWinnerId)) return;
+  if (![Number(match.p1Id), Number(match.p2Id)].includes(numericWinnerId)) return;
+  match.winnerId = numericWinnerId;
+  updateSwissRanking(state.schedule);
+  persistState();
+  renderSwissBoard(state.schedule);
+  if (isSwissPilotScreenOpen()) {
+    renderSwissPilotScreen();
+  }
+  renderRankingView(state.schedule);
+  renderLiveRankingPanel();
+  if (elements.rankingModal && !elements.rankingModal.classList.contains('hidden')) {
+    renderRankingModal();
+  }
+}
+
+function validateSwissRound() {
+  if (!state.schedule?.swiss) return;
+  const stayInPilot = isSwissPilotScreenOpen();
+  const swiss = state.schedule.swiss;
+  const playerMap = getSwissPlayerMap(state.schedule);
+  const allResolved = (swiss.currentMatches || []).every(match => isSwissWinnerResolved(match));
+  if (!allResolved) {
+    alert('Choisissez un gagnant sur tous les matchs avant de passer à la ronde suivante.');
+    return;
+  }
+  const committedRound = {
+    round: swiss.round,
+    matches: (swiss.currentMatches || []).map(match => ({ ...match })),
+  };
+  committedRound.matches.forEach(match => {
+    if (match.bye) {
+      const player = playerMap.get(Number(match.p1Id));
+      if (player) {
+        player.points += 1;
+        player.bye += 1;
+      }
+      return;
+    }
+    const p1 = playerMap.get(Number(match.p1Id));
+    const p2 = playerMap.get(Number(match.p2Id));
+    const winnerId = Number(match.winnerId);
+    if (!p1 || !p2 || !isSwissWinnerResolved(match)) return;
+    const loserId = winnerId === p1.id ? p2.id : p1.id;
+    const winner = playerMap.get(winnerId);
+    const loser = playerMap.get(loserId);
+    if (!winner || !loser) return;
+    winner.points += 1;
+    winner.matches += 1;
+    winner.wins += 1;
+    loser.matches += 1;
+    loser.losses += 1;
+    winner.opponents = [...winner.opponents, loser.id];
+    loser.opponents = [...loser.opponents, winner.id];
+  });
+  swiss.history = [...(swiss.history || []), committedRound];
+  swiss.round += 1;
+  swiss.currentMatches = generateSwissPairings(swiss.players, buildSwissPreviousMatches(state.schedule)).map((match, index) => ({
+    ...match,
+    id: match.bye ? `swiss-bye-${swiss.round}-${match.p1Id}` : `swiss-${swiss.round}-${index + 1}`,
+    round: swiss.round,
+  }));
+  syncSwissRotations(state.schedule);
+  updateSwissRanking(state.schedule);
+  persistState();
+  renderResults(state.schedule, { preserveTimestamp: true });
+  if (stayInPilot) {
+    goTo('swiss-pilot');
+    renderSwissPilotScreen();
+  }
+}
+
+function exportSwissRankingCsv() {
+  if (!state.schedule?.swiss) return;
+  const ranking = updateSwissRanking(state.schedule);
+  if (!ranking.length) return;
+  const header = ['rang', 'nom', 'points', 'matchs', 'victoires', 'defaites', 'exempt', 'adversaires'].join(';');
+  const playerMap = getSwissPlayerMap(state.schedule);
+  const rows = ranking.map((row, index) => {
+    const player = playerMap.get(Number(row.id));
+    const opponents = (player?.opponents || [])
+      .map(opponentId => playerMap.get(Number(opponentId))?.name)
+      .filter(Boolean)
+      .join(' | ');
+    return [index + 1, row.name, row.points, row.played, row.wins, row.losses, row.bye, opponents].join(';');
+  });
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `ronde-suisse_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function assembleSchedule(entries, teams, options, metaExtras) {
@@ -5947,13 +9810,34 @@ function hydrateLadderMatches(schedule) {
   if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return;
   const ladder = schedule.ladder;
   const names = ladder.names || [];
-  const baseOrder = ensureLadderOrder(ladder, names.length);
-  const workingOrder = [...baseOrder];
+  ladder.order = Array.from({ length: names.length }, (_, i) => i);
+  const workingOrder = [...ladder.order];
   schedule.rotations.forEach(rotation => {
-    const courts = rotation.matches.length;
-    rotation.byes = workingOrder.slice(courts * 2).map(index => names[index] || `Participant ${index + 1}`);
+    const isExplicitRotation = rotation.matches?.every(match => match.explicitPlayers && match.home && match.away);
+    if (isExplicitRotation) {
+      if (Array.isArray(rotation.orderSnapshot) && rotation.orderSnapshot.length) {
+        ladder.order = rotation.orderSnapshot
+          .map(name => names.indexOf(name))
+          .filter(index => index >= 0);
+      }
+      rotation.matches.forEach((match, fieldIndex) => {
+        match.field = Number(match.field) || fieldIndex + 1;
+        match.order = 1;
+        if (!match.id) {
+          match.id = buildMatchKey(rotation.number, match.home, match.away);
+        }
+      });
+      rotation.fieldAssignments = rotation.matches.map(match => ({
+        label: `Terrain ${match.field}`,
+        matches: [match],
+      }));
+      return;
+    }
+    const usedSlots = new Set();
     rotation.matches.forEach((match, fieldIndex) => {
       const [slotA, slotB] = match.ladderSlots || [fieldIndex * 2, fieldIndex * 2 + 1];
+      usedSlots.add(slotA);
+      usedSlots.add(slotB);
       const orderA = workingOrder[slotA];
       const orderB = workingOrder[slotB];
       match.field = fieldIndex + 1;
@@ -5961,13 +9845,45 @@ function hydrateLadderMatches(schedule) {
       match.home = names[orderA] || `Participant ${slotA + 1}`;
       match.away = names[orderB] || `Participant ${slotB + 1}`;
     });
+    rotation.byes = workingOrder
+      .map((index, orderIndex) => ({ index, orderIndex }))
+      .filter(({ orderIndex }) => !usedSlots.has(orderIndex))
+      .map(({ index }) => names[index] || `Participant ${index + 1}`);
     rotation.fieldAssignments = rotation.matches.map(match => ({
       label: `Terrain ${match.field}`,
       matches: [match],
     }));
-    applyLadderRoundResults(workingOrder, rotation.matches, names);
+    applyLadderRoundResults(workingOrder, rotation.matches, names, schedule);
   });
   ladder.order = workingOrder;
+}
+
+function appendNextLadderRotation(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'ladder' || isLadderSessionEnded(schedule)) return null;
+  const rotation = buildNextLadderRotationFromCurrentStandings(schedule);
+  if (!rotation) return null;
+  schedule.rotations.push(rotation);
+  schedule.meta.matchCount = (schedule.meta.matchCount || 0) + rotation.matches.length;
+  schedule.meta.currentRotationNumber = rotation.number;
+  hydrateLadderMatches(schedule);
+  return rotation;
+}
+
+function computeLadderOrderAfterRotation(schedule = state.schedule, uptoIndex = state.liveRotationIndex) {
+  if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return [];
+  const names = schedule.ladder.names || [];
+  const workingOrder = Array.from({ length: names.length }, (_, index) => index);
+  const safeLimit = clampNumber(Number(uptoIndex) || 0, 0, Math.max(schedule.rotations.length - 1, 0), 0);
+  schedule.rotations.slice(0, safeLimit + 1).forEach(rotation => {
+    applyLadderRoundResults(workingOrder, rotation.matches, names, schedule);
+  });
+  return workingOrder;
+}
+
+function buildNextLadderRotationFromCurrentStandings(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return null;
+  const nextNumber = (schedule.rotations[state.liveRotationIndex]?.number || schedule.rotations.length || 0) + 1;
+  return buildConfiguredLadderRotation(schedule, schedule.ladder.order || [], nextNumber, schedule.rotations[state.liveRotationIndex] || null);
 }
 
 function ensureLadderOrder(ladder, count) {
@@ -5977,34 +9893,219 @@ function ensureLadderOrder(ladder, count) {
   return ladder.order;
 }
 
-function applyLadderRoundResults(order, matches, names) {
-  matches.forEach(match => {
-    const [slotA, slotB] = match.ladderSlots || [];
-    if (!Number.isInteger(slotA) || !Number.isInteger(slotB)) return;
-    const homeName = names[order[slotA]];
-    const awayName = names[order[slotB]];
-    const participants = { home: homeName, away: awayName };
-    if (isMatchNeutralized(participants)) return;
-    const record = state.scores && state.scores[match.id];
-    if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away) || record.home === record.away) return;
-    if (record.home > record.away) {
-      // home wins stays at slotA
-      return;
-    }
-    // away wins -> échange les positions
-    const temp = order[slotA];
-    order[slotA] = order[slotB];
-    order[slotB] = temp;
+function getScheduleLadderMode(schedule = state.schedule) {
+  const ladder = schedule?.ladder || {};
+  if (ladder.mode) return ladder.mode;
+  if (schedule?.format === 'ladder') {
+    return inferLadderMode(schedule.meta?.fieldCount, ladder.refereeCourts || 0, ladder.freeCourts || 0);
+  }
+  return getLadderMode();
+}
+
+function resolveLadderRoundOutcome(match, order, names) {
+  const [slotTop, slotBottom] = match.ladderSlots || [];
+  if (!Number.isInteger(slotTop) || !Number.isInteger(slotBottom)) return null;
+  const topPlayerIndex = order[slotTop];
+  const bottomPlayerIndex = order[slotBottom];
+  const topName = names[topPlayerIndex] || `Participant ${slotTop + 1}`;
+  const bottomName = names[bottomPlayerIndex] || `Participant ${slotBottom + 1}`;
+  const participants = { home: topName, away: bottomName };
+  if (isMatchNeutralized(participants)) {
+    return {
+      match,
+      field: Number(match.field) || 0,
+      slotTop,
+      slotBottom,
+      topPlayerIndex,
+      bottomPlayerIndex,
+      topName,
+      bottomName,
+      baseHighIndex: topPlayerIndex,
+      baseLowIndex: bottomPlayerIndex,
+      baseHighName: topName,
+      baseLowName: bottomName,
+      winnerName: null,
+      loserName: null,
+      resolved: false,
+      status: 'neutralized',
+    };
+  }
+  const record = state.scores?.[match.id];
+  if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) {
+    return {
+      match,
+      field: Number(match.field) || 0,
+      slotTop,
+      slotBottom,
+      topPlayerIndex,
+      bottomPlayerIndex,
+      topName,
+      bottomName,
+      baseHighIndex: topPlayerIndex,
+      baseLowIndex: bottomPlayerIndex,
+      baseHighName: topName,
+      baseLowName: bottomName,
+      winnerName: null,
+      loserName: null,
+      resolved: false,
+      status: 'unresolved',
+    };
+  }
+  if (record.home === record.away) {
+    return {
+      match,
+      field: Number(match.field) || 0,
+      slotTop,
+      slotBottom,
+      topPlayerIndex,
+      bottomPlayerIndex,
+      topName,
+      bottomName,
+      baseHighIndex: topPlayerIndex,
+      baseLowIndex: bottomPlayerIndex,
+      baseHighName: topName,
+      baseLowName: bottomName,
+      winnerName: null,
+      loserName: null,
+      resolved: false,
+      status: 'draw',
+    };
+  }
+  const bottomWins = record.away > record.home;
+  return {
+    match,
+    field: Number(match.field) || 0,
+    slotTop,
+    slotBottom,
+    topPlayerIndex,
+    bottomPlayerIndex,
+    topName,
+    bottomName,
+    baseHighIndex: bottomWins ? bottomPlayerIndex : topPlayerIndex,
+    baseLowIndex: bottomWins ? topPlayerIndex : bottomPlayerIndex,
+    baseHighName: bottomWins ? bottomName : topName,
+    baseLowName: bottomWins ? topName : bottomName,
+    winnerName: bottomWins ? bottomName : topName,
+    loserName: bottomWins ? topName : bottomName,
+    resolved: true,
+    status: bottomWins ? 'bottom-win' : 'top-win',
+  };
+}
+
+function computeFreeLadderRoundState(order, matches, names) {
+  const courts = (matches || [])
+    .map(match => resolveLadderRoundOutcome(match, order, names))
+    .filter(Boolean)
+    .sort((a, b) => a.slotTop - b.slotTop || a.field - b.field);
+  if (!courts.length) {
+    return { nextOrder: [...order], courts: [], boundarySwaps: [] };
+  }
+  const boundarySwaps = courts.slice(0, -1).map((court, index) => {
+    const lowerCourt = courts[index + 1];
+    const swapped = Boolean(court.resolved && lowerCourt.resolved);
+    return {
+      upperField: court.field,
+      lowerField: lowerCourt.field,
+      swapped,
+      movingUpName: swapped ? lowerCourt.baseHighName : null,
+      movingDownName: swapped ? court.baseLowName : null,
+    };
+  });
+  const nextOrder = [...order];
+  courts.forEach((court, index) => {
+    const incomingFromUpper = index > 0 && boundarySwaps[index - 1]?.swapped ? courts[index - 1].baseLowIndex : court.baseHighIndex;
+    const incomingFromLower =
+      index < boundarySwaps.length && boundarySwaps[index]?.swapped ? courts[index + 1].baseHighIndex : court.baseLowIndex;
+    court.finalHighIndex = incomingFromUpper;
+    court.finalLowIndex = incomingFromLower;
+    court.finalHighName = names[incomingFromUpper] || `Participant ${court.slotTop + 1}`;
+    court.finalLowName = names[incomingFromLower] || `Participant ${court.slotBottom + 1}`;
+    nextOrder[court.slotTop] = incomingFromUpper;
+    nextOrder[court.slotBottom] = incomingFromLower;
+  });
+  return { nextOrder, courts, boundarySwaps };
+}
+
+function applyLadderRoundResults(order, matches, names, schedule = state.schedule) {
+  const roundState = computeFreeLadderRoundState(order, matches, names);
+  roundState.nextOrder.forEach((playerIndex, orderIndex) => {
+    order[orderIndex] = playerIndex;
   });
 }
 
 function hydrateScheduleForSpecialModes(schedule) {
   if (!schedule) return;
   if (schedule.format === 'ladder') {
+    schedule.meta = schedule.meta || {};
+    schedule.meta.format = 'ladder';
+    schedule.meta.sessionMode = schedule.meta.sessionMode === 'limited' ? 'limited' : getLadderSessionMode();
+    schedule.meta.rotationLimit =
+      schedule.meta.sessionMode === 'limited'
+        ? clampNumber(
+            Number(schedule.meta.rotationLimit) || Number(schedule.meta.rotationCount) || schedule.rotations?.length || 1,
+            1,
+            999,
+            schedule.rotations?.length || 1
+          )
+        : null;
+    schedule.meta.rotationCount = schedule.meta.sessionMode === 'limited' ? schedule.meta.rotationLimit : null;
+    schedule.meta.sessionEnded = Boolean(schedule.meta.sessionEnded);
+    if (!schedule.meta.durationMinutes) {
+      schedule.meta.durationMinutes = clampNumber(Number(state.options.duration) || 12, 4, 30, 12);
+    }
+    if (schedule.ladder) {
+      schedule.ladder.configuredCourts = getLadderConfiguredCourts(schedule);
+      schedule.ladder.sessionMode = schedule.meta.sessionMode;
+      schedule.ladder.rotationLimit = schedule.meta.rotationLimit;
+      schedule.ladder.mode = schedule.ladder.mode || inferLadderMode(schedule.meta.fieldCount, schedule.ladder.refereeCourts || 0, schedule.ladder.freeCourts || 0);
+      schedule.ladder.refereePlacement = normalizeLadderRefereePlacement(schedule.ladder.refereePlacement);
+      schedule.ladder.manualRefereeFields = normalizeManualRefereeFields(
+        schedule.ladder.manualRefereeFields,
+        schedule.ladder.configuredCourts || schedule.meta.configuredCourts || schedule.meta.fieldCount
+      );
+      if (!Array.isArray(schedule.ladder.refereeFields)) {
+        schedule.ladder.refereeFields = selectLadderRefereeFields(
+          schedule.meta.fieldCount || 0,
+          schedule.ladder,
+          schedule.ladder.mode,
+          schedule.ladder.refereeCourts
+        );
+      }
+    }
     hydrateLadderMatches(schedule);
   }
   if (schedule.format === 'challenge') {
     hydrateChallengeBoard(schedule);
+  }
+  if (schedule.format === 'swiss') {
+    schedule.meta = schedule.meta || {};
+    schedule.meta.format = 'swiss';
+    schedule.meta.formatLabel = TOURNAMENT_MODES.swiss.label;
+    if (!schedule.meta.durationMinutes) {
+      schedule.meta.durationMinutes = clampNumber(Number(state.options.duration) || 12, 1, 180, 12);
+    }
+    if (!schedule.swiss) {
+      schedule.swiss = {
+        round: 1,
+        players: (schedule.teams || []).map((team, index) => ({
+          id: index + 1,
+          seed: index,
+          name: team.name,
+          points: 0,
+          matches: 0,
+          wins: 0,
+          losses: 0,
+          bye: 0,
+          opponents: [],
+        })),
+        currentMatches: [],
+        history: [],
+        ranking: [],
+      };
+      schedule.swiss.currentMatches = generateSwissPairings(schedule.swiss.players, []);
+    }
+    syncSwissRotations(schedule);
+    updateSwissRanking(schedule);
   }
 }
 
@@ -6013,15 +10114,19 @@ function hydrateChallengeBoard(schedule) {
   if (!schedule.challenge) {
     schedule.challenge = {
       names: schedule.teams.map(team => team.name),
-      order: schedule.teams.map((_, index) => index),
+      order: [],
+      range: getChallengeRange(),
       history: [],
     };
   }
   const challenge = schedule.challenge;
   challenge.names = schedule.teams.map(team => team.name);
+  challenge.range = clampNumber(Number(challenge.range) || getChallengeRange(), 1, 10, getChallengeRange());
   if (!Array.isArray(challenge.history)) {
     challenge.history = [];
   }
+  schedule.meta = schedule.meta || {};
+  schedule.meta.fieldCount = clampNumber(Number(schedule.meta.fieldCount) || 1, 1, 16, 1);
   ensureChallengeRoster(schedule);
 }
 
@@ -6237,6 +10342,369 @@ function buildParallelEntries(groupedRounds, options) {
     }
   }
   return entries;
+}
+
+function createLadderStat(name) {
+  return {
+    name,
+    played: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    points: 0,
+    pointsFor: 0,
+    pointsAgainst: 0,
+    status: 'Attente',
+  };
+}
+
+function getCurrentLadderRotation(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'ladder') return null;
+  return schedule.rotations[state.liveRotationIndex] || schedule.rotations[0] || null;
+}
+
+function buildLadderStatusMap(schedule = state.schedule, rotation = getCurrentLadderRotation(schedule), roleAssignments) {
+  const map = new Map();
+  const names = schedule?.ladder?.names || [];
+  names.forEach(name => {
+    if (isEntityInactive(getEntityStatusByName(name))) {
+      map.set(name, 'Indisponible');
+    }
+  });
+  if (!rotation) return map;
+  rotation.matches.forEach(match => {
+    const participants = resolveMatchParticipants(match, schedule);
+    [participants.home, participants.away].forEach(name => {
+      if (name && !map.has(name)) map.set(name, 'Joue');
+    });
+  });
+  const roleTeams = collectRoleTeams(roleAssignments);
+  roleTeams.arbitre.forEach(name => {
+    if (!map.has(name)) map.set(name, 'Arbitre');
+  });
+  filterRestTeams(rotation.byes || [], roleAssignments).forEach(name => {
+    if (!map.has(name)) map.set(name, 'Repos');
+  });
+  return map;
+}
+
+function computeLadderStandings(schedule = state.schedule) {
+  if (!schedule || schedule.format !== 'ladder' || !schedule.ladder) return [];
+  hydrateLadderMatches(schedule);
+  const names = schedule.ladder.names || [];
+  const statsMap = new Map(names.map(name => [name, createLadderStat(name)]));
+  schedule.rotations.forEach(rotation => {
+    rotation.matches.forEach(match => {
+      const participants = resolveMatchParticipants(match, schedule);
+      if (isMatchNeutralized(participants)) return;
+      const record = state.scores?.[match.id];
+      if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) return;
+      const home = statsMap.get(participants.home);
+      const away = statsMap.get(participants.away);
+      if (!home || !away) return;
+      home.played += 1;
+      away.played += 1;
+      home.pointsFor += record.home;
+      home.pointsAgainst += record.away;
+      away.pointsFor += record.away;
+      away.pointsAgainst += record.home;
+      if (record.home > record.away) {
+        home.wins += 1;
+        away.losses += 1;
+        home.points += 3;
+      } else if (record.away > record.home) {
+        away.wins += 1;
+        home.losses += 1;
+        away.points += 3;
+      } else {
+        home.draws += 1;
+        away.draws += 1;
+        home.points += 1;
+        away.points += 1;
+      }
+    });
+  });
+  const rotation = getCurrentLadderRotation(schedule);
+  const roleAssignments = computeRoleAssignments(rotation);
+  const statusMap = buildLadderStatusMap(schedule, rotation, roleAssignments);
+  const order = ensureLadderOrder(schedule.ladder, names.length);
+  return order.map(index => {
+    const name = names[index];
+    const row = statsMap.get(name) || createLadderStat(name);
+    return {
+      ...row,
+      goalDiff: row.pointsFor - row.pointsAgainst,
+      status: statusMap.get(name) || 'Attente',
+    };
+  });
+}
+
+function computeLadderMovementFeed(schedule = state.schedule, rotation = getCurrentLadderRotation(schedule), roleAssignments) {
+  if (!schedule || schedule.format !== 'ladder' || !rotation) return [];
+  const feed = [];
+  const rotationIndex = Math.max(
+    0,
+    schedule.rotations.findIndex(entry => entry === rotation || entry.number === rotation.number)
+  );
+  const roundState = computeLadderFieldRoundState(rotation, schedule);
+  roundState.boundarySwaps.forEach(swap => {
+    if (!swap?.swapped) return;
+    feed.push({ type: 'up', label: `${swap.movingUpName} monte du Terrain ${swap.lowerField} vers le Terrain ${swap.upperField}` });
+    feed.push({ type: 'down', label: `${swap.movingDownName} descend du Terrain ${swap.upperField} vers le Terrain ${swap.lowerField}` });
+  });
+  roundState.courts.forEach(court => {
+    if (court.status === 'draw') {
+      feed.push({ type: 'steady', label: `${court.topName} et ${court.bottomName} restent sur Terrain ${court.field}` });
+    } else if (court.status === 'neutralized') {
+      feed.push({ type: 'unavailable', label: `Terrain ${court.field} neutralisé` });
+    }
+  });
+  rotation.matches.forEach(match => {
+    const arbiter = roleAssignments?.get(match.id)?.arbitre;
+    if (!arbiter) return;
+    feed.push({ type: 'arbiter', label: `${arbiter} arbitre sur Terrain ${match.field}` });
+    const nextRotation = schedule.rotations[rotationIndex + 1];
+    const nextRef = nextRotation?.fieldReferees?.[String(match.field)] || nextRotation?.fieldReferees?.[match.field];
+    if (nextRef) {
+      feed.push({ type: 'play', label: `${arbiter} jouera sur Terrain ${match.field} à la rotation suivante` });
+      feed.push({ type: 'arbiter', label: `${nextRef} arbitrera ensuite sur Terrain ${match.field}` });
+    }
+  });
+  const bench = computeLadderBenchData(schedule, rotation, roleAssignments);
+  bench.nextEntrants.forEach(name => {
+    feed.push({ type: 'play', label: `${name} entre dans la rotation suivante` });
+  });
+  bench.waiting.forEach(name => {
+    feed.push({ type: 'rest', label: `${name} reste en attente` });
+  });
+  bench.unavailable.forEach(name => {
+    feed.push({ type: 'unavailable', label: `${name} est neutralisé` });
+  });
+  return feed;
+}
+
+function computeLadderBenchData(schedule = state.schedule, rotation = getCurrentLadderRotation(schedule), roleAssignments) {
+  if (!schedule || schedule.format !== 'ladder') {
+    return { waiting: [], nextEntrants: [], unavailable: [] };
+  }
+  const waiting = rotation ? filterRestTeams(rotation.byes || [], roleAssignments) : [];
+  const unavailable = (schedule.ladder?.names || []).filter(name => isEntityInactive(getEntityStatusByName(name)));
+  const currentPlaying = new Set(
+    rotation
+      ? rotation.matches.flatMap(match => {
+          const participants = resolveMatchParticipants(match, schedule);
+          return [participants.home, participants.away];
+        })
+      : []
+  );
+  const nextRotation = schedule.rotations[state.liveRotationIndex + 1];
+  const nextEntrants = nextRotation
+    ? Array.from(
+        new Set(
+          nextRotation.matches.flatMap(match => {
+            const participants = resolveMatchParticipants(match, schedule);
+            return [participants.home, participants.away];
+          })
+        )
+      ).filter(name => !currentPlaying.has(name))
+    : [];
+  return { waiting, nextEntrants, unavailable };
+}
+
+function buildLadderCurrentRotationSummary(schedule = state.schedule) {
+  if (!schedule || !isLadderLiveMode(schedule) || !schedule.rotations?.length) return null;
+  const rotation = getCurrentLadderRotation(schedule);
+  if (!rotation) return null;
+  const total = getLadderRotationTotal(schedule);
+  const activeFields = rotation.matches.length;
+  const completed = rotation.matches.reduce((count, match) => {
+    const participants = resolveMatchParticipants(match, schedule);
+    const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
+    return count + (isMatchCompleteById(matchId) ? 1 : 0);
+  }, 0);
+  const validated = rotation.matches.reduce((count, match) => {
+    const participants = resolveMatchParticipants(match, schedule);
+    const matchId = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
+    return count + (isMatchValidated(matchId) ? 1 : 0);
+  }, 0);
+  const refereeCourts = rotation.matches.filter(match => getLadderCourtProfile(Number(match.field)) === 'arbiter').length;
+  const freeCourts = Math.max(0, activeFields - refereeCourts);
+  const remaining = Math.max(0, activeFields - completed);
+  const stateKey = validated === activeFields && activeFields > 0 ? 'ready' : completed > 0 ? 'active' : 'pending';
+  const stateLabelMap = {
+    pending: 'En cours',
+    active: 'En cours',
+    ready: 'Prête à clôturer',
+  };
+  return {
+    rotation,
+    total,
+    sessionMode: schedule.meta?.sessionMode || 'open',
+    playerCount: schedule.ladder?.names?.length || schedule.meta?.teamCount || 0,
+    activeFields,
+    configuredCourts: schedule.ladder?.configuredCourts || schedule.meta?.fieldCount || activeFields,
+    maxCourts: schedule.ladder?.maxCourts || activeFields,
+    courtMode: schedule.ladder?.courtMode || 'optimized',
+    completed,
+    remaining,
+    validated,
+    refereeCourts,
+    freeCourts,
+    stateKey,
+    stateLabel: isLadderSessionEnded(schedule) ? 'Séance terminée' : stateLabelMap[stateKey] || 'En cours',
+    timer: state.options.timer ? formatSeconds(timerState.remainingSeconds || timerState.baseSeconds) : null,
+  };
+}
+
+function buildLadderResultsFocusCard() {
+  const summary = buildLadderCurrentRotationSummary(state.schedule);
+  if (!summary) return '';
+  return `
+    <article class="ladder-focus-card ladder-focus-card-results">
+      <div class="ladder-focus-copy">
+        <p class="eyebrow">Rotation en cours</p>
+      <h3>${formatLadderRotationLabel(summary.rotation, state.schedule)}</h3>
+      <div class="ladder-focus-stats">
+        <span class="ladder-summary-pill">${summary.activeFields} terrains utilisés</span>
+        <span class="ladder-summary-pill">${summary.playerCount} joueurs</span>
+        <span class="ladder-summary-pill">max possible : ${summary.maxCourts} terrains</span>
+        <span class="ladder-summary-pill">${summary.completed} matchs saisis / ${summary.activeFields}</span>
+        <span class="ladder-summary-pill">${summary.refereeCourts} terrains arbitrés</span>
+        <span class="ladder-summary-pill">${summary.freeCourts} terrains sans arbitre</span>
+      </div>
+      </div>
+      <div class="ladder-focus-actions">
+        <span class="state-pill ${summary.stateKey === 'ready' ? 'live' : 'next'}">${summary.stateLabel}</span>
+        <button type="button" class="btn primary xl" data-open-current-rotation>Ouvrir la rotation en cours</button>
+        <button type="button" class="btn secondary" data-open-current-ranking>Voir le classement</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderLadderCurrentRotationCard() {
+  if (!elements.liveCurrentRotationCard) return;
+  if (!isLadderLiveMode(state.schedule)) {
+    elements.liveCurrentRotationCard.classList.add('hidden');
+    elements.liveCurrentRotationCard.innerHTML = '';
+    if (elements.liveCurrentRotationBtn) {
+      elements.liveCurrentRotationBtn.classList.add('hidden');
+    }
+    return;
+  }
+  const summary = buildLadderCurrentRotationSummary(state.schedule);
+  if (!summary) {
+    elements.liveCurrentRotationCard.classList.add('hidden');
+    elements.liveCurrentRotationCard.innerHTML = '';
+    if (elements.liveCurrentRotationBtn) {
+      elements.liveCurrentRotationBtn.classList.add('hidden');
+    }
+    return;
+  }
+  const closeDisabled = summary.stateKey !== 'ready' || isLadderSessionEnded(state.schedule) ? 'disabled' : '';
+  const closeLabel =
+    !isLadderOpenSession(state.schedule) && summary.total && summary.rotation.number >= summary.total
+      ? 'Terminer le tournoi'
+      : 'Rotation suivante';
+  const timerLine = summary.timer ? `<span class="ladder-summary-pill">Temps restant ${summary.timer}</span>` : '';
+  elements.liveCurrentRotationCard.innerHTML = `
+      <div class="ladder-focus-copy">
+      <p class="eyebrow">Rotation en cours</p>
+      <h3>${formatLadderRotationLabel(summary.rotation, state.schedule)}</h3>
+      <p class="ladder-focus-lead">Accès direct à la rotation active pour renseigner les terrains sans chercher.</p>
+      <div class="ladder-focus-stats">
+        <span class="ladder-summary-pill">${summary.activeFields} terrains utilisés</span>
+        <span class="ladder-summary-pill">${summary.playerCount} joueurs</span>
+        <span class="ladder-summary-pill">max possible : ${summary.maxCourts} terrains</span>
+        <span class="ladder-summary-pill">${summary.completed} matchs saisis / ${summary.activeFields}</span>
+        <span class="ladder-summary-pill">${summary.refereeCourts} terrains arbitrés</span>
+        <span class="ladder-summary-pill">${summary.freeCourts} terrains sans arbitre</span>
+        ${timerLine}
+      </div>
+    </div>
+    <div class="ladder-focus-actions">
+      <span class="state-pill ${summary.stateKey === 'ready' ? 'live' : 'next'}">${summary.stateLabel}</span>
+      <button type="button" class="btn primary xl" data-open-current-rotation>Ouvrir la rotation en cours</button>
+      <button type="button" class="btn secondary" data-close-current-rotation ${closeDisabled}>${closeLabel}</button>
+      <button type="button" class="btn ghost" data-open-current-ranking>Voir le classement</button>
+    </div>
+  `;
+  elements.liveCurrentRotationCard.classList.remove('hidden');
+  if (elements.liveCurrentRotationBtn) {
+    elements.liveCurrentRotationBtn.classList.remove('hidden');
+  }
+}
+
+function focusCurrentLadderRotation(options = {}) {
+  const behavior = options.behavior || 'smooth';
+  const ensureLive = Boolean(options.ensureLive);
+  if (ensureLive && state.schedule) {
+    goTo('live');
+    renderLiveRotation();
+  }
+  const scrollToMatches = () => {
+    const target =
+      elements.liveFieldBoard?.querySelector('.ladder-pilot-card') ||
+      elements.currentRotationMatchesAnchor ||
+      elements.liveFieldBoard ||
+      elements.liveRotationContent;
+    if (!target) return;
+    target.scrollIntoView({ behavior, block: 'start' });
+    window.setTimeout(() => {
+      target.scrollIntoView({ behavior, block: 'start' });
+      const firstAction =
+        target.querySelector('[data-ladder-quick]') ||
+        target.querySelector('[data-ladder-score-toggle]') ||
+        target.querySelector('[data-status-player]');
+      if (firstAction && typeof firstAction.focus === 'function') {
+        firstAction.focus({ preventScroll: true });
+      }
+    }, ensureLive ? 120 : 40);
+  };
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(scrollToMatches);
+  });
+}
+
+function handleRotationViewClick(event) {
+  const swissWinnerButton = event.target.closest('[data-swiss-winner]');
+  if (swissWinnerButton) {
+    const matchId = swissWinnerButton.dataset.swissMatchId;
+    const winnerId = Number(swissWinnerButton.dataset.swissWinner);
+    if (matchId && Number.isInteger(winnerId)) {
+      setSwissWinner(matchId, winnerId);
+    }
+    return;
+  }
+  const swissValidateButton = event.target.closest('[data-swiss-validate-round]');
+  if (swissValidateButton) {
+    validateSwissRound();
+    return;
+  }
+  const swissExportButton = event.target.closest('[data-swiss-export]');
+  if (swissExportButton) {
+    exportSwissRankingCsv();
+    return;
+  }
+  const openCurrentButton = event.target.closest('[data-open-current-rotation]');
+  if (openCurrentButton) {
+    if (isLadderLiveMode(state.schedule)) {
+      openLadderPilotModal();
+    } else {
+      focusCurrentLadderRotation({ ensureLive: true });
+    }
+    return;
+  }
+  const rankingButton = event.target.closest('[data-open-current-ranking]');
+  if (rankingButton) {
+    setActiveView('rankings');
+  }
+}
+
+function setEntityStatusByName(name, statusKey) {
+  const index = state.teamNames.findIndex(entry => entry === name);
+  if (index === -1) return;
+  setEntityStatus(index, statusKey);
 }
 
 function buildFinalEntries(groups) {
@@ -6540,6 +11008,13 @@ function formatSeconds(totalSeconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function buildFieldToken(value) {
+  return removeDiacritics(String(value ?? ''))
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
 function buildMatchKey(rotationNumber, home, away) {
   const encode = value => encodeURIComponent(value.trim());
   return `r${rotationNumber}-${encode(home)}-${encode(away)}`;
@@ -6686,6 +11161,8 @@ function createDefaultState() {
     options: {
       fields: 2,
       duration: 12,
+      challengeClassName: '',
+      challengeRange: 5,
       startTime: '09:00',
       turnaround: 2,
       breakMinutes: 0,
@@ -6700,6 +11177,12 @@ function createDefaultState() {
       worldCupGroupCount: 2,
       roleSettings: { ...DEFAULT_ROLE_SETTINGS },
       ladder: {
+        mode: 'free',
+        sessionMode: 'open',
+        rotationLimit: null,
+        courtMode: 'optimized',
+        refereePlacement: 'top',
+        manualRefereeFields: [],
         refereeCourts: 0,
         freeCourts: 0,
       },
@@ -6750,6 +11233,13 @@ function sanitizeState(raw) {
   const optionSource = { ...base.options, ...(source.options || {}) };
   optionSource.fields = clampNumber(Number(optionSource.fields), 1, 16, base.options.fields);
   optionSource.duration = clampNumber(Number(optionSource.duration), 1, 180, base.options.duration);
+  optionSource.challengeClassName = String(optionSource.challengeClassName || '').trim();
+  optionSource.challengeRange = clampNumber(
+    Number.isFinite(Number(optionSource.challengeRange)) ? Number(optionSource.challengeRange) : 5,
+    1,
+    10,
+    5
+  );
   optionSource.startTime = optionSource.startTime || base.options.startTime;
   optionSource.turnaround = clampNumber(Number(optionSource.turnaround), 0, 60, base.options.turnaround);
   optionSource.breakMinutes = clampNumber(Number(optionSource.breakMinutes), 0, 600, base.options.breakMinutes);
@@ -6773,6 +11263,15 @@ function sanitizeState(raw) {
     ? optionSource.schedulingMode
     : 'pedagogique';
   optionSource.ladder = {
+    mode: ['free', 'arbiter', 'mixed'].includes(optionSource?.ladder?.mode) ? optionSource.ladder.mode : 'free',
+    sessionMode: optionSource?.ladder?.sessionMode === 'limited' ? 'limited' : 'open',
+    rotationLimit:
+      Number.isFinite(Number(optionSource?.ladder?.rotationLimit)) && Number(optionSource.ladder.rotationLimit) > 0
+        ? clampNumber(Number(optionSource.ladder.rotationLimit), 1, 999, 6)
+        : null,
+    courtMode: optionSource?.ladder?.courtMode === 'max' ? 'max' : 'optimized',
+    refereePlacement: normalizeLadderRefereePlacement(optionSource?.ladder?.refereePlacement),
+    manualRefereeFields: normalizeManualRefereeFields(optionSource?.ladder?.manualRefereeFields, optionSource.fields),
     refereeCourts: clampNumber(Number(optionSource?.ladder?.refereeCourts), 0, 16, 0),
     freeCourts: clampNumber(Number(optionSource?.ladder?.freeCourts), 0, 16, 0),
   };
@@ -6801,6 +11300,42 @@ function sanitizeState(raw) {
   optionSource.roleSettings = mergedRoles;
   delete optionSource.restRoles;
   delete optionSource.restRolesEnabled;
+  {
+    const fields = optionSource.fields;
+    let mode = optionSource.ladder.mode;
+    let refereeCourts = clampNumber(Number(optionSource.ladder.refereeCourts), 0, fields, 0);
+    let freeCourts = clampNumber(Number(optionSource.ladder.freeCourts), 0, fields, 0);
+    if (mode === 'free') {
+      refereeCourts = 0;
+      freeCourts = fields;
+    } else if (mode === 'arbiter') {
+      refereeCourts = Math.max(refereeCourts || fields, 1);
+      refereeCourts = clampNumber(refereeCourts, 1, fields, fields);
+      freeCourts = Math.max(fields - refereeCourts, 0);
+      if (freeCourts > 0) mode = 'mixed';
+    } else {
+      if (fields <= 1) {
+        mode = 'arbiter';
+        refereeCourts = 1;
+        freeCourts = 0;
+      } else {
+        if (refereeCourts <= 0 || refereeCourts >= fields) {
+          refereeCourts = Math.max(1, Math.floor(fields / 2));
+        }
+        freeCourts = fields - refereeCourts;
+      }
+    }
+    optionSource.ladder = {
+      mode,
+      sessionMode: optionSource.ladder.sessionMode,
+      rotationLimit: optionSource.ladder.sessionMode === 'limited' ? optionSource.ladder.rotationLimit : null,
+      courtMode: optionSource.ladder.courtMode,
+      refereePlacement: optionSource.ladder.refereePlacement,
+      manualRefereeFields: normalizeManualRefereeFields(optionSource.ladder.manualRefereeFields, fields),
+      refereeCourts,
+      freeCourts,
+    };
+  }
   merged.options = optionSource;
   const incomingNames = Array.isArray(source.teamNames) ? source.teamNames : base.teamNames;
   merged.teamNames = ensureTeamListLength(incomingNames, merged.participants, merged.practiceType);
@@ -6853,12 +11388,14 @@ function persistState() {
 function resetApplication() {
   const confirmed = window.confirm('Réinitialiser complètement la configuration et effacer les scores ?');
   if (!confirmed) return;
+  challengeIdSeed = 0;
   localStorage.removeItem(STORAGE_KEY);
   state = sanitizeState(createDefaultState());
   persistState();
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
+  renderChallengeClassManager();
   updateTheme(state.universeId);
   renderModeCards();
   updateModeScreenCopy();
@@ -6882,23 +11419,38 @@ function resetApplication() {
 function setLiveModeAvailability(enabled) {
   if (!elements.startLiveBtn) return;
   const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
+  const ladderMode = isLadderLiveMode(state.schedule);
+  const swissMode = state.schedule?.format === 'swiss';
   elements.startLiveBtn.disabled = !enabled || !hasRotations;
   const rotationNumber =
     state.schedule && state.schedule.rotations[state.liveRotationIndex]
       ? state.schedule.rotations[state.liveRotationIndex].number
       : 1;
   if (enabled) {
-    elements.startLiveBtn.textContent =
-      state.liveRotationIndex > 0 ? `Reprendre le live (Rotation ${rotationNumber})` : 'Démarrer le live';
+    if (swissMode) {
+      elements.startLiveBtn.textContent =
+        state.schedule?.swiss?.round > 1 ? `Ouvrir le pilotage (Ronde ${rotationNumber})` : 'Ouvrir le pilotage';
+    } else if (ladderMode) {
+      elements.startLiveBtn.textContent =
+        state.liveRotationIndex > 0 ? `Ouvrir le pilotage (Rotation ${rotationNumber})` : 'Ouvrir le pilotage';
+    } else {
+      elements.startLiveBtn.textContent =
+        state.liveRotationIndex > 0 ? `Reprendre le live (Rotation ${rotationNumber})` : 'Démarrer le live';
+    }
   } else {
-    elements.startLiveBtn.textContent = 'Démarrer le live';
+    elements.startLiveBtn.textContent = ladderMode ? 'Ouvrir le pilotage' : 'Démarrer le live';
   }
   if (elements.resultsPrimaryHint) {
-    const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
     if (!enabled) {
-      elements.resultsPrimaryHint.textContent = 'Générez un planning pour activer le mode live.';
+      elements.resultsPrimaryHint.textContent = ladderMode
+        ? 'Générez un planning pour ouvrir le pilotage.'
+        : 'Générez un planning pour activer le mode live.';
+    } else if (swissMode) {
+      elements.resultsPrimaryHint.textContent = 'La Ronde Suisse se pilote directement dans la liste des matchs de la ronde.';
     } else if (!hasRotations) {
       elements.resultsPrimaryHint.textContent = 'Le mode live est désactivé pour le mode Défi. Utilisez la colonne classement pour gérer vos défis.';
+    } else if (ladderMode) {
+      elements.resultsPrimaryHint.textContent = 'La saisie des scores se fait directement dans la page de pilotage dédiée.';
     } else if (state.liveRotationIndex > 0) {
       elements.resultsPrimaryHint.textContent = `Reprenez directement à la rotation ${rotationNumber} ou ajustez les scores.`;
     } else {
@@ -6906,10 +11458,16 @@ function setLiveModeAvailability(enabled) {
     }
   }
   if (elements.returnLiveBtn) {
-    elements.returnLiveBtn.disabled = !enabled;
+    elements.returnLiveBtn.disabled = !enabled || swissMode;
   }
   if (elements.liveChronoBtn) {
-    elements.liveChronoBtn.disabled = !enabled;
+    elements.liveChronoBtn.disabled = !enabled || swissMode;
+  }
+  if (elements.resultsProjectionBtn) {
+    elements.resultsProjectionBtn.disabled = swissMode;
+  }
+  if (elements.resultsChronoBtn) {
+    elements.resultsChronoBtn.disabled = swissMode;
   }
   if (elements.rankingButtons && elements.rankingButtons.length) {
     elements.rankingButtons.forEach(btn => {
@@ -6917,15 +11475,3 @@ function setLiveModeAvailability(enabled) {
     });
   }
 }
-  if (elements.challengeForm) {
-    elements.challengeForm.addEventListener('submit', handleChallengeFormSubmit);
-  }
-  if (elements.challengeModal) {
-    elements.challengeModal.addEventListener('click', event => {
-      if (event.target === elements.challengeModal) {
-        closeChallengeDialog();
-        return;
-      }
-      handleChallengeDialogAction(event);
-    });
-  }
