@@ -200,6 +200,20 @@ body[data-screen='swiss-pilot'] .stepper {
   transition: opacity 0.2s ease, border 0.2s ease, background 0.2s ease;
 }
 
+.step.step-clickable {
+  cursor: pointer;
+}
+
+.step.step-clickable:hover,
+.step.step-clickable:focus-visible {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.step.step-disabled {
+  cursor: default;
+}
+
 .step.done {
   opacity: 1;
   border-color: rgba(247, 169, 56, 0.5);
@@ -338,6 +352,85 @@ body[data-screen='swiss-pilot'] .stepper {
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
+}
+
+.landing-sessions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+  padding: 22px 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+}
+
+.landing-sessions-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.landing-sessions-head h3 {
+  margin: 6px 0 0;
+}
+
+.landing-sessions-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.landing-sessions-list {
+  display: grid;
+  gap: 12px;
+}
+
+.landing-session-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.landing-session-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.landing-session-copy strong,
+.landing-session-copy span {
+  overflow-wrap: anywhere;
+}
+
+.landing-session-meta {
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.landing-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.landing-session-empty {
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+  text-align: center;
 }
 
 .landing-eyebrow {
@@ -1789,6 +1882,49 @@ input[type='range']::-webkit-slider-thumb {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.session-save-feedback {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 80;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(20, 28, 22, 0.96);
+  border: 1px solid rgba(96, 214, 140, 0.45);
+  color: #dff8e8;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.25);
+  font-weight: 600;
+}
+
+.session-save-feedback.hidden {
+  display: none;
+}
+
+.session-save-panel {
+  margin-top: 18px;
+}
+
+.session-save-panel-head h4 {
+  margin: 6px 0 0;
+}
+
+.session-save-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-save-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.session-save-panel [data-session-name-hint]:not(.hidden) {
+  color: var(--warning, #ffd27a);
 }
 
 .results-tertiary-cta {
@@ -3852,7 +3988,7 @@ body.mode-chrono #timerWidget {
 
 .ladder-pilot-modal-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -4362,6 +4498,7 @@ body.modal-open {
   padding: 14px;
   gap: 12px;
   border-width: 2px;
+  overflow: hidden;
 }
 
 .ladder-pilot-summary-card {
@@ -4371,13 +4508,24 @@ body.modal-open {
 .ladder-pilot-console {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .ladder-pilot-head {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: flex-start;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
+}
+
+.ladder-pilot-heading-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .ladder-pilot-head h4 {
@@ -4398,6 +4546,8 @@ body.modal-open {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ladder-player-chip {
@@ -4408,6 +4558,8 @@ body.modal-open {
   border-radius: 999px;
   border: 2px solid transparent;
   background: rgba(255, 255, 255, 0.04);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .result-winner {
@@ -4700,9 +4852,17 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
 
 .ladder-pilot-tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.ladder-pilot-tags .state-pill {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ladder-quick-actions {
@@ -4719,7 +4879,7 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
 .ladder-pilot-secondary {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -4728,6 +4888,7 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
 }
 
 .ladder-status-actions .btn {
@@ -4742,6 +4903,22 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
 
 .ladder-score-editor.hidden {
   display: none;
+}
+
+.ladder-pilot-next-cta {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 2px;
+  background: linear-gradient(180deg, rgba(15, 13, 12, 0), rgba(15, 13, 12, 0.92) 38%);
+  z-index: 3;
+}
+
+.ladder-pilot-next-cta .btn {
+  min-width: min(100%, 420px);
+  min-height: 58px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
 }
 
 .ladder-movement-card {
@@ -4938,6 +5115,31 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
 }
 
 @media (max-width: 640px) {
+  .session-save-feedback {
+    width: calc(100vw - 24px);
+    max-width: 520px;
+    text-align: center;
+    bottom: 12px;
+  }
+
+  .session-save-panel-actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .landing-sessions-head,
+  .landing-session-card {
+    flex-direction: column;
+  }
+
+  .landing-session-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .landing-session-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+  }
+
   .ladder-pilot-screen {
     padding: 12px;
   }

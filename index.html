@@ -27,8 +27,12 @@
           <div class="tools-menu hidden" id="toolsMenu" role="menu" aria-label="Outils rapides">
             <button class="tools-item" data-open-ranking role="menuitem">Classement</button>
             <button class="tools-item" id="statusBtn" role="menuitem">Statut indisponible</button>
+            <button class="tools-item" id="toolsImportJsonBtn" role="menuitem">Importer une sauvegarde JSON</button>
+            <button class="tools-item hidden" id="toolsExportJsonBtn" role="menuitem">Exporter sauvegarde JSON</button>
+            <button class="tools-item hidden" id="toolsExportCsvBtn" role="menuitem">Exporter CSV</button>
             <button class="tools-item" id="printTopBtn" role="menuitem">Imprimer</button>
           </div>
+          <input type="file" id="toolsJsonImportFile" accept=".json,application/json" class="hidden" />
         </div>
       </header>
 
@@ -82,27 +86,17 @@
             <div class="landing-meta">
               <button class="btn primary hero" id="quickModeBtn">Mode EPS rapide</button>
               <button class="btn secondary hero" id="resumeFlow">Reprendre ma dernière configuration</button>
-              <button class="btn ghost small" id="openHelpFromLanding">Aide rapide</button>
+              <button class="btn success hero" id="toolsImportJsonBtnLanding">Importer une sauvegarde JSON</button>
             </div>
-            <section class="landing-highlight class-manager-card" aria-labelledby="challengeClassManagerTitle">
-              <div>
-                <p class="mega-eyebrow">Gestion des classes</p>
-                <h3 id="challengeClassManagerTitle">Défi par classe / groupe</h3>
-                <p class="landing-subcopy">Créez, reprenez ou importez une classe sans repasser par les écrans de saisie.</p>
+            <section class="landing-sessions-panel" aria-labelledby="landingSessionsTitle">
+              <div class="landing-sessions-head">
+                <div>
+                  <p class="mega-eyebrow">Reprise locale</p>
+                  <h3 id="landingSessionsTitle">Mes séances</h3>
+                </div>
+                <p class="landing-sessions-hint" id="landingSessionsHint">Aucune séance locale enregistrée pour le moment.</p>
               </div>
-              <label class="field class-manager-field">
-                <span>Classes disponibles</span>
-                <select id="challengeClassSelect">
-                  <option value="">Aucune classe sauvegardée</option>
-                </select>
-              </label>
-              <div class="landing-meta class-manager-actions">
-                <button class="btn success hero" id="challengeClassCreateBtn">Créer une classe</button>
-                <button class="btn secondary hero" id="challengeClassResumeBtn">Reprendre une classe</button>
-                <button class="btn ghost hero" id="challengeClassImportBtn">Importer une classe</button>
-              </div>
-              <p class="micro-copy" id="challengeClassManagerHint">Les classes sauvegardées localement apparaissent ici.</p>
-              <input type="file" id="challengeClassImportFile" accept=".json,application/json" class="hidden" />
+              <div class="landing-sessions-list" id="landingSessionsList"></div>
             </section>
             <p class="landing-hint">Simple en façade · puissant derrière · utilisable sur iPad, téléphone et TV.</p>
           </div>
@@ -212,7 +206,7 @@
               <button class="btn primary" id="applyBulkNames">Appliquer la liste</button>
             </div>
             <div class="bulk-import" data-mode-field="raquettes-montee-descente">
-              <label for="teamRankingImport">Importer un classement CSV</label>
+              <label for="teamRankingImport">Importer une liste CSV pour montée-descente</label>
               <input type="file" id="teamRankingImport" accept=".csv,text/csv,.txt" />
               <p class="micro-copy">CSV de classement ou simple liste ordonnée pour reprendre directement une montée-descente.</p>
             </div>
@@ -288,10 +282,11 @@
                   </label>
                 </div>
               </div>
-              <div class="mode-field wide" data-mode-field="raquettes-defi">
+              <div class="mode-field wide" data-mode-field="all">
                 <label class="field">
                   <span>Classe / groupe</span>
                   <input type="text" id="challengeClassName" name="challengeClassName" placeholder="ex : 6A, 5B, AS Badminton" />
+                  <div class="field-hint" id="challengeClassRequiredHint">Nom de séance recommandé pour retrouver rapidement la configuration sur cet iPad.</div>
                 </label>
               </div>
               <div class="mode-field wide" data-mode-field="raquettes-defi">
@@ -600,6 +595,7 @@
               <p class="action-hint" id="resultsPrimaryHint">Passez en mode live pour piloter les rotations et les scores.</p>
             </div>
             <div class="results-secondary-cta">
+              <button class="btn success" id="saveSessionBtn">Sauvegarder la séance</button>
               <button class="btn secondary" data-nav="options">Modifier</button>
               <button class="btn secondary" id="printBtn">Imprimer</button>
             </div>
@@ -798,9 +794,10 @@
           <button class="btn ghost small" id="finalRankingCloseBtn" aria-label="Fermer">Fermer</button>
         </header>
         <div id="finalRankingTable" class="final-ranking-table"></div>
+        <div id="finalSessionSavePanel"></div>
             <div class="modal-actions">
               <button class="btn secondary" id="finalRankingLiveBtn">Revenir au live</button>
-              <button class="btn secondary" id="finalRankingCsvBtn" disabled>Télécharger en CSV</button>
+              <button class="btn secondary" id="finalRankingCsvBtn" disabled>Exporter CSV</button>
               <button class="btn primary" id="finalRankingOkBtn">Retour au planning</button>
             </div>
           </div>
@@ -830,6 +827,7 @@
         </header>
         <div class="ladder-pilot-toolbar">
           <button class="btn secondary" id="ladderPilotBackBtn">Retour configuration</button>
+          <button class="btn success" id="ladderPilotSaveBtn">Sauvegarder la séance</button>
           <button class="btn primary" id="ladderPilotNextBtn">Rotation suivante</button>
           <button class="btn secondary" id="ladderPilotFinishBtn">Terminer la montée-descente</button>
           <button class="btn ghost" id="ladderPilotRankingBtn">Voir le classement</button>
@@ -850,6 +848,7 @@
             </header>
             <div class="ladder-pilot-toolbar swiss-pilot-toolbar">
               <button class="btn secondary" id="swissPilotBackBtn">Retour planning</button>
+              <button class="btn success" id="swissPilotSaveBtn">Sauvegarder la séance</button>
               <button class="btn ghost" id="swissPilotExportBtn">Exporter CSV</button>
             </div>
             <div class="ladder-pilot-modal-body swiss-pilot-body" id="swissPilotBody"></div>
@@ -905,6 +904,8 @@
         </form>
       </div>
     </div>
+
+    <div class="session-save-feedback hidden" id="sessionSaveFeedback" aria-live="polite">Séance sauvegardée sur cet iPad</div>
 
     <button class="help-fab" id="helpBtn" aria-label="Aide rapide">❓</button>
 

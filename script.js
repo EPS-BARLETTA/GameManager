@@ -7,6 +7,13 @@ const SCREEN_TO_STEP = {
   options: 'options',
   results: 'results',
 };
+
+function getMaxAccessibleStepIndex(screen = state.currentScreen) {
+  if (state.schedule) return STEP_ORDER.length - 1;
+  const stepKey = SCREEN_TO_STEP[screen];
+  const activeIndex = STEP_ORDER.indexOf(stepKey);
+  return activeIndex >= 0 ? activeIndex : -1;
+}
 const UNIVERSES = {
   sportco: {
     id: 'sportco',
@@ -404,12 +411,18 @@ const elements = {
   landingSportcoBtn: document.getElementById('landingSportcoBtn'),
   landingRaquettesBtn: document.getElementById('landingRaquettesBtn'),
   resumeFlow: document.getElementById('resumeFlow'),
+  landingSessionsList: document.getElementById('landingSessionsList'),
+  landingSessionsHint: document.getElementById('landingSessionsHint'),
   challengeClassSelect: document.getElementById('challengeClassSelect'),
   challengeClassCreateBtn: document.getElementById('challengeClassCreateBtn'),
   challengeClassResumeBtn: document.getElementById('challengeClassResumeBtn'),
-  challengeClassImportBtn: document.getElementById('challengeClassImportBtn'),
-  challengeClassImportFile: document.getElementById('challengeClassImportFile'),
   challengeClassManagerHint: document.getElementById('challengeClassManagerHint'),
+  toolsImportJsonBtn: document.getElementById('toolsImportJsonBtn'),
+  toolsImportJsonBtnLanding: document.getElementById('toolsImportJsonBtnLanding'),
+  toolsExportJsonBtn: document.getElementById('toolsExportJsonBtn'),
+  toolsExportCsvBtn: document.getElementById('toolsExportCsvBtn'),
+  toolsJsonImportFile: document.getElementById('toolsJsonImportFile'),
+  sessionSaveFeedback: document.getElementById('sessionSaveFeedback'),
   quickModeBtn: document.getElementById('quickModeBtn'),
   openHelpFromLanding: document.getElementById('openHelpFromLanding'),
   quickForm: document.getElementById('quickForm'),
@@ -512,6 +525,7 @@ const elements = {
   startLiveBtn: document.getElementById('startLiveBtn'),
   returnLiveBtn: document.getElementById('returnLiveBtn'),
   printBtn: document.getElementById('printBtn'),
+  saveSessionBtn: document.getElementById('saveSessionBtn'),
   resetAppBtn: document.getElementById('resetAppBtn'),
   rotationView: document.getElementById('rotationView'),
   teamView: document.getElementById('teamView'),
@@ -576,6 +590,7 @@ const elements = {
   liveRankingPanelBtn: document.getElementById('liveRankingPanelBtn'),
   finalRankingModal: document.getElementById('finalRankingModal'),
   finalRankingTable: document.getElementById('finalRankingTable'),
+  finalSessionSavePanel: document.getElementById('finalSessionSavePanel'),
   finalRankingCloseBtn: document.getElementById('finalRankingCloseBtn'),
   finalRankingCsvBtn: document.getElementById('finalRankingCsvBtn'),
   finalRankingOkBtn: document.getElementById('finalRankingOkBtn'),
@@ -590,6 +605,7 @@ const elements = {
   ladderPilotBody: document.getElementById('ladderPilotBody'),
   ladderPilotCloseBtn: document.getElementById('ladderPilotCloseBtn'),
   ladderPilotBackBtn: document.getElementById('ladderPilotBackBtn'),
+  ladderPilotSaveBtn: document.getElementById('ladderPilotSaveBtn'),
   ladderPilotNextBtn: document.getElementById('ladderPilotNextBtn'),
   ladderPilotFinishBtn: document.getElementById('ladderPilotFinishBtn'),
   ladderPilotRankingBtn: document.getElementById('ladderPilotRankingBtn'),
@@ -599,6 +615,7 @@ const elements = {
   swissPilotBody: document.getElementById('swissPilotBody'),
   swissPilotCloseBtn: document.getElementById('swissPilotCloseBtn'),
   swissPilotBackBtn: document.getElementById('swissPilotBackBtn'),
+  swissPilotSaveBtn: document.getElementById('swissPilotSaveBtn'),
   swissPilotExportBtn: document.getElementById('swissPilotExportBtn'),
   challengeModal: document.getElementById('challengeModal'),
   challengeForm: document.getElementById('challengeForm'),
@@ -653,9 +670,14 @@ let resetFeedbackTimeout = null;
 let _challengeAutoReset = null;
 let _challengeSelectedId = null;
 let challengeEditContext = null;
+let rankingReturnScreen = null;
+let sessionSaveFeedbackTimeout = null;
 const MIN_TURNAROUND_MINUTES = 1;
 const IDEAL_TURNAROUND_MINUTES = 2;
 let challengeIdSeed = 0;
+const APP_SAVE_TYPE = 'gamemanager-save';
+const APP_SAVE_VERSION = 1;
+const APP_SESSIONS_KEY = 'gamemanager-sessions-v1';
 
 function generateChallengePlayerId() {
   challengeIdSeed += 1;
@@ -666,146 +688,498 @@ function getChallengeRange() {
   return clampNumber(Number(state.options.challengeRange) || 5, 1, 10, 5);
 }
 
+function getSessionName(source = state) {
+  const optionSource = source?.options || {};
+  return String(optionSource.sessionName || optionSource.challengeClassName || '').trim();
+}
+
+function syncSessionNameOnState(targetState, nextName) {
+  if (!targetState) return '';
+  targetState.options = targetState.options || {};
+  const trimmed = String(nextName || '').trim();
+  targetState.options.sessionName = trimmed;
+  targetState.options.challengeClassName = trimmed;
+  return trimmed;
+}
+
+function hasChallengeClassName() {
+  return Boolean(getSessionName());
+}
+
+function updateGenerateButtonState() {
+  if (!elements.generateBtn) return;
+  const requiresClass = state.activeModeId === 'raquettes-defi';
+  const disabled = requiresClass && !hasChallengeClassName();
+  elements.generateBtn.disabled = disabled;
+  elements.generateBtn.title = disabled ? 'Renseignez une classe ou un groupe pour sauvegarder ce classement.' : '';
+}
+
+function triggerDownload({ content, type, filename }) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function getAppSaveFilename(extension = 'json') {
+  const today = new Date().toISOString().slice(0, 10);
+  const sessionSlug = getSessionName()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${sessionSlug ? `${sessionSlug}_` : ''}gamemanager_${today}.${extension}`;
+}
+
+function getSessionStatusKey(schedule = state.schedule) {
+  if (!schedule) return 'configuration';
+  if (schedule.meta?.sessionEnded) return 'finished';
+  return 'in-progress';
+}
+
+function doesActiveModeMatchSchedule(schedule = state.schedule) {
+  if (!schedule) return false;
+  const expectedFormat = MODE_DEFINITIONS[state.activeModeId]?.tournamentType;
+  const expectedPractice = MODE_DEFINITIONS[state.activeModeId]?.practiceType;
+  const actualPractice = schedule.meta?.practiceType || getPracticeTypeFromMeta(schedule.meta);
+  return (!expectedFormat || expectedFormat === schedule.format) && (!expectedPractice || expectedPractice === actualPractice);
+}
+
+function generateSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `session-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function ensureCurrentSessionMetadata(options = {}) {
+  const forceNew = Boolean(options.forceNew);
+  if (forceNew || !state.sessionId) {
+    state.sessionId = generateSessionId();
+  }
+  if (forceNew || !state.sessionCreatedAt) {
+    state.sessionCreatedAt = new Date().toISOString();
+  }
+}
+
+function buildAppSaveSnapshot() {
+  ensureCurrentSessionMetadata();
+  const sessionName = getSessionName();
+  const savedAt = new Date().toISOString();
+  return {
+    type: APP_SAVE_TYPE,
+    version: APP_SAVE_VERSION,
+    id: state.sessionId,
+    savedAt,
+    createdAt: state.sessionCreatedAt || savedAt,
+    updatedAt: savedAt,
+    sessionName,
+    mode: state.activeModeId,
+    universe: state.universeId,
+    participantCount: state.participants,
+    status: getSessionStatusKey(state.schedule),
+    className: sessionName,
+    state: {
+      ...state,
+      options: {
+        ...state.options,
+        sessionName,
+        challengeClassName: sessionName,
+      },
+    },
+    viewState: {
+      resultsMode: uiState.resultsMode,
+      finalRankingSnapshot,
+    },
+  };
+}
+
+function exportAppStateJson() {
+  if (!state.schedule) {
+    alert('Aucune séance à sauvegarder pour le moment.');
+    return;
+  }
+  const payload = buildAppSaveSnapshot();
+  triggerDownload({
+    content: JSON.stringify(payload, null, 2),
+    type: 'application/json',
+    filename: getAppSaveFilename('json'),
+  });
+}
+
+function loadStoredSessions() {
+  try {
+    const raw = localStorage.getItem(APP_SESSIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(entry => entry && entry.type === APP_SAVE_TYPE && entry.state);
+  } catch (error) {
+    console.warn('Impossible de charger les séances locales', error);
+    return [];
+  }
+}
+
+function saveStoredSessions(entries) {
+  localStorage.setItem(APP_SESSIONS_KEY, JSON.stringify(entries));
+}
+
+function upsertStoredSessionSnapshot(snapshot) {
+  if (!snapshot?.id) return;
+  const nextSessions = loadStoredSessions().filter(entry => entry.id !== snapshot.id);
+  nextSessions.push(snapshot);
+  saveStoredSessions(nextSessions);
+}
+
+function getStoredSessionById(sessionId) {
+  return loadStoredSessions().find(entry => entry.id === sessionId) || null;
+}
+
+function listStoredSessions() {
+  return loadStoredSessions().sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.savedAt || a.createdAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || b.savedAt || b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function removeStoredSession(sessionId) {
+  saveStoredSessions(loadStoredSessions().filter(entry => entry.id !== sessionId));
+}
+
+function exportStoredSessionSnapshot(snapshot) {
+  if (!snapshot?.state) return;
+  const sessionName = String(snapshot.sessionName || snapshot.className || '').trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const sessionSlug = sessionName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '');
+  triggerDownload({
+    content: JSON.stringify(snapshot, null, 2),
+    type: 'application/json',
+    filename: `${sessionSlug ? `${sessionSlug}_` : ''}gamemanager_${today}.json`,
+  });
+}
+
+function getSessionModeLabel(snapshot) {
+  const modeId = snapshot?.mode || snapshot?.state?.activeModeId;
+  return MODE_DEFINITIONS[modeId]?.label || snapshot?.state?.schedule?.meta?.formatLabel || 'Séance';
+}
+
+function getSessionUniverseLabel(snapshot) {
+  const universeId = snapshot?.universe || snapshot?.state?.universeId;
+  return UNIVERSES[universeId]?.label || 'Univers';
+}
+
+function getSessionStatusLabel(snapshot) {
+  return snapshot?.status === 'finished' ? 'Terminé' : snapshot?.state?.schedule ? 'En cours' : 'Configuration';
+}
+
+function saveCurrentSessionSnapshot() {
+  if (!state.schedule) return null;
+  const snapshot = buildAppSaveSnapshot();
+  upsertStoredSessionSnapshot(snapshot);
+  return snapshot;
+}
+
+function renderLandingSessions() {
+  if (!elements.landingSessionsList || !elements.landingSessionsHint) return;
+  const sessions = listStoredSessions().slice(0, 8);
+  if (!sessions.length) {
+    elements.landingSessionsHint.textContent = 'Aucune séance locale enregistrée pour le moment.';
+    elements.landingSessionsList.innerHTML =
+      '<p class="landing-session-empty">Générez une première séance pour la retrouver ici automatiquement.</p>';
+    return;
+  }
+  elements.landingSessionsHint.textContent = `${sessions.length} séance(s) récente(s) sur cet appareil.`;
+  elements.landingSessionsList.innerHTML = sessions
+    .map(snapshot => {
+      const sessionName = String(snapshot.sessionName || snapshot.className || '').trim() || 'Séance sans nom';
+      const updatedAt = snapshot.updatedAt || snapshot.savedAt || snapshot.createdAt;
+      const stamp = updatedAt
+        ? new Date(updatedAt).toLocaleDateString('fr-FR', { dateStyle: 'long' })
+        : 'date inconnue';
+      const participantCount = Number(snapshot.participantCount || snapshot.state?.participants || 0);
+      return `
+        <article class="landing-session-card">
+          <div class="landing-session-copy">
+            <strong>${escapeHtml(sessionName)} · ${escapeHtml(getSessionModeLabel(snapshot))} · ${escapeHtml(stamp)}</strong>
+            <span class="landing-session-meta">${escapeHtml(getSessionUniverseLabel(snapshot))} · ${participantCount} participant(s) · ${escapeHtml(getSessionStatusLabel(snapshot))}</span>
+          </div>
+          <div class="landing-session-actions">
+            <button type="button" class="btn primary small" data-session-action="resume" data-session-id="${snapshot.id}">Reprendre</button>
+            <button type="button" class="btn ghost small" data-session-action="rename" data-session-id="${snapshot.id}">Renommer</button>
+            <button type="button" class="btn ghost small" data-session-action="export" data-session-id="${snapshot.id}">Exporter JSON</button>
+            <button type="button" class="btn ghost small" data-session-action="delete" data-session-id="${snapshot.id}">Supprimer</button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function showSessionSaveFeedback(message = 'Séance sauvegardée sur cet iPad') {
+  if (!elements.sessionSaveFeedback) return;
+  elements.sessionSaveFeedback.textContent = message;
+  elements.sessionSaveFeedback.classList.remove('hidden');
+  if (sessionSaveFeedbackTimeout) {
+    clearTimeout(sessionSaveFeedbackTimeout);
+  }
+  sessionSaveFeedbackTimeout = window.setTimeout(() => {
+    elements.sessionSaveFeedback.classList.add('hidden');
+  }, 2200);
+}
+
+function ensureSessionNameBeforeSave() {
+  const existing = getSessionName();
+  if (existing) return existing;
+  const response = window.prompt('Nom de la classe / du groupe ?', '');
+  const trimmed = String(response || '').trim();
+  if (!trimmed) {
+    alert('Renseignez une classe ou un groupe pour sauvegarder cette séance.');
+    return null;
+  }
+  syncSessionNameOnState(state, trimmed);
+  syncOptionInputs();
+  return trimmed;
+}
+
+function saveSessionLocally(options = {}) {
+  if (!state.schedule) {
+    alert('Aucune séance à sauvegarder pour le moment.');
+    return false;
+  }
+  const sessionName = ensureSessionNameBeforeSave();
+  if (!sessionName) return false;
+  ensureCurrentSessionMetadata();
+  syncSessionNameOnState(state, sessionName);
+  persistState();
+  if (typeof options.afterSave === 'function') {
+    options.afterSave();
+  }
+  showSessionSaveFeedback('Séance sauvegardée sur cet iPad');
+  return true;
+}
+
+function buildSessionSavePanelMarkup(scope = 'results') {
+  const sessionName = getSessionName();
+  return `
+    <section class="session-save-panel panel-card" data-session-save-panel="${scope}">
+      <header class="session-save-panel-head">
+        <div>
+          <p class="eyebrow">Sauvegarder la séance</p>
+          <h4>Sauvegarder la séance</h4>
+        </div>
+      </header>
+      <div class="session-save-panel-body">
+        <label class="field">
+          <span>Classe / groupe</span>
+          <input type="text" value="${escapeHtml(sessionName)}" data-session-name-input placeholder="ex : 6A, 5B, AS Badminton" />
+          <div class="field-hint hidden" data-session-name-hint>Nom requis pour retrouver cette séance</div>
+        </label>
+        <div class="session-save-panel-actions">
+          <button type="button" class="btn success" data-session-panel-action="save">Sauvegarder la séance</button>
+          <button type="button" class="btn secondary" data-session-panel-action="export-json">Exporter sauvegarde JSON</button>
+          <button type="button" class="btn secondary" data-session-panel-action="export-csv">Exporter CSV</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFinalSessionSavePanel() {
+  if (!elements.finalSessionSavePanel || !state.schedule) return;
+  elements.finalSessionSavePanel.innerHTML = buildSessionSavePanelMarkup('final-modal');
+}
+
+function appendRankingSessionSavePanel() {
+  if (!elements.rankingView || !state.schedule) return;
+  elements.rankingView.insertAdjacentHTML('beforeend', buildSessionSavePanelMarkup('ranking-view'));
+}
+
+function handleSessionSavePanelAction(event) {
+  const actionButton = event.target.closest('[data-session-panel-action]');
+  if (!actionButton) return false;
+  const panel = actionButton.closest('[data-session-save-panel]');
+  if (!panel) return false;
+  const input = panel.querySelector('[data-session-name-input]');
+  const hint = panel.querySelector('[data-session-name-hint]');
+  const sessionName = String(input?.value || '').trim();
+  if (hint) {
+    hint.classList.add('hidden');
+  }
+  if (actionButton.dataset.sessionPanelAction === 'save') {
+    if (!sessionName) {
+      if (hint) hint.classList.remove('hidden');
+      if (input) input.focus();
+      return true;
+    }
+    saveSessionLocally({
+      sessionName,
+      afterSave: () => {
+        renderChallengeClassManager();
+        if (input) input.value = getSessionName();
+      },
+    });
+    return true;
+  }
+  if (actionButton.dataset.sessionPanelAction === 'export-json') {
+    if (sessionName) {
+      syncSessionNameOnState(state, sessionName);
+      syncOptionInputs();
+      persistState();
+    }
+    exportAppStateJson();
+    return true;
+  }
+  if (actionButton.dataset.sessionPanelAction === 'export-csv') {
+    if (sessionName) {
+      syncSessionNameOnState(state, sessionName);
+      syncOptionInputs();
+      persistState();
+    }
+    exportCurrentCsv();
+    return true;
+  }
+  return false;
+}
+
+function exportCurrentCsv() {
+  if (!state.schedule) {
+    alert('Aucun planning généré pour exporter un CSV.');
+    return;
+  }
+  if (state.schedule.format === 'challenge') {
+    exportChallengeRankingCsv();
+    return;
+  }
+  if (state.schedule.format === 'swiss') {
+    exportSwissRankingCsv();
+    return;
+  }
+  downloadFinalRankingCsv();
+}
+
 function getChallengeClassStorageKey(className) {
   const safe = String(className || '').trim().toLowerCase();
-  if (!safe) return null;
-  return `poulemanager_challenge_class_${safe}`;
+  return safe || null;
 }
 
 function saveChallengeClassSnapshot() {
-  const className = String(state.options.challengeClassName || '').trim();
-  if (!className || !state.schedule?.challenge) return;
-  const key = getChallengeClassStorageKey(className);
-  if (!key) return;
-  const data = {
-    type: 'poulemanager-challenge-class',
-    version: 1,
-    className,
-    savedAt: new Date().toISOString(),
-    challenge: state.schedule.challenge,
-  };
-  localStorage.setItem(key, JSON.stringify(data));
+  if (!state.schedule?.challenge || !getSessionName()) return;
+  saveCurrentSessionSnapshot();
   renderChallengeClassManager();
 }
 
 function loadChallengeClassSnapshot(className) {
-  const key = getChallengeClassStorageKey(className);
-  if (!key) return null;
-  const raw = localStorage.getItem(key);
-  if (!raw) return null;
-  try {
-    const data = JSON.parse(raw);
-    if (data?.type !== 'poulemanager-challenge-class') return null;
-    if (!data.challenge?.order || !data.challenge?.roster) return null;
-    return data;
-  } catch (error) {
-    return null;
-  }
-}
-
-function exportChallengeClassSnapshot() {
-  if (!state.schedule?.challenge) return;
-  const className = String(state.options.challengeClassName || '').trim() || 'defi';
-  const data = {
+  const safe = getChallengeClassStorageKey(className);
+  if (!safe) return null;
+  const session = listStoredSessions().find(
+    entry => entry.mode === 'raquettes-defi' && String(entry.sessionName || entry.className || '').trim().toLowerCase() === safe
+  );
+  if (!session?.state?.schedule?.challenge) return null;
+  return {
     type: 'poulemanager-challenge-class',
     version: 1,
-    className,
-    exportedAt: new Date().toISOString(),
-    challenge: state.schedule.challenge,
+    className: session.sessionName || session.className,
+    savedAt: session.updatedAt || session.savedAt || null,
+    challenge: session.state.schedule.challenge,
+    session,
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `defi_${className}_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 function saveCurrentChallengeClass() {
   if (!state.schedule?.challenge) return;
-  saveChallengeClassSnapshot();
-  exportChallengeClassSnapshot();
-  persistState();
-  renderChallengeClassManager();
+  saveSessionLocally({
+    afterSave: () => {
+      renderChallengeClassManager();
+      renderChallengeBoard(state.schedule);
+    },
+  });
 }
 
-function importChallengeClassSnapshot(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function onload(event) {
-    try {
-      const data = JSON.parse(event.target.result);
-      if (!data.challenge || !data.challenge.order) {
-        alert('Fichier invalide');
-        return;
-      }
-      const names = Array.isArray(data.challenge?.names) && data.challenge.names.length
-        ? data.challenge.names.slice()
-        : Array.isArray(data.challenge?.roster)
-          ? data.challenge.roster.map(player => player.name).filter(Boolean)
-          : [];
-      if (!names.length) {
-        alert('Fichier invalide');
-        return;
-      }
-      applyModeDefinition('raquettes-defi', { skipNavigation: true });
-      state.options.challengeClassName = String(data.className || state.options.challengeClassName || '').trim();
-      state.participants = names.length;
-      state.teamNames = ensureTeamListLength(names, names.length, 'raquette');
-      state.entityStatuses = ensureEntityStatusLength([], names.length);
-      renderParticipants();
-      buildTeamFields(names.length);
-      syncOptionInputs();
-      const schedule = buildChallengeBoard(names, state.options);
-      schedule.challenge = data.challenge;
-      ensureChallengeRoster(schedule);
-      state.schedule = schedule;
-      saveChallengeClassSnapshot();
-      persistState();
-      renderResults(schedule, { resetScores: true });
-      renderChallengeClassManager();
-      goTo('results');
-      renderChallengeBoard(schedule);
-      renderRankingView(schedule);
-      renderLiveRankingForChallenge();
-    } catch (error) {
-      alert('Erreur import');
-    }
-  };
-  reader.readAsText(file);
+function promptForChallengeClassName(initialValue = '') {
+  const response = window.prompt('Nom de la classe / du groupe ?', initialValue);
+  const trimmed = String(response || '').trim();
+  if (!trimmed) {
+    alert('Renseignez une classe ou un groupe pour sauvegarder ce classement.');
+    return null;
+  }
+  return trimmed;
+}
+
+function setChallengeClassName(nextName) {
+  const trimmed = String(nextName || '').trim();
+  if (!trimmed) return false;
+  syncSessionNameOnState(state, trimmed);
+  persistState();
+  syncOptionInputs();
+  renderChallengeClassManager();
+  updateGenerateButtonState();
+  if (state.schedule?.challenge) {
+    saveChallengeClassSnapshot();
+    renderChallengeBoard(state.schedule);
+  }
+  return true;
+}
+
+function restoreChallengeClassSnapshotData(data) {
+  if (!data.challenge || !data.challenge.order) {
+    alert('Fichier invalide');
+    return false;
+  }
+  const names = Array.isArray(data.challenge?.names) && data.challenge.names.length
+    ? data.challenge.names.slice()
+    : Array.isArray(data.challenge?.roster)
+      ? data.challenge.roster.map(player => player.name).filter(Boolean)
+      : [];
+  if (!names.length) {
+    alert('Fichier invalide');
+    return false;
+  }
+  applyModeDefinition('raquettes-defi', { skipNavigation: true });
+  syncSessionNameOnState(state, String(data.className || getSessionName() || '').trim());
+  state.participants = names.length;
+  state.teamNames = ensureTeamListLength(names, names.length, 'raquette');
+  state.entityStatuses = ensureEntityStatusLength([], names.length);
+  renderParticipants();
+  buildTeamFields(names.length);
+  syncOptionInputs();
+  const schedule = buildChallengeBoard(names, state.options);
+  schedule.challenge = data.challenge;
+  ensureChallengeRoster(schedule);
+  state.schedule = schedule;
+  saveChallengeClassSnapshot();
+  persistState();
+  renderResults(schedule, { resetScores: true });
+  renderChallengeClassManager();
+  goTo('results');
+  renderChallengeBoard(schedule);
+  renderRankingView(schedule);
+  renderLiveRankingForChallenge();
+  return true;
 }
 
 function listChallengeClassSnapshots() {
-  const entries = [];
-  const prefix = 'poulemanager_challenge_class_';
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key || !key.startsWith(prefix)) continue;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      const data = JSON.parse(raw);
-      if (data?.type !== 'poulemanager-challenge-class' || !data.className) continue;
-      entries.push({
-        key,
-        className: String(data.className).trim(),
-        savedAt: data.savedAt || data.exportedAt || null,
-      });
-    } catch (error) {
-      continue;
-    }
-  }
-  return entries.sort((a, b) => String(a.className).localeCompare(String(b.className), 'fr', { sensitivity: 'base' }));
+  return listStoredSessions()
+    .filter(entry => entry.mode === 'raquettes-defi' && String(entry.sessionName || entry.className || '').trim())
+    .map(entry => ({
+      key: entry.id,
+      className: String(entry.sessionName || entry.className || '').trim(),
+      savedAt: entry.updatedAt || entry.savedAt || null,
+    }))
+    .sort((a, b) => String(a.className).localeCompare(String(b.className), 'fr', { sensitivity: 'base' }));
 }
 
 function renderChallengeClassManager() {
   const select = elements.challengeClassSelect;
   if (!select) return;
   const entries = listChallengeClassSnapshots();
-  const currentClass = String(state.options.challengeClassName || '').trim();
+  const currentClass = getSessionName();
   if (!entries.length) {
     select.innerHTML = '<option value="">Aucune classe sauvegardée</option>';
     select.disabled = true;
@@ -835,12 +1209,109 @@ function renderChallengeClassManager() {
   }
 }
 
+function updateSaveActionsState() {
+  const hasSchedule = Boolean(state.schedule);
+  if (elements.toolsExportJsonBtn) {
+    elements.toolsExportJsonBtn.classList.toggle('hidden', !hasSchedule);
+  }
+  if (elements.toolsExportCsvBtn) {
+    elements.toolsExportCsvBtn.classList.toggle('hidden', !hasSchedule);
+  }
+  if (elements.printTopBtn) {
+    elements.printTopBtn.classList.toggle('hidden', !hasSchedule);
+  }
+  renderLandingSessions();
+}
+
+function restoreAppSaveState(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    alert('Fichier invalide');
+    return;
+  }
+  if (snapshot.type === 'poulemanager-challenge-class') {
+    restoreChallengeClassSnapshotData(snapshot);
+    updateSaveActionsState();
+    return;
+  }
+  if (snapshot.type !== APP_SAVE_TYPE || !snapshot.state) {
+    alert('Fichier invalide');
+    return;
+  }
+
+  const importedState = sanitizeState(snapshot.state);
+  const savedScreen = importedState.currentScreen;
+  const savedLiveRotationIndex = Number.isInteger(importedState.liveRotationIndex) ? importedState.liveRotationIndex : 0;
+  state = importedState;
+  syncSessionNameOnState(state, snapshot.sessionName || snapshot.className || getSessionName(state));
+  state.sessionId = snapshot.id || state.sessionId || generateSessionId();
+  state.sessionCreatedAt = snapshot.createdAt || snapshot.savedAt || state.sessionCreatedAt || new Date().toISOString();
+  uiState.resultsMode = snapshot.viewState?.resultsMode === 'pilot' ? 'pilot' : 'read';
+  finalRankingSnapshot = snapshot.viewState?.finalRankingSnapshot || null;
+  invalidateStandingsCache();
+  renderParticipants();
+  buildTeamFields(state.participants);
+  syncOptionInputs();
+  renderChallengeClassManager();
+  updateSaveActionsState();
+  updateTheme(state.universeId);
+  renderModeCards();
+  updateModeScreenCopy();
+  setResultsMode(uiState.resultsMode);
+
+  if (state.schedule) {
+    renderResults(state.schedule, { preserveTimestamp: true });
+    state.liveRotationIndex = clampNumber(
+      savedLiveRotationIndex,
+      0,
+      Math.max((state.schedule.rotations?.length || 1) - 1, 0),
+      0
+    );
+    renderLiveRankingPanel(state.schedule.rotations[state.liveRotationIndex]?.number || 1);
+    renderChronoScreen();
+    persistState();
+    if (savedScreen === 'ladder-pilot' && isLadderLiveMode(state.schedule)) {
+      openLadderPilotModal();
+    } else if (savedScreen === 'swiss-pilot' && state.schedule.format === 'swiss') {
+      goTo('swiss-pilot');
+      renderSwissPilotScreen();
+    } else if (['live', 'projection', 'chrono', 'results', 'options', 'teams', 'count', 'type', 'landing'].includes(savedScreen)) {
+      goTo(savedScreen === 'landing' ? 'results' : savedScreen);
+      if (savedScreen === 'live') {
+        renderLiveRotation();
+      } else if (savedScreen === 'projection') {
+        openProjectionScreen();
+      } else if (savedScreen === 'chrono') {
+        renderChronoScreen();
+      }
+    } else {
+      goTo('results');
+    }
+  } else {
+    persistState();
+    goTo(['landing', 'type', 'count', 'teams', 'options'].includes(savedScreen) ? savedScreen : 'landing');
+  }
+  updateSaveActionsState();
+}
+
+async function importAppStateJson(file) {
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const data = JSON.parse(raw);
+    restoreAppSaveState(data);
+  } catch (error) {
+    alert('Erreur import');
+  }
+}
+
 function openChallengeClassCreationFlow() {
   const className = window.prompt('Nom de la classe / du groupe ?');
   const trimmed = String(className || '').trim();
   if (!trimmed) return;
   applyModeDefinition('raquettes-defi', { skipNavigation: true });
-  state.options.challengeClassName = trimmed;
+  syncSessionNameOnState(state, trimmed);
+  state.sessionId = null;
+  state.sessionCreatedAt = null;
   state.schedule = null;
   state.generatedAt = null;
   state.scores = {};
@@ -854,6 +1325,7 @@ function openChallengeClassCreationFlow() {
   renderModeCards();
   updateModeScreenCopy();
   renderChallengeClassManager();
+  updateSaveActionsState();
   goTo('count');
 }
 
@@ -862,6 +1334,11 @@ function resumeChallengeClass(className) {
   const data = loadChallengeClassSnapshot(trimmed);
   if (!data) {
     alert('Aucune sauvegarde trouvée pour cette classe.');
+    return;
+  }
+  if (data.session) {
+    restoreAppSaveState(data.session);
+    alert(`Classe ${trimmed} reprise`);
     return;
   }
   const challengeData = data.challenge;
@@ -875,7 +1352,7 @@ function resumeChallengeClass(className) {
     return;
   }
   applyModeDefinition('raquettes-defi', { skipNavigation: true });
-  state.options.challengeClassName = trimmed;
+  syncSessionNameOnState(state, trimmed);
   state.participants = names.length;
   state.teamNames = ensureTeamListLength(names, names.length, 'raquette');
   state.entityStatuses = ensureEntityStatusLength([], names.length);
@@ -887,6 +1364,7 @@ function resumeChallengeClass(className) {
   ensureChallengeRoster(schedule);
   renderResults(schedule, { resetScores: true });
   renderChallengeClassManager();
+  updateSaveActionsState();
   goTo('results');
   alert(`Classe ${trimmed} reprise`);
 }
@@ -992,10 +1470,12 @@ init();
 
 function init() {
   bindNavigation();
+  initializeStepperInteractivity();
   renderParticipants();
   buildTeamFields(state.participants);
   syncOptionInputs();
   renderChallengeClassManager();
+  updateSaveActionsState();
   setupAutoSelectInputs();
   updateTheme(state.universeId);
   renderModeCards();
@@ -1036,6 +1516,54 @@ function bindNavigation() {
   if (elements.resumeFlow) {
     elements.resumeFlow.addEventListener('click', handleResume);
   }
+  if (elements.landingSessionsList) {
+    elements.landingSessionsList.addEventListener('click', event => {
+      const actionButton = event.target.closest('[data-session-action]');
+      if (!actionButton) return;
+      const sessionId = actionButton.dataset.sessionId;
+      const action = actionButton.dataset.sessionAction;
+      const snapshot = getStoredSessionById(sessionId);
+      if (!snapshot) {
+        alert('Cette séance n’est plus disponible localement.');
+        renderLandingSessions();
+        return;
+      }
+      if (action === 'resume') {
+        restoreAppSaveState(snapshot);
+        return;
+      }
+      if (action === 'rename') {
+        const nextName = window.prompt('Nouveau nom de classe / groupe ?', snapshot.sessionName || snapshot.className || '');
+        const trimmed = String(nextName || '').trim();
+        if (!trimmed) return;
+        snapshot.sessionName = trimmed;
+        snapshot.className = trimmed;
+        if (snapshot.state?.options) {
+          snapshot.state.options.sessionName = trimmed;
+          snapshot.state.options.challengeClassName = trimmed;
+        }
+        upsertStoredSessionSnapshot(snapshot);
+        if (state.sessionId === snapshot.id) {
+          syncSessionNameOnState(state, trimmed);
+          syncOptionInputs();
+          persistState();
+        } else {
+          renderLandingSessions();
+        }
+        return;
+      }
+      if (action === 'delete') {
+        const confirmed = window.confirm('Supprimer cette séance locale ?');
+        if (!confirmed) return;
+        removeStoredSession(snapshot.id);
+        renderLandingSessions();
+        return;
+      }
+      if (action === 'export') {
+        exportStoredSessionSnapshot(snapshot);
+      }
+    });
+  }
   if (elements.challengeClassCreateBtn) {
     elements.challengeClassCreateBtn.addEventListener('click', openChallengeClassCreationFlow);
   }
@@ -1049,17 +1577,42 @@ function bindNavigation() {
       resumeChallengeClass(className);
     });
   }
-  if (elements.challengeClassImportBtn) {
-    elements.challengeClassImportBtn.addEventListener('click', () => {
-      elements.challengeClassImportFile?.click();
-    });
+  const openJsonImport = () => {
+    elements.toolsJsonImportFile?.click();
+  };
+  if (elements.toolsImportJsonBtn) {
+    elements.toolsImportJsonBtn.addEventListener('click', openJsonImport);
   }
-  if (elements.challengeClassImportFile) {
-    elements.challengeClassImportFile.addEventListener('change', event => {
+  if (elements.toolsImportJsonBtnLanding) {
+    elements.toolsImportJsonBtnLanding.addEventListener('click', openJsonImport);
+  }
+  if (elements.toolsJsonImportFile) {
+    elements.toolsJsonImportFile.addEventListener('change', event => {
       const file = event.target.files?.[0];
       if (!file) return;
-      importChallengeClassSnapshot(file);
+      importAppStateJson(file);
       event.target.value = '';
+    });
+  }
+  if (elements.toolsExportJsonBtn) {
+    elements.toolsExportJsonBtn.addEventListener('click', exportAppStateJson);
+  }
+  if (elements.toolsExportCsvBtn) {
+    elements.toolsExportCsvBtn.addEventListener('click', exportCurrentCsv);
+  }
+  if (elements.saveSessionBtn) {
+    elements.saveSessionBtn.addEventListener('click', () => {
+      saveSessionLocally();
+    });
+  }
+  if (elements.ladderPilotSaveBtn) {
+    elements.ladderPilotSaveBtn.addEventListener('click', () => {
+      saveSessionLocally();
+    });
+  }
+  if (elements.swissPilotSaveBtn) {
+    elements.swissPilotSaveBtn.addEventListener('click', () => {
+      saveSessionLocally();
     });
   }
   if (elements.openHelpFromLanding) {
@@ -1186,8 +1739,9 @@ function bindNavigation() {
   const challengeClassNameInput = document.getElementById('challengeClassName');
   if (challengeClassNameInput) {
     challengeClassNameInput.addEventListener('input', event => {
-      state.options.challengeClassName = String(event.target.value || '').trim();
+      syncSessionNameOnState(state, String(event.target.value || '').trim());
       persistState();
+      updateGenerateButtonState();
       if (isChallengeModeActive()) renderChallengeBoard();
     });
   }
@@ -1568,6 +2122,7 @@ function bindNavigation() {
   }
   if (elements.finalRankingModal) {
     elements.finalRankingModal.addEventListener('click', event => {
+      if (handleSessionSavePanelAction(event)) return;
       if (event.target === elements.finalRankingModal) {
         hideFinalRankingModal();
       }
@@ -1609,21 +2164,12 @@ function bindNavigation() {
   }
   if (elements.ladderPilotRankingBtn) {
     elements.ladderPilotRankingBtn.addEventListener('click', () => {
-      closeLadderPilotModal();
+      rankingReturnScreen = 'ladder-pilot';
       openRankingModal();
     });
   }
   if (elements.ladderPilotNextBtn) {
-    elements.ladderPilotNextBtn.addEventListener('click', () => {
-      const progressed = advanceLiveRotation();
-      if (
-        progressed &&
-        isLadderLiveMode(state.schedule) &&
-        !(elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden'))
-      ) {
-        openLadderPilotModal();
-      }
-    });
+    elements.ladderPilotNextBtn.addEventListener('click', advanceLadderPilotRotation);
   }
   if (elements.ladderPilotFinishBtn) {
     elements.ladderPilotFinishBtn.addEventListener('click', handleLiveFinish);
@@ -1636,6 +2182,11 @@ function bindNavigation() {
   }
   if (elements.swissPilotExportBtn) {
     elements.swissPilotExportBtn.addEventListener('click', exportSwissRankingCsv);
+  }
+  if (elements.resultsScreen) {
+    elements.resultsScreen.addEventListener('click', event => {
+      handleSessionSavePanelAction(event);
+    });
   }
   if (elements.statusBtn) {
     elements.statusBtn.addEventListener('click', openStatusModal);
@@ -1789,6 +2340,32 @@ function bindNavigation() {
   }
 }
 
+function initializeStepperInteractivity() {
+  if (!elements.stepItems || !elements.stepItems.forEach) return;
+  elements.stepItems.forEach(item => {
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '-1');
+    item.setAttribute('aria-disabled', 'true');
+    item.addEventListener('click', () => {
+      handleStepperNavigation(item.dataset.step);
+    });
+    item.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      handleStepperNavigation(item.dataset.step);
+    });
+  });
+}
+
+function handleStepperNavigation(step) {
+  if (!STEP_ORDER.includes(step)) return;
+  const targetIndex = STEP_ORDER.indexOf(step);
+  const maxAccessibleIndex = getMaxAccessibleStepIndex();
+  if (targetIndex < 0 || targetIndex > maxAccessibleIndex) return;
+  if (step === 'results' && !state.schedule) return;
+  goTo(step);
+}
+
 function handleResume() {
   const stored = loadState();
   if (!stored) return;
@@ -1798,6 +2375,7 @@ function handleResume() {
   buildTeamFields(state.participants);
   syncOptionInputs();
   renderChallengeClassManager();
+  updateSaveActionsState();
   updateTheme(state.universeId);
   renderModeCards();
   updateModeScreenCopy();
@@ -1861,13 +2439,19 @@ function updateStepper(screen) {
   }
   elements.stepper.classList.remove('hidden');
   const activeIndex = STEP_ORDER.indexOf(stepKey);
+  const maxAccessibleIndex = getMaxAccessibleStepIndex(screen);
   elements.stepItems.forEach(item => {
     const idx = STEP_ORDER.indexOf(item.dataset.step);
     const isDone = idx < activeIndex;
     const isCurrent = idx === activeIndex;
+    const isAccessible = idx >= 0 && idx <= maxAccessibleIndex;
     item.classList.toggle('active', idx <= activeIndex);
     item.classList.toggle('done', isDone);
     item.classList.toggle('current', isCurrent);
+    item.classList.toggle('step-disabled', !isAccessible);
+    item.classList.toggle('step-clickable', isAccessible);
+    item.setAttribute('aria-disabled', isAccessible ? 'false' : 'true');
+    item.setAttribute('tabindex', isAccessible ? '0' : '-1');
   });
 }
 
@@ -2659,6 +3243,7 @@ function applyModeDefinition(modeId, options = {}) {
     buildTeamFields(state.participants);
   }
   persistState();
+  updateGenerateButtonState();
   if (!options.skipNavigation && elements.modeNextBtn) {
     elements.modeNextBtn.disabled = false;
   }
@@ -2717,7 +3302,7 @@ function syncOptionInputs() {
   elements.matchDuration.value = state.options.duration;
   const challengeClassNameInput = document.getElementById('challengeClassName');
   if (challengeClassNameInput) {
-    challengeClassNameInput.value = state.options.challengeClassName || '';
+    challengeClassNameInput.value = getSessionName();
   }
   const challengeRangeInput = document.getElementById('challengeRange');
   if (challengeRangeInput) {
@@ -2771,6 +3356,7 @@ function syncOptionInputs() {
   updateCountScreenCopy();
   updateRoleControlsState();
   updateModeContextPanel();
+  updateGenerateButtonState();
 }
 
 function getFinalTeamNames() {
@@ -2804,6 +3390,11 @@ function applyBulkTeamNames() {
 
 function handleGenerate() {
   try {
+    if (state.activeModeId === 'raquettes-defi' && !hasChallengeClassName()) {
+      alert('Renseignez une classe ou un groupe pour sauvegarder ce classement.');
+      updateGenerateButtonState();
+      return;
+    }
     const teams = getFinalTeamNames();
     if (teams.length < 2) {
       alert(`Ajoutez au moins deux ${formatParticipantLabel({ plural: true })}.`);
@@ -2812,6 +3403,9 @@ function handleGenerate() {
     state.teamNames = teams;
     buildTeamFields(state.participants);
     const schedule = generateSchedule(teams, state.options);
+    if (!state.schedule || state.schedule.format !== schedule.format || !state.sessionId) {
+      ensureCurrentSessionMetadata({ forceNew: true });
+    }
     renderResults(schedule, { resetScores: true });
     if (isLadderLiveMode(schedule)) {
       openLadderPilotModal();
@@ -2898,6 +3492,7 @@ function renderResults(schedule, options = {}) {
   setLiveModeAvailability(true);
   handleTimerVisibility();
   renderChronoScreen();
+  updateSaveActionsState();
 }
 
 function renderSummary(meta) {
@@ -4563,6 +5158,7 @@ function renderRankingView(schedule) {
     const rows = updateSwissRanking(schedule);
     if (!rows.length) {
       elements.rankingView.innerHTML = '<p>Aucun classement Ronde Suisse disponible.</p>';
+      appendRankingSessionSavePanel();
       return;
     }
     elements.rankingView.innerHTML = `
@@ -4574,18 +5170,22 @@ function renderRankingView(schedule) {
         ${buildSwissRankingTable(rows)}
       </article>
     `;
+    appendRankingSessionSavePanel();
     return;
   }
   if (schedule.format === 'challenge') {
     renderChallengeRanking(schedule);
+    appendRankingSessionSavePanel();
     return;
   }
   if (schedule.format === 'ladder') {
     renderLadderRanking(schedule);
+    appendRankingSessionSavePanel();
     return;
   }
   if (schedule.format && schedule.format !== 'round-robin') {
     renderGroupRankingCards(schedule);
+    appendRankingSessionSavePanel();
     return;
   }
   const practiceType = getPracticeTypeFromMeta(schedule.meta);
@@ -4636,6 +5236,7 @@ function renderRankingView(schedule) {
     })
     .join('');
   elements.rankingView.innerHTML = cards;
+  appendRankingSessionSavePanel();
 }
 
 function renderLadderRanking(schedule) {
@@ -4737,10 +5338,10 @@ function renderChallengeBoard(schedule = state.schedule) {
   ensureChallengeRoster(schedule);
   const challenge = schedule.challenge;
   const range = getChallengeRange();
-  const className = String(state.options.challengeClassName || '').trim();
-  const classSnapshot = className ? loadChallengeClassSnapshot(className) : null;
-  const lastSavedLabel = classSnapshot?.savedAt
-    ? new Date(classSnapshot.savedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+  const className = getSessionName();
+  const currentSessionSnapshot = state.sessionId ? getStoredSessionById(state.sessionId) : null;
+  const lastSavedLabel = currentSessionSnapshot?.updatedAt
+    ? new Date(currentSessionSnapshot.updatedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
     : 'Aucune';
   if (!challenge || !challenge.names.length) {
     elements.rotationView.innerHTML =
@@ -4779,22 +5380,24 @@ function renderChallengeBoard(schedule = state.schedule) {
           <p class="eyebrow">Mode Défi</p>
           <h3>Classement · fenêtre ±${range}</h3>
         </div>
-        <div class="challenge-shell-actions">
-          <p class="challenge-shell-hint">
-            Touchez un joueur pour voir ses adversaires · Touchez deux fois ou “Défi” pour saisir
-          </p>
-          <button type="button" class="btn ghost small" data-challenge-export>Exporter CSV</button>
-        </div>
+        <p class="challenge-shell-hint">
+          Touchez un joueur pour voir ses adversaires · Touchez deux fois ou “Défi” pour saisir
+        </p>
       </header>
       <div class="challenge-history-card">
         <div>
-          <strong>Classe : ${escapeHtml(className || 'Non renseignée')}</strong>
+          <strong>Classe : ${escapeHtml(className || 'Classe non renseignée')}</strong>
           <p class="challenge-history-meta">Dernière sauvegarde : ${escapeHtml(lastSavedLabel)}</p>
         </div>
         <div class="challenge-shell-actions">
-          <button type="button" class="btn success small" data-challenge-save-class ${className ? '' : 'disabled'}>
-            Sauvegarder la classe
-          </button>
+          ${
+            className
+              ? `
+                <button type="button" class="btn ghost small" data-challenge-edit-class>Modifier le nom de classe</button>
+                <button type="button" class="btn success small" data-challenge-save-class>Sauvegarder la séance</button>
+              `
+              : '<button type="button" class="btn success small" data-challenge-set-class>Ajouter une classe</button>'
+          }
         </div>
       </div>
       ${buildChallengeHistoryBlock(challenge)}
@@ -5259,16 +5862,26 @@ function openChallengeDialog(playerId, options = {}) {
 
 function handleChallengeClick(event) {
   if (!isChallengeModeActive()) return;
+  const setClassBtn = event.target.closest('[data-challenge-set-class]');
+  if (setClassBtn) {
+    event.preventDefault();
+    const nextName = promptForChallengeClassName(getSessionName());
+    if (!nextName) return;
+    setChallengeClassName(nextName);
+    return;
+  }
+  const editClassBtn = event.target.closest('[data-challenge-edit-class]');
+  if (editClassBtn) {
+    event.preventDefault();
+    const nextName = promptForChallengeClassName(getSessionName());
+    if (!nextName) return;
+    setChallengeClassName(nextName);
+    return;
+  }
   const saveClassBtn = event.target.closest('[data-challenge-save-class]');
   if (saveClassBtn) {
     event.preventDefault();
     saveCurrentChallengeClass();
-    return;
-  }
-  const exportBtn = event.target.closest('[data-challenge-export]');
-  if (exportBtn) {
-    event.preventDefault();
-    exportChallengeRankingCsv();
     return;
   }
   const navBtn = event.target.closest('[data-challenge-nav]');
@@ -5895,6 +6508,7 @@ function showFinalRankingModal(uptoRotation) {
         ? { kind: 'swiss', table: updateSwissRanking(state.schedule), complete: true, uptoRotation: upto }
       : computeRankingSnapshot(state.schedule, upto);
   renderFinalRankingTable(finalRankingSnapshot, upto);
+  renderFinalSessionSavePanel();
   elements.finalRankingModal.classList.remove('hidden');
   syncBodyModalState();
 }
@@ -5902,6 +6516,9 @@ function showFinalRankingModal(uptoRotation) {
 function hideFinalRankingModal() {
   if (!elements.finalRankingModal) return;
   elements.finalRankingModal.classList.add('hidden');
+  if (elements.finalSessionSavePanel) {
+    elements.finalSessionSavePanel.innerHTML = '';
+  }
   syncBodyModalState();
 }
 
@@ -6147,6 +6764,9 @@ function openRankingModal() {
     alert('Générez un planning avant d’ouvrir le classement.');
     return;
   }
+  if (!rankingReturnScreen && isLadderPilotModalOpen()) {
+    rankingReturnScreen = 'ladder-pilot';
+  }
   renderRankingModal();
   elements.rankingModal.classList.remove('hidden');
   syncBodyModalState();
@@ -6156,6 +6776,13 @@ function closeRankingModal() {
   if (!elements.rankingModal) return;
   elements.rankingModal.classList.add('hidden');
   syncBodyModalState();
+  if (rankingReturnScreen === 'ladder-pilot' && isLadderLiveMode(state.schedule)) {
+    rankingReturnScreen = null;
+    goTo('ladder-pilot');
+    renderLadderPilotModal();
+    return;
+  }
+  rankingReturnScreen = null;
 }
 
 function renderRankingModal() {
@@ -6596,14 +7223,16 @@ function renderLadderPilotModal() {
   if (elements.ladderPilotTitle) {
     elements.ladderPilotTitle.textContent = formatLadderRotationLabel(rotation, state.schedule);
   }
+  const limitedLast = !isLadderOpenSession(state.schedule) && summary.total && rotation.number >= summary.total;
+  const nextActionLabel = isLadderSessionEnded(state.schedule)
+    ? 'Séance terminée'
+    : limitedLast
+      ? 'Terminer le tournoi'
+      : 'Rotation suivante';
+  const nextActionDisabled = summary.stateKey !== 'ready' || isLadderSessionEnded(state.schedule);
   if (elements.ladderPilotNextBtn) {
-    const limitedLast = !isLadderOpenSession(state.schedule) && summary.total && rotation.number >= summary.total;
-    elements.ladderPilotNextBtn.disabled = summary.stateKey !== 'ready' || isLadderSessionEnded(state.schedule);
-    elements.ladderPilotNextBtn.textContent = isLadderSessionEnded(state.schedule)
-      ? 'Séance terminée'
-      : limitedLast
-        ? 'Terminer le tournoi'
-        : 'Rotation suivante';
+    elements.ladderPilotNextBtn.disabled = nextActionDisabled;
+    elements.ladderPilotNextBtn.textContent = nextActionLabel;
   }
   if (elements.ladderPilotFinishBtn) {
     elements.ladderPilotFinishBtn.disabled = isLadderSessionEnded(state.schedule);
@@ -6630,8 +7259,24 @@ function renderLadderPilotModal() {
     </div>
     <div class="ladder-pilot-console">
       <div class="ladder-pilot-modal-list">${cards}</div>
+      <div class="ladder-pilot-next-cta">
+        <button type="button" class="btn primary xl" data-ladder-next-cta ${nextActionDisabled ? 'disabled' : ''}>
+          ${nextActionLabel}
+        </button>
+      </div>
     </div>
   `;
+}
+
+function advanceLadderPilotRotation() {
+  const progressed = advanceLiveRotation();
+  if (
+    progressed &&
+    isLadderLiveMode(state.schedule) &&
+    !(elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden'))
+  ) {
+    openLadderPilotModal();
+  }
 }
 
 function openLadderPilotModal() {
@@ -7281,7 +7926,6 @@ function buildLadderPilotCard(rotation, match, roleAssignments, options = {}) {
   match.id = matchId;
   const profile = getLadderCourtProfile(Number(match.field));
   const arbiter = roleAssignments?.get(matchId)?.arbitre || '';
-  const profileLabel = arbiter ? `Arbitre · ${arbiter}` : profile === 'arbiter' ? 'Avec arbitre' : 'Sans arbitre';
   const neutralized = isMatchNeutralized(participants);
   const validated = isMatchValidated(matchId);
   const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
@@ -7292,6 +7936,7 @@ function buildLadderPilotCard(rotation, match, roleAssignments, options = {}) {
   const editorHiddenClass = inlineScoreEditor ? '' : ' hidden';
   const statusTag = neutralized ? 'Neutralisé' : validated ? 'Validé' : '';
   const toggleLabel = validated ? 'Modifier le score' : 'Entrer le score';
+  const profileTagLabel = arbiter ? `Arbitre : ${arbiter}` : profile === 'arbiter' ? 'Avec arbitre' : 'Sans arbitre';
   const validatedOutcome = getValidatedLadderMatchOutcome(matchId, participants);
   const homeResultClass =
     validatedOutcome?.winner === 'home' ? 'result-winner' : validatedOutcome?.loser === 'home' ? 'result-loser' : '';
@@ -7300,7 +7945,7 @@ function buildLadderPilotCard(rotation, match, roleAssignments, options = {}) {
   return `
     <article class="live-match-card ladder-pilot-card ${validated ? 'validated' : 'active'} ${neutralized ? 'neutralized' : ''}" data-match-id="${matchId}">
       <header class="ladder-pilot-head">
-        <div>
+        <div class="ladder-pilot-heading-copy">
           <p class="eyebrow">Terrain ${match.field}</p>
           <h4 class="ladder-player-line">
             <span class="ladder-player-chip ${homeResultClass}">${escapeHtml(participants.home)}</span>
@@ -7309,7 +7954,7 @@ function buildLadderPilotCard(rotation, match, roleAssignments, options = {}) {
           </h4>
         </div>
         <div class="ladder-pilot-tags">
-          <span class="state-pill ${profile === 'arbiter' ? 'next' : 'rest'}">${profileLabel}</span>
+          <span class="state-pill ${profile === 'arbiter' ? 'next' : 'rest'}">${profileTagLabel}</span>
           ${statusTag ? `<span class="state-pill ${neutralized ? 'rest' : 'live'}">${statusTag}</span>` : ''}
         </div>
       </header>
@@ -8282,6 +8927,13 @@ function updateTimerFabVisibility() {
 }
 
 function handleLiveClick(event) {
+  const nextRotationCta = event.target.closest('[data-ladder-next-cta]');
+  if (nextRotationCta) {
+    if (!nextRotationCta.disabled) {
+      advanceLadderPilotRotation();
+    }
+    return;
+  }
   const openCurrentButton = event.target.closest('[data-open-current-rotation]');
   if (openCurrentButton) {
     if (isLadderLiveMode(state.schedule)) {
@@ -9475,9 +10127,6 @@ function renderSwissBoard(schedule) {
           <p class="eyebrow">Ronde Suisse</p>
           <h3>Ronde ${currentRound}</h3>
           <p class="swiss-board-meta">${remainingCount} match(s) restant(s) · ${schedule.swiss.currentMatches.filter(match => !match.bye).length} match(s) · ${schedule.swiss.currentMatches.filter(match => match.bye).length} exempt(s)</p>
-        </div>
-        <div class="swiss-board-actions">
-          <button type="button" class="btn secondary" data-swiss-export>Exporter CSV</button>
         </div>
       </header>
       <div class="swiss-board-layout">
@@ -10681,11 +11330,6 @@ function handleRotationViewClick(event) {
     validateSwissRound();
     return;
   }
-  const swissExportButton = event.target.closest('[data-swiss-export]');
-  if (swissExportButton) {
-    exportSwissRankingCsv();
-    return;
-  }
   const openCurrentButton = event.target.closest('[data-open-current-rotation]');
   if (openCurrentButton) {
     if (isLadderLiveMode(state.schedule)) {
@@ -11155,12 +11799,15 @@ function createDefaultState() {
     activeModeId: defaultMode.id,
     tournamentType: defaultMode.tournamentType,
     practiceType: defaultPractice,
+    sessionId: null,
+    sessionCreatedAt: null,
     participants: 8,
     teamNames: ensureTeamListLength([], 8, defaultPractice),
     entityStatuses: [],
     options: {
       fields: 2,
       duration: 12,
+      sessionName: '',
       challengeClassName: '',
       challengeRange: 5,
       startTime: '09:00',
@@ -11233,7 +11880,8 @@ function sanitizeState(raw) {
   const optionSource = { ...base.options, ...(source.options || {}) };
   optionSource.fields = clampNumber(Number(optionSource.fields), 1, 16, base.options.fields);
   optionSource.duration = clampNumber(Number(optionSource.duration), 1, 180, base.options.duration);
-  optionSource.challengeClassName = String(optionSource.challengeClassName || '').trim();
+  optionSource.sessionName = String(optionSource.sessionName || optionSource.challengeClassName || '').trim();
+  optionSource.challengeClassName = optionSource.sessionName;
   optionSource.challengeRange = clampNumber(
     Number.isFinite(Number(optionSource.challengeRange)) ? Number(optionSource.challengeRange) : 5,
     1,
@@ -11337,6 +11985,8 @@ function sanitizeState(raw) {
     };
   }
   merged.options = optionSource;
+  merged.sessionId = source.sessionId || null;
+  merged.sessionCreatedAt = source.sessionCreatedAt || null;
   const incomingNames = Array.isArray(source.teamNames) ? source.teamNames : base.teamNames;
   merged.teamNames = ensureTeamListLength(incomingNames, merged.participants, merged.practiceType);
   merged.entityStatuses = ensureEntityStatusLength(source.entityStatuses, merged.participants);
@@ -11377,9 +12027,18 @@ function sanitizeState(raw) {
 
 function persistState() {
   try {
+    const canSnapshotCurrentSession = Boolean(state.schedule && doesActiveModeMatchSchedule());
+    if (canSnapshotCurrentSession) {
+      ensureCurrentSessionMetadata();
+      syncSessionNameOnState(state, getSessionName());
+    }
     const snapshot = { ...state };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    if (canSnapshotCurrentSession) {
+      upsertStoredSessionSnapshot(buildAppSaveSnapshot());
+    }
     updateResumeButton();
+    renderLandingSessions();
   } catch (error) {
     console.warn('Sauvegarde impossible', error);
   }
@@ -11396,6 +12055,7 @@ function resetApplication() {
   buildTeamFields(state.participants);
   syncOptionInputs();
   renderChallengeClassManager();
+  updateSaveActionsState();
   updateTheme(state.universeId);
   renderModeCards();
   updateModeScreenCopy();
