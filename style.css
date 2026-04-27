@@ -56,6 +56,10 @@ body[data-screen='swiss-pilot'] {
   display: block;
 }
 
+body[data-screen='pool-pilot'] {
+  display: block;
+}
+
 .app-shell {
   width: min(1100px, 100%);
   padding: clamp(16px, 4vw, 32px);
@@ -81,8 +85,19 @@ body[data-screen='swiss-pilot'] .app-shell {
   padding: 0;
 }
 
+body[data-screen='pool-pilot'] .app-shell {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
 body[data-screen='swiss-pilot'] .topbar,
 body[data-screen='swiss-pilot'] .stepper {
+  display: none;
+}
+
+body[data-screen='pool-pilot'] .topbar,
+body[data-screen='pool-pilot'] .stepper {
   display: none;
 }
 
@@ -373,6 +388,13 @@ body[data-screen='swiss-pilot'] .stepper {
   flex-wrap: wrap;
 }
 
+.landing-sessions-head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .landing-sessions-head h3 {
   margin: 6px 0 0;
 }
@@ -386,6 +408,61 @@ body[data-screen='swiss-pilot'] .stepper {
 .landing-sessions-list {
   display: grid;
   gap: 12px;
+}
+
+.session-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.session-class-card {
+  --session-class-color: rgba(96, 214, 140, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--session-class-color) 45%, rgba(255, 255, 255, 0.08));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--session-class-color) 12%, rgba(255, 255, 255, 0.03)), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.session-class-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-class-copy strong,
+.session-class-copy span {
+  overflow-wrap: anywhere;
+}
+
+.session-class-chip {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.session-class-meta {
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.session-class-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.session-class-actions .btn.primary {
+  min-width: 150px;
 }
 
 .landing-session-card {
@@ -1870,6 +1947,12 @@ input[type='range']::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+}
+
+.results-primary-cta .btn.hero {
+  width: 100%;
+  justify-content: center;
 }
 
 .action-hint {
@@ -1882,6 +1965,7 @@ input[type='range']::-webkit-slider-thumb {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .session-save-feedback {
@@ -2047,7 +2131,6 @@ input[type='range']::-webkit-slider-thumb {
   display: none;
 }
 
-.screen[data-screen='results'][data-results-mode='read'] .results-action-stack,
 .screen[data-screen='results'][data-results-mode='read'] .view-toggle,
 .screen[data-screen='results'][data-results-mode='read']:not(.results-challenge) .view {
   display: none;
@@ -2063,7 +2146,6 @@ input[type='range']::-webkit-slider-thumb {
 .screen[data-screen='results'].results-challenge .time-indicator,
 .screen[data-screen='results'].results-challenge .results-mode-switch,
 .screen[data-screen='results'].results-challenge .results-mode-note,
-.screen[data-screen='results'].results-challenge .results-action-stack,
 .screen[data-screen='results'].results-challenge .results-tertiary-cta,
 .screen[data-screen='results'].results-challenge .view-toggle,
 .screen[data-screen='results'].results-challenge #teamView,
@@ -3936,6 +4018,35 @@ body.mode-chrono #timerWidget {
   gap: 16px;
 }
 
+.session-save-modal-card {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.session-save-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-save-modal-copy,
+.session-save-modal-mode {
+  margin: 0;
+}
+
+.session-save-modal-mode {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.config-edit-modal-card {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.config-edit-modal-copy {
+  margin: 0;
+  color: var(--muted);
+}
+
 #finalRankingModal .final-ranking-card {
   width: min(1040px, calc(100vw - 32px));
   max-height: 90vh;
@@ -3994,6 +4105,134 @@ body.mode-chrono #timerWidget {
 
 .ladder-pilot-modal .ladder-pilot-card {
   min-height: 100%;
+}
+
+.pool-pilot-screen {
+  width: 100vw;
+  min-height: 100vh;
+  padding: clamp(16px, 2.4vw, 28px);
+  background: linear-gradient(180deg, #15110f, #0f0d0c);
+}
+
+.pool-pilot-card {
+  width: 100%;
+  min-height: calc(100vh - clamp(32px, 4.8vw, 56px));
+}
+
+.pool-pilot-body {
+  width: 100%;
+}
+
+.pool-pilot-toolbar {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+#poolPilotCloseBtn {
+  display: none;
+}
+
+.pool-pilot-summary-card {
+  margin-bottom: 4px;
+}
+
+.pool-pilot-console {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pool-pilot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.pool-pilot-list .live-match-card {
+  min-height: 100%;
+  padding: 18px;
+}
+
+.pool-pilot-list .live-match-card header {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pool-pilot-list .live-match-card .teams {
+  gap: 16px;
+}
+
+.pool-pilot-list .live-team strong {
+  font-size: 1.3rem;
+  overflow-wrap: anywhere;
+}
+
+.pool-pilot-list .score-adjust {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+}
+
+.pool-pilot-list .live-score-pad input {
+  width: 78px;
+  min-height: 52px;
+  font-size: 1.45rem;
+}
+
+.pool-pilot-list .live-card-actions {
+  justify-content: stretch;
+  flex-wrap: wrap;
+}
+
+.pool-pilot-list .live-card-actions .btn {
+  min-height: 44px;
+}
+
+.pool-pilot-next-cta {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(15, 13, 12, 0), rgba(15, 13, 12, 0.96) 24%, rgba(15, 13, 12, 0.98));
+}
+
+.pool-pilot-next-cta .btn {
+  min-width: min(420px, 100%);
+}
+
+.pool-pilot-next-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 720px) {
+  .pool-pilot-screen {
+    padding: 16px;
+  }
+
+  .pool-pilot-card {
+    min-height: calc(100vh - 32px);
+  }
+
+  .pool-pilot-list {
+    grid-template-columns: 1fr;
+  }
+
+  .pool-pilot-list .live-match-card .teams {
+    grid-template-columns: 1fr;
+  }
+
+  .pool-pilot-next-cta {
+    padding-inline: 0;
+    background: linear-gradient(180deg, rgba(15, 13, 12, 0), rgba(15, 13, 12, 0.94) 20%, rgba(15, 13, 12, 0.98));
+  }
 }
 
 .ranking-card {
@@ -5131,12 +5370,25 @@ body[data-screen='swiss-pilot'] .swiss-ranking-panel {
     flex-direction: column;
   }
 
+  .landing-sessions-head-actions {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .session-class-grid {
+    grid-template-columns: 1fr;
+  }
+
   .landing-session-actions {
     width: 100%;
     justify-content: stretch;
   }
 
   .landing-session-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .session-class-actions .btn {
     flex: 1 1 calc(50% - 4px);
   }
 

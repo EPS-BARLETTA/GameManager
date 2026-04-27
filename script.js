@@ -410,9 +410,12 @@ const elements = {
   stepItems: document.querySelectorAll('.step'),
   landingSportcoBtn: document.getElementById('landingSportcoBtn'),
   landingRaquettesBtn: document.getElementById('landingRaquettesBtn'),
+  landingSavesBtn: document.getElementById('landingSavesBtn'),
   resumeFlow: document.getElementById('resumeFlow'),
+  landingSessionsTitle: document.getElementById('landingSessionsTitle'),
   landingSessionsList: document.getElementById('landingSessionsList'),
   landingSessionsHint: document.getElementById('landingSessionsHint'),
+  savesBackToClassesBtn: document.getElementById('savesBackToClassesBtn'),
   challengeClassSelect: document.getElementById('challengeClassSelect'),
   challengeClassCreateBtn: document.getElementById('challengeClassCreateBtn'),
   challengeClassResumeBtn: document.getElementById('challengeClassResumeBtn'),
@@ -422,6 +425,19 @@ const elements = {
   toolsExportJsonBtn: document.getElementById('toolsExportJsonBtn'),
   toolsExportCsvBtn: document.getElementById('toolsExportCsvBtn'),
   toolsJsonImportFile: document.getElementById('toolsJsonImportFile'),
+  sessionSaveModal: document.getElementById('sessionSaveModal'),
+  sessionSaveModalForm: document.getElementById('sessionSaveModalForm'),
+  sessionSaveModalMode: document.getElementById('sessionSaveModalMode'),
+  sessionSaveModalCloseBtn: document.getElementById('sessionSaveModalCloseBtn'),
+  sessionSaveModalCancelBtn: document.getElementById('sessionSaveModalCancelBtn'),
+  sessionSaveClassSelect: document.getElementById('sessionSaveClassSelect'),
+  sessionSaveNewClassField: document.getElementById('sessionSaveNewClassField'),
+  sessionSaveNewClassInput: document.getElementById('sessionSaveNewClassInput'),
+  sessionSaveNewClassHint: document.getElementById('sessionSaveNewClassHint'),
+  configEditModal: document.getElementById('configEditModal'),
+  configEditModalCloseBtn: document.getElementById('configEditModalCloseBtn'),
+  configEditModalCancelBtn: document.getElementById('configEditModalCancelBtn'),
+  configEditModalConfirmBtn: document.getElementById('configEditModalConfirmBtn'),
   sessionSaveFeedback: document.getElementById('sessionSaveFeedback'),
   quickModeBtn: document.getElementById('quickModeBtn'),
   openHelpFromLanding: document.getElementById('openHelpFromLanding'),
@@ -609,6 +625,15 @@ const elements = {
   ladderPilotNextBtn: document.getElementById('ladderPilotNextBtn'),
   ladderPilotFinishBtn: document.getElementById('ladderPilotFinishBtn'),
   ladderPilotRankingBtn: document.getElementById('ladderPilotRankingBtn'),
+  poolPilotScreen: document.getElementById('poolPilotScreen'),
+  poolPilotTitle: document.getElementById('poolPilotTitle'),
+  poolPilotMeta: document.getElementById('poolPilotMeta'),
+  poolPilotBody: document.getElementById('poolPilotBody'),
+  poolPilotCloseBtn: document.getElementById('poolPilotCloseBtn'),
+  poolPilotBackBtn: document.getElementById('poolPilotBackBtn'),
+  poolPilotSaveBtn: document.getElementById('poolPilotSaveBtn'),
+  poolPilotNextBtn: document.getElementById('poolPilotNextBtn'),
+  poolPilotRankingBtn: document.getElementById('poolPilotRankingBtn'),
   swissPilotScreen: document.getElementById('swissPilotScreen'),
   swissPilotTitle: document.getElementById('swissPilotTitle'),
   swissPilotMeta: document.getElementById('swissPilotMeta'),
@@ -663,6 +688,7 @@ const timerUiState = {
 };
 const uiState = {
   resultsMode: 'read',
+  savesSelectedGroupKey: null,
 };
 let latestRecommendation = null;
 let recommendationApplied = false;
@@ -672,12 +698,15 @@ let _challengeSelectedId = null;
 let challengeEditContext = null;
 let rankingReturnScreen = null;
 let sessionSaveFeedbackTimeout = null;
+let pendingSessionSaveRequest = null;
+let pendingConfigEditAction = null;
 const MIN_TURNAROUND_MINUTES = 1;
 const IDEAL_TURNAROUND_MINUTES = 2;
 let challengeIdSeed = 0;
 const APP_SAVE_TYPE = 'gamemanager-save';
 const APP_SAVE_VERSION = 1;
 const APP_SESSIONS_KEY = 'gamemanager-sessions-v1';
+const APP_SESSION_CLASS_META_KEY = 'gamemanager-session-classes-v1';
 
 function generateChallengePlayerId() {
   challengeIdSeed += 1;
@@ -794,8 +823,122 @@ function buildAppSaveSnapshot() {
     viewState: {
       resultsMode: uiState.resultsMode,
       finalRankingSnapshot,
+      restoreScreen: state.currentScreen,
+      liveRotationIndex: state.liveRotationIndex,
     },
   };
+}
+
+function sessionHasRecordedProgress(sourceState = state) {
+  if (!sourceState?.schedule) return false;
+  if (sourceState.schedule.meta?.sessionEnded) return true;
+  if (Number(sourceState.liveRotationIndex || 0) > 0) return true;
+  if (sourceState.schedule.format === 'challenge') {
+    return Array.isArray(sourceState.schedule.challenge?.history) && sourceState.schedule.challenge.history.length > 0;
+  }
+  if (sourceState.schedule.format === 'swiss') {
+    return Array.isArray(sourceState.schedule.swiss?.history) && sourceState.schedule.swiss.history.length > 0;
+  }
+  if (sourceState.scores && Object.keys(sourceState.scores).length > 0) return true;
+  return false;
+}
+
+function isConfigurationScreen(screen) {
+  return ['type', 'count', 'teams', 'options'].includes(screen);
+}
+
+function shouldConfirmConfigurationEdit(targetScreen, sourceState = state) {
+  return isConfigurationScreen(targetScreen) && sessionHasRecordedProgress(sourceState);
+}
+
+function closeConfigEditModal() {
+  if (!elements.configEditModal) return;
+  elements.configEditModal.classList.add('hidden');
+  pendingConfigEditAction = null;
+  syncBodyModalState();
+}
+
+function openConfigEditModal(onConfirm) {
+  if (!elements.configEditModal) {
+    if (typeof onConfirm === 'function') onConfirm();
+    return;
+  }
+  pendingConfigEditAction = typeof onConfirm === 'function' ? onConfirm : null;
+  elements.configEditModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
+function requestConfigurationEdit(targetScreen, onConfirm, sourceState = state) {
+  if (!shouldConfirmConfigurationEdit(targetScreen, sourceState)) {
+    if (typeof onConfirm === 'function') onConfirm();
+    return;
+  }
+  openConfigEditModal(onConfirm);
+}
+
+function resetForNewSession(options = {}) {
+  const defaults = createDefaultState();
+  const preservedParticipants = Number.isInteger(state.participants) ? state.participants : defaults.participants;
+  const preservedOptions = {
+    ...defaults.options,
+    ...state.options,
+    sessionName: '',
+    classGroupName: '',
+    challengeClassName: '',
+    ladder: {
+      ...defaults.options.ladder,
+      ...(state.options?.ladder || {}),
+    },
+  };
+  state = {
+    ...defaults,
+    universeId: options.universeId || defaults.universeId,
+    participants: preservedParticipants,
+    options: preservedOptions,
+    teamNames: ensureTeamListLength([], preservedParticipants, defaults.practiceType),
+    entityStatuses: [],
+    schedule: null,
+    ladderState: null,
+    challengeState: null,
+    generatedAt: null,
+    scores: {},
+    validatedMatches: {},
+    liveRotationIndex: 0,
+    sessionId: null,
+    sessionCreatedAt: null,
+    currentScreen: 'landing',
+    lastScreen: 'landing',
+  };
+  finalRankingSnapshot = null;
+  uiState.resultsMode = 'read';
+  rankingReturnScreen = null;
+  invalidateStandingsCache();
+  renderParticipants();
+  buildTeamFields(state.participants);
+  syncOptionInputs();
+  renderChallengeClassManager();
+  updateSaveActionsState();
+  updateGenerateButtonState();
+  updateModeScreenCopy();
+}
+
+function getSavedSessionRestoreScreen(restoredState, snapshot = null) {
+  const schedule = restoredState?.schedule;
+  const savedScreen =
+    snapshot?.viewState?.restoreScreen ||
+    restoredState?.currentScreen ||
+    'results';
+  if (!schedule) {
+    return ['landing', 'type', 'count', 'teams', 'options'].includes(savedScreen) ? savedScreen : 'landing';
+  }
+  if (schedule.meta?.sessionEnded) {
+    return 'results';
+  }
+  if (schedule.format === 'swiss') return 'swiss-pilot';
+  if (schedule.format === 'challenge') return 'challenge-pilot';
+  if (isLadderLiveMode(schedule)) return 'ladder-pilot';
+  if (isRaquettesPoulePilotMode(schedule)) return 'pool-pilot';
+  return ['live', 'projection', 'chrono'].includes(savedScreen) ? savedScreen : 'live';
 }
 
 function exportAppStateJson() {
@@ -879,6 +1022,121 @@ function getSessionStatusLabel(snapshot) {
   return snapshot?.status === 'finished' ? 'Terminé' : snapshot?.state?.schedule ? 'En cours' : 'Configuration';
 }
 
+function getSessionGroupName(snapshot) {
+  const candidates = [
+    snapshot?.sessionName,
+    snapshot?.className,
+    snapshot?.state?.options?.sessionName,
+    snapshot?.state?.options?.classGroupName,
+    snapshot?.state?.options?.challengeClassName,
+  ];
+  const label = candidates.find(value => String(value || '').trim());
+  return String(label || '').trim() || 'Sans classe';
+}
+
+function getSessionGroupKey(name) {
+  const safe = String(name || '')
+    .trim()
+    .toLowerCase();
+  return safe || 'sans-classe';
+}
+
+function loadSessionClassMeta() {
+  try {
+    const raw = localStorage.getItem(APP_SESSION_CLASS_META_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    console.warn('Impossible de charger les métadonnées de classes', error);
+    return {};
+  }
+}
+
+function saveSessionClassMeta(meta) {
+  localStorage.setItem(APP_SESSION_CLASS_META_KEY, JSON.stringify(meta || {}));
+}
+
+function getSessionClassColor(groupKey) {
+  const meta = loadSessionClassMeta();
+  return String(meta?.[groupKey]?.color || '').trim() || '';
+}
+
+function setSessionClassColor(groupKey, colorValue) {
+  const meta = loadSessionClassMeta();
+  meta[groupKey] = {
+    ...(meta[groupKey] || {}),
+    color: colorValue,
+  };
+  saveSessionClassMeta(meta);
+}
+
+function deleteSessionClassMeta(groupKey) {
+  const meta = loadSessionClassMeta();
+  if (!(groupKey in meta)) return;
+  delete meta[groupKey];
+  saveSessionClassMeta(meta);
+}
+
+function renameSessionClassMeta(previousKey, nextKey) {
+  if (previousKey === nextKey) return;
+  const meta = loadSessionClassMeta();
+  if (!meta[previousKey]) return;
+  meta[nextKey] = {
+    ...(meta[nextKey] || {}),
+    ...meta[previousKey],
+  };
+  delete meta[previousKey];
+  saveSessionClassMeta(meta);
+}
+
+function getGroupedStoredSessions() {
+  const groups = new Map();
+  listStoredSessions().forEach(snapshot => {
+    const className = getSessionGroupName(snapshot);
+    const key = getSessionGroupKey(className);
+    const bucket =
+      groups.get(key) || {
+        key,
+        className,
+        color: getSessionClassColor(key),
+        sessions: [],
+      };
+    bucket.sessions.push(snapshot);
+    groups.set(key, bucket);
+  });
+  return Array.from(groups.values()).sort((a, b) => a.className.localeCompare(b.className, 'fr', { sensitivity: 'base' }));
+}
+
+function getSelectedStoredSessionGroup() {
+  const groups = getGroupedStoredSessions();
+  if (!uiState.savesSelectedGroupKey) return { groups, selectedGroup: null };
+  const selectedGroup = groups.find(group => group.key === uiState.savesSelectedGroupKey) || null;
+  if (!selectedGroup) {
+    uiState.savesSelectedGroupKey = null;
+  }
+  return { groups, selectedGroup };
+}
+
+function applySessionNameToSnapshot(snapshot, nextName) {
+  const trimmed = String(nextName || '').trim();
+  if (!snapshot || !trimmed) return snapshot;
+  snapshot.sessionName = trimmed;
+  snapshot.className = trimmed;
+  snapshot.state = snapshot.state || {};
+  snapshot.state.options = snapshot.state.options || {};
+  snapshot.state.options.sessionName = trimmed;
+  snapshot.state.options.challengeClassName = trimmed;
+  snapshot.state.options.classGroupName = trimmed;
+  return snapshot;
+}
+
+function formatStoredSessionStamp(snapshot) {
+  const updatedAt = snapshot.updatedAt || snapshot.savedAt || snapshot.createdAt;
+  return updatedAt
+    ? new Date(updatedAt).toLocaleDateString('fr-FR', { dateStyle: 'long' })
+    : 'date inconnue';
+}
+
 function saveCurrentSessionSnapshot() {
   if (!state.schedule) return null;
   const snapshot = buildAppSaveSnapshot();
@@ -888,26 +1146,58 @@ function saveCurrentSessionSnapshot() {
 
 function renderLandingSessions() {
   if (!elements.landingSessionsList || !elements.landingSessionsHint) return;
-  const sessions = listStoredSessions().slice(0, 8);
-  if (!sessions.length) {
+  const { groups, selectedGroup } = getSelectedStoredSessionGroup();
+  if (elements.savesBackToClassesBtn) {
+    elements.savesBackToClassesBtn.classList.toggle('hidden', !selectedGroup);
+  }
+  if (elements.landingSessionsTitle) {
+    elements.landingSessionsTitle.textContent = selectedGroup ? selectedGroup.className : 'Classes / groupes';
+  }
+  if (!groups.length) {
     elements.landingSessionsHint.textContent = 'Aucune séance locale enregistrée pour le moment.';
     elements.landingSessionsList.innerHTML =
       '<p class="landing-session-empty">Générez une première séance pour la retrouver ici automatiquement.</p>';
     return;
   }
-  elements.landingSessionsHint.textContent = `${sessions.length} séance(s) récente(s) sur cet appareil.`;
-  elements.landingSessionsList.innerHTML = sessions
+  if (!selectedGroup) {
+    elements.landingSessionsHint.textContent = `${groups.length} classe(s) / groupe(s) enregistré(s) sur cet iPad.`;
+    elements.landingSessionsList.innerHTML = `
+      <div class="session-class-grid">
+        ${groups
+          .map(group => {
+            const latestStamp = formatStoredSessionStamp(group.sessions[0]);
+            const sessionCount = group.sessions.length;
+            const sessionLabel = sessionCount > 1 ? `${sessionCount} séances` : '1 séance';
+            const colorStyle = group.color ? ` style="--session-class-color: ${escapeHtml(group.color)}"` : '';
+            return `
+              <article class="session-class-card"${colorStyle}>
+                <div class="session-class-copy">
+                  <p class="session-class-chip">Classe / groupe</p>
+                  <strong>${escapeHtml(group.className)}</strong>
+                  <span class="session-class-meta">${escapeHtml(sessionLabel)} · Dernière mise à jour ${escapeHtml(latestStamp)}</span>
+                </div>
+                <div class="session-class-actions">
+                  <button type="button" class="btn primary small" data-session-group-action="open" data-session-group-key="${group.key}">Voir les séances</button>
+                  <button type="button" class="btn ghost small" data-session-group-action="rename-class" data-session-group-key="${group.key}">Renommer</button>
+                  <button type="button" class="btn ghost small" data-session-group-action="color-class" data-session-group-key="${group.key}">Couleur</button>
+                  <button type="button" class="btn ghost small" data-session-group-action="delete-class" data-session-group-key="${group.key}">Supprimer</button>
+                </div>
+              </article>
+            `;
+          })
+          .join('')}
+      </div>
+    `;
+    return;
+  }
+  elements.landingSessionsHint.textContent = `${selectedGroup.sessions.length} séance(s) enregistrée(s) pour cette classe.`;
+  elements.landingSessionsList.innerHTML = selectedGroup.sessions
     .map(snapshot => {
-      const sessionName = String(snapshot.sessionName || snapshot.className || '').trim() || 'Séance sans nom';
-      const updatedAt = snapshot.updatedAt || snapshot.savedAt || snapshot.createdAt;
-      const stamp = updatedAt
-        ? new Date(updatedAt).toLocaleDateString('fr-FR', { dateStyle: 'long' })
-        : 'date inconnue';
       const participantCount = Number(snapshot.participantCount || snapshot.state?.participants || 0);
       return `
         <article class="landing-session-card">
           <div class="landing-session-copy">
-            <strong>${escapeHtml(sessionName)} · ${escapeHtml(getSessionModeLabel(snapshot))} · ${escapeHtml(stamp)}</strong>
+            <strong>${escapeHtml(getSessionModeLabel(snapshot))} · ${escapeHtml(formatStoredSessionStamp(snapshot))}</strong>
             <span class="landing-session-meta">${escapeHtml(getSessionUniverseLabel(snapshot))} · ${participantCount} participant(s) · ${escapeHtml(getSessionStatusLabel(snapshot))}</span>
           </div>
           <div class="landing-session-actions">
@@ -934,35 +1224,109 @@ function showSessionSaveFeedback(message = 'Séance sauvegardée sur cet iPad') 
   }, 2200);
 }
 
-function ensureSessionNameBeforeSave() {
-  const existing = getSessionName();
-  if (existing) return existing;
-  const response = window.prompt('Nom de la classe / du groupe ?', '');
-  const trimmed = String(response || '').trim();
-  if (!trimmed) {
-    alert('Renseignez une classe ou un groupe pour sauvegarder cette séance.');
-    return null;
-  }
-  syncSessionNameOnState(state, trimmed);
-  syncOptionInputs();
-  return trimmed;
+function getAvailableSessionClassNames() {
+  const seen = new Set();
+  return getGroupedStoredSessions()
+    .map(group => String(group.className || '').trim())
+    .filter(name => {
+      const key = getSessionGroupKey(name);
+      if (!name || key === 'sans-classe' || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
-function saveSessionLocally(options = {}) {
+function getCurrentSessionModeSummary() {
+  const modeLabel = MODE_DEFINITIONS[state.activeModeId]?.label || 'Séance';
+  const universeLabel = UNIVERSES[state.universeId]?.label || '';
+  return universeLabel ? `${modeLabel} · ${universeLabel}` : modeLabel;
+}
+
+function syncSessionSavePanelInputs(sessionName) {
+  document.querySelectorAll('[data-session-name-input]').forEach(input => {
+    input.value = sessionName;
+  });
+}
+
+function updateSessionSaveModalFieldState() {
+  const creatingNewClass = elements.sessionSaveClassSelect?.value === '__new__';
+  elements.sessionSaveNewClassField?.classList.toggle('hidden', !creatingNewClass);
+  if (!creatingNewClass) {
+    elements.sessionSaveNewClassHint?.classList.add('hidden');
+  }
+}
+
+function closeSessionSaveModal() {
+  if (!elements.sessionSaveModal) return;
+  elements.sessionSaveModal.classList.add('hidden');
+  pendingSessionSaveRequest = null;
+  syncBodyModalState();
+}
+
+function openSessionSaveModal(options = {}) {
   if (!state.schedule) {
     alert('Aucune séance à sauvegarder pour le moment.');
     return false;
   }
-  const sessionName = ensureSessionNameBeforeSave();
-  if (!sessionName) return false;
+  pendingSessionSaveRequest = {
+    afterSave: options.afterSave,
+    sourceInput: options.sourceInput || null,
+  };
+  const currentName = String(options.sessionName || getSessionName()).trim();
+  const classNames = getAvailableSessionClassNames();
+  const hasCurrentInExisting = currentName && classNames.some(name => getSessionGroupKey(name) === getSessionGroupKey(currentName));
+  if (elements.sessionSaveModalMode) {
+    elements.sessionSaveModalMode.textContent = getCurrentSessionModeSummary();
+  }
+  if (elements.sessionSaveClassSelect) {
+    const optionsMarkup = [
+      ...classNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`),
+      '<option value="__new__">Créer une nouvelle classe</option>',
+    ];
+    elements.sessionSaveClassSelect.innerHTML = optionsMarkup.join('');
+    elements.sessionSaveClassSelect.value = hasCurrentInExisting ? currentName : '__new__';
+  }
+  if (elements.sessionSaveNewClassInput) {
+    elements.sessionSaveNewClassInput.value = hasCurrentInExisting ? '' : currentName;
+  }
+  elements.sessionSaveNewClassHint?.classList.add('hidden');
+  updateSessionSaveModalFieldState();
+  elements.sessionSaveModal?.classList.remove('hidden');
+  syncBodyModalState();
+  window.setTimeout(() => {
+    if (elements.sessionSaveClassSelect?.value === '__new__') {
+      elements.sessionSaveNewClassInput?.focus();
+    } else {
+      elements.sessionSaveClassSelect?.focus();
+    }
+  }, 0);
+  return true;
+}
+
+function commitSessionSaveLocally(options = {}) {
+  if (!state.schedule) {
+    alert('Aucune séance à sauvegarder pour le moment.');
+    return false;
+  }
+  const sessionName = String(options.sessionName || '').trim();
+  if (!sessionName) {
+    alert('Renseignez une classe ou un groupe pour sauvegarder cette séance.');
+    return false;
+  }
   ensureCurrentSessionMetadata();
   syncSessionNameOnState(state, sessionName);
+  syncOptionInputs();
+  syncSessionSavePanelInputs(sessionName);
   persistState();
   if (typeof options.afterSave === 'function') {
     options.afterSave();
   }
-  showSessionSaveFeedback('Séance sauvegardée sur cet iPad');
+  showSessionSaveFeedback(`Séance sauvegardée dans ${sessionName} sur cet iPad`);
   return true;
+}
+
+function saveSessionLocally(options = {}) {
+  return openSessionSaveModal(options);
 }
 
 function buildSessionSavePanelMarkup(scope = 'results') {
@@ -1013,13 +1377,9 @@ function handleSessionSavePanelAction(event) {
     hint.classList.add('hidden');
   }
   if (actionButton.dataset.sessionPanelAction === 'save') {
-    if (!sessionName) {
-      if (hint) hint.classList.remove('hidden');
-      if (input) input.focus();
-      return true;
-    }
     saveSessionLocally({
       sessionName,
+      sourceInput: input,
       afterSave: () => {
         renderChallengeClassManager();
         if (input) input.value = getSessionName();
@@ -1046,6 +1406,34 @@ function handleSessionSavePanelAction(event) {
     return true;
   }
   return false;
+}
+
+function confirmSessionSaveModal(event) {
+  event.preventDefault();
+  const selectedValue = String(elements.sessionSaveClassSelect?.value || '').trim();
+  const isNewClass = selectedValue === '__new__';
+  const sessionName = isNewClass
+    ? String(elements.sessionSaveNewClassInput?.value || '').trim()
+    : selectedValue;
+  if (!sessionName) {
+    elements.sessionSaveNewClassHint?.classList.remove('hidden');
+    if (isNewClass) {
+      elements.sessionSaveNewClassInput?.focus();
+    } else {
+      elements.sessionSaveClassSelect?.focus();
+    }
+    return;
+  }
+  const request = pendingSessionSaveRequest || {};
+  const saved = commitSessionSaveLocally({
+    sessionName,
+    afterSave: request.afterSave,
+  });
+  if (!saved) return;
+  if (request.sourceInput) {
+    request.sourceInput.value = sessionName;
+  }
+  closeSessionSaveModal();
 }
 
 function exportCurrentCsv() {
@@ -1239,13 +1627,20 @@ function restoreAppSaveState(snapshot) {
   }
 
   const importedState = sanitizeState(snapshot.state);
-  const savedScreen = importedState.currentScreen;
-  const savedLiveRotationIndex = Number.isInteger(importedState.liveRotationIndex) ? importedState.liveRotationIndex : 0;
+  const restoreScreen = getSavedSessionRestoreScreen(importedState, snapshot);
+  const savedLiveRotationIndex = Number.isInteger(snapshot.viewState?.liveRotationIndex)
+    ? snapshot.viewState.liveRotationIndex
+    : Number.isInteger(importedState.liveRotationIndex)
+      ? importedState.liveRotationIndex
+      : 0;
   state = importedState;
   syncSessionNameOnState(state, snapshot.sessionName || snapshot.className || getSessionName(state));
   state.sessionId = snapshot.id || state.sessionId || generateSessionId();
   state.sessionCreatedAt = snapshot.createdAt || snapshot.savedAt || state.sessionCreatedAt || new Date().toISOString();
-  uiState.resultsMode = snapshot.viewState?.resultsMode === 'pilot' ? 'pilot' : 'read';
+  uiState.resultsMode =
+    restoreScreen === 'challenge-pilot' || snapshot.viewState?.resultsMode === 'pilot'
+      ? 'pilot'
+      : 'read';
   finalRankingSnapshot = snapshot.viewState?.finalRankingSnapshot || null;
   invalidateStandingsCache();
   renderParticipants();
@@ -1269,26 +1664,29 @@ function restoreAppSaveState(snapshot) {
     renderLiveRankingPanel(state.schedule.rotations[state.liveRotationIndex]?.number || 1);
     renderChronoScreen();
     persistState();
-    if (savedScreen === 'ladder-pilot' && isLadderLiveMode(state.schedule)) {
+    if (restoreScreen === 'ladder-pilot' && isLadderLiveMode(state.schedule)) {
       openLadderPilotModal();
-    } else if (savedScreen === 'swiss-pilot' && state.schedule.format === 'swiss') {
-      goTo('swiss-pilot');
-      renderSwissPilotScreen();
-    } else if (['live', 'projection', 'chrono', 'results', 'options', 'teams', 'count', 'type', 'landing'].includes(savedScreen)) {
-      goTo(savedScreen === 'landing' ? 'results' : savedScreen);
-      if (savedScreen === 'live') {
+    } else if (restoreScreen === 'pool-pilot' && isRaquettesPoulePilotMode(state.schedule)) {
+      openPoolPilotScreen();
+    } else if (restoreScreen === 'swiss-pilot' && state.schedule.format === 'swiss') {
+      openSwissPilotScreen();
+    } else if (restoreScreen === 'challenge-pilot' && state.schedule.format === 'challenge') {
+      openChallengePilotView();
+    } else if (['live', 'projection', 'chrono', 'results'].includes(restoreScreen)) {
+      goTo(restoreScreen, { skipConfigConfirmation: true });
+      if (restoreScreen === 'live') {
         renderLiveRotation();
-      } else if (savedScreen === 'projection') {
+      } else if (restoreScreen === 'projection') {
         openProjectionScreen();
-      } else if (savedScreen === 'chrono') {
+      } else if (restoreScreen === 'chrono') {
         renderChronoScreen();
       }
     } else {
-      goTo('results');
+      startLiveMode();
     }
   } else {
     persistState();
-    goTo(['landing', 'type', 'count', 'teams', 'options'].includes(savedScreen) ? savedScreen : 'landing');
+    goTo(restoreScreen, { skipConfigConfirmation: true });
   }
   updateSaveActionsState();
 }
@@ -1513,11 +1911,82 @@ function bindNavigation() {
   if (elements.landingRaquettesBtn) {
     elements.landingRaquettesBtn.addEventListener('click', () => enterUniverse('raquettes'));
   }
+  if (elements.landingSavesBtn) {
+    elements.landingSavesBtn.addEventListener('click', () => {
+      uiState.savesSelectedGroupKey = null;
+      renderLandingSessions();
+      goTo('saves');
+    });
+  }
   if (elements.resumeFlow) {
     elements.resumeFlow.addEventListener('click', handleResume);
   }
   if (elements.landingSessionsList) {
     elements.landingSessionsList.addEventListener('click', event => {
+      const groupActionButton = event.target.closest('[data-session-group-action]');
+      if (groupActionButton) {
+        const groupKey = groupActionButton.dataset.sessionGroupKey;
+        const groupAction = groupActionButton.dataset.sessionGroupAction;
+        const { groups } = getSelectedStoredSessionGroup();
+        const group = groups.find(entry => entry.key === groupKey);
+        if (!group) {
+          renderLandingSessions();
+          return;
+        }
+        if (groupAction === 'open') {
+          uiState.savesSelectedGroupKey = group.key;
+          renderLandingSessions();
+          return;
+        }
+        if (groupAction === 'rename-class') {
+          const nextName = window.prompt('Nouveau nom de classe / groupe ?', group.className);
+          const trimmed = String(nextName || '').trim();
+          if (!trimmed) return;
+          const nextKey = getSessionGroupKey(trimmed);
+          const updatedSessions = loadStoredSessions().map(snapshot => {
+            if (getSessionGroupKey(getSessionGroupName(snapshot)) !== group.key) return snapshot;
+            return applySessionNameToSnapshot(snapshot, trimmed);
+          });
+          saveStoredSessions(updatedSessions);
+          renameSessionClassMeta(group.key, nextKey);
+          uiState.savesSelectedGroupKey = nextKey;
+          if (getSessionGroupKey(getSessionName()) === group.key) {
+            syncSessionNameOnState(state, trimmed);
+            syncOptionInputs();
+            persistState();
+          } else {
+            renderLandingSessions();
+          }
+          return;
+        }
+        if (groupAction === 'color-class') {
+          const currentColor = group.color || '';
+          const input = window.prompt('Couleur de la classe (hex, nom CSS...). Laissez vide pour retirer la couleur.', currentColor);
+          if (input === null) return;
+          const trimmed = String(input || '').trim();
+          if (trimmed && window.CSS?.supports && !window.CSS.supports('color', trimmed)) {
+            alert('Couleur invalide.');
+            return;
+          }
+          setSessionClassColor(group.key, trimmed);
+          renderLandingSessions();
+          return;
+        }
+        if (groupAction === 'delete-class') {
+          const confirmed = window.confirm(`Supprimer toutes les séances locales de ${group.className} ?`);
+          if (!confirmed) return;
+          const remainingSessions = loadStoredSessions().filter(
+            snapshot => getSessionGroupKey(getSessionGroupName(snapshot)) !== group.key
+          );
+          saveStoredSessions(remainingSessions);
+          deleteSessionClassMeta(group.key);
+          if (uiState.savesSelectedGroupKey === group.key) {
+            uiState.savesSelectedGroupKey = null;
+          }
+          renderLandingSessions();
+          return;
+        }
+      }
       const actionButton = event.target.closest('[data-session-action]');
       if (!actionButton) return;
       const sessionId = actionButton.dataset.sessionId;
@@ -1536,12 +2005,7 @@ function bindNavigation() {
         const nextName = window.prompt('Nouveau nom de classe / groupe ?', snapshot.sessionName || snapshot.className || '');
         const trimmed = String(nextName || '').trim();
         if (!trimmed) return;
-        snapshot.sessionName = trimmed;
-        snapshot.className = trimmed;
-        if (snapshot.state?.options) {
-          snapshot.state.options.sessionName = trimmed;
-          snapshot.state.options.challengeClassName = trimmed;
-        }
+        applySessionNameToSnapshot(snapshot, trimmed);
         upsertStoredSessionSnapshot(snapshot);
         if (state.sessionId === snapshot.id) {
           syncSessionNameOnState(state, trimmed);
@@ -1562,6 +2026,12 @@ function bindNavigation() {
       if (action === 'export') {
         exportStoredSessionSnapshot(snapshot);
       }
+    });
+  }
+  if (elements.savesBackToClassesBtn) {
+    elements.savesBackToClassesBtn.addEventListener('click', () => {
+      uiState.savesSelectedGroupKey = null;
+      renderLandingSessions();
     });
   }
   if (elements.challengeClassCreateBtn) {
@@ -1605,6 +2075,50 @@ function bindNavigation() {
       saveSessionLocally();
     });
   }
+  if (elements.sessionSaveClassSelect) {
+    elements.sessionSaveClassSelect.addEventListener('change', () => {
+      elements.sessionSaveNewClassHint?.classList.add('hidden');
+      updateSessionSaveModalFieldState();
+    });
+  }
+  if (elements.sessionSaveModalForm) {
+    elements.sessionSaveModalForm.addEventListener('submit', confirmSessionSaveModal);
+  }
+  if (elements.sessionSaveModalCloseBtn) {
+    elements.sessionSaveModalCloseBtn.addEventListener('click', closeSessionSaveModal);
+  }
+  if (elements.sessionSaveModalCancelBtn) {
+    elements.sessionSaveModalCancelBtn.addEventListener('click', closeSessionSaveModal);
+  }
+  if (elements.sessionSaveModal) {
+    elements.sessionSaveModal.addEventListener('click', event => {
+      if (event.target === elements.sessionSaveModal) {
+        closeSessionSaveModal();
+      }
+    });
+  }
+  if (elements.configEditModalCloseBtn) {
+    elements.configEditModalCloseBtn.addEventListener('click', closeConfigEditModal);
+  }
+  if (elements.configEditModalCancelBtn) {
+    elements.configEditModalCancelBtn.addEventListener('click', closeConfigEditModal);
+  }
+  if (elements.configEditModalConfirmBtn) {
+    elements.configEditModalConfirmBtn.addEventListener('click', () => {
+      const nextAction = pendingConfigEditAction;
+      closeConfigEditModal();
+      if (typeof nextAction === 'function') {
+        nextAction();
+      }
+    });
+  }
+  if (elements.configEditModal) {
+    elements.configEditModal.addEventListener('click', event => {
+      if (event.target === elements.configEditModal) {
+        closeConfigEditModal();
+      }
+    });
+  }
   if (elements.ladderPilotSaveBtn) {
     elements.ladderPilotSaveBtn.addEventListener('click', () => {
       saveSessionLocally();
@@ -1619,7 +2133,11 @@ function bindNavigation() {
     elements.openHelpFromLanding.addEventListener('click', openHelpModal);
   }
   if (elements.quickModeBtn) {
-    elements.quickModeBtn.addEventListener('click', () => goTo('quick'));
+    elements.quickModeBtn.addEventListener('click', () => {
+      resetForNewSession();
+      persistState();
+      goTo('quick');
+    });
   }
 
   if (elements.modeCardsGrid) {
@@ -1647,7 +2165,7 @@ function bindNavigation() {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'results' && !state.schedule) return;
-      goTo(target);
+      requestConfigurationEdit(target, () => goTo(target, { skipConfigConfirmation: true }));
     });
   });
 
@@ -1974,8 +2492,16 @@ function bindNavigation() {
         openSwissPilotScreen();
         return;
       }
+      if (state.schedule?.format === 'challenge') {
+        openChallengePilotView();
+        return;
+      }
       if (isLadderLiveMode(state.schedule)) {
         openLadderPilotModal();
+        return;
+      }
+      if (isRaquettesPoulePilotMode(state.schedule)) {
+        openPoolPilotScreen();
         return;
       }
       startLiveMode();
@@ -1988,6 +2514,10 @@ function bindNavigation() {
     elements.liveCurrentRotationBtn.addEventListener('click', () => {
       if (isLadderLiveMode(state.schedule)) {
         openLadderPilotModal();
+        return;
+      }
+      if (isRaquettesPoulePilotMode(state.schedule)) {
+        openPoolPilotScreen();
         return;
       }
       focusCurrentLadderRotation();
@@ -2036,6 +2566,10 @@ function bindNavigation() {
   if (elements.ladderPilotBody) {
     elements.ladderPilotBody.addEventListener('input', handleScoreInput);
     elements.ladderPilotBody.addEventListener('click', handleLiveClick);
+  }
+  if (elements.poolPilotBody) {
+    elements.poolPilotBody.addEventListener('input', handleScoreInput);
+    elements.poolPilotBody.addEventListener('click', handleLiveClick);
   }
   if (elements.rotationView) {
     elements.rotationView.addEventListener('click', handleRotationViewClick);
@@ -2174,6 +2708,24 @@ function bindNavigation() {
   if (elements.ladderPilotFinishBtn) {
     elements.ladderPilotFinishBtn.addEventListener('click', handleLiveFinish);
   }
+  if (elements.poolPilotCloseBtn) {
+    elements.poolPilotCloseBtn.addEventListener('click', closePoolPilotScreen);
+  }
+  if (elements.poolPilotBackBtn) {
+    elements.poolPilotBackBtn.addEventListener('click', closePoolPilotScreen);
+  }
+  if (elements.poolPilotSaveBtn) {
+    elements.poolPilotSaveBtn.addEventListener('click', () => saveSessionLocally());
+  }
+  if (elements.poolPilotRankingBtn) {
+    elements.poolPilotRankingBtn.addEventListener('click', () => {
+      rankingReturnScreen = 'pool-pilot';
+      openRankingModal();
+    });
+  }
+  if (elements.poolPilotNextBtn) {
+    elements.poolPilotNextBtn.addEventListener('click', advancePoolPilotRotation);
+  }
   if (elements.swissPilotCloseBtn) {
     elements.swissPilotCloseBtn.addEventListener('click', closeSwissPilotScreen);
   }
@@ -2263,6 +2815,10 @@ function bindNavigation() {
       }
       if (btn.dataset.resultsModeTarget === 'pilot' && isLadderLiveMode(state.schedule)) {
         openLadderPilotModal();
+        return;
+      }
+      if (btn.dataset.resultsModeTarget === 'pilot' && isRaquettesPoulePilotMode(state.schedule)) {
+        openPoolPilotScreen();
       }
     });
   }
@@ -2304,6 +2860,14 @@ function bindNavigation() {
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     let handled = false;
+    if (elements.configEditModal && !elements.configEditModal.classList.contains('hidden')) {
+      closeConfigEditModal();
+      handled = true;
+    }
+    if (elements.sessionSaveModal && !elements.sessionSaveModal.classList.contains('hidden')) {
+      closeSessionSaveModal();
+      handled = true;
+    }
     if (elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden')) {
       hideFinalRankingModal();
       handled = true;
@@ -2318,6 +2882,10 @@ function bindNavigation() {
     }
     if (state.currentScreen === 'ladder-pilot') {
       closeLadderPilotModal();
+      handled = true;
+    }
+    if (state.currentScreen === 'pool-pilot') {
+      closePoolPilotScreen();
       handled = true;
     }
     if (state.currentScreen === 'swiss-pilot') {
@@ -2363,7 +2931,7 @@ function handleStepperNavigation(step) {
   const maxAccessibleIndex = getMaxAccessibleStepIndex();
   if (targetIndex < 0 || targetIndex > maxAccessibleIndex) return;
   if (step === 'results' && !state.schedule) return;
-  goTo(step);
+  requestConfigurationEdit(step, () => goTo(step, { skipConfigConfirmation: true }));
 }
 
 function handleResume() {
@@ -2381,9 +2949,22 @@ function handleResume() {
   updateModeScreenCopy();
   if (state.schedule) {
     renderResults(state.schedule, { preserveTimestamp: true });
-    goTo(state.currentScreen && state.currentScreen !== 'landing' ? state.currentScreen : 'results');
+    const restoreScreen = getSavedSessionRestoreScreen(state, { viewState: { restoreScreen: state.currentScreen } });
+    if (restoreScreen === 'ladder-pilot') {
+      openLadderPilotModal();
+    } else if (restoreScreen === 'pool-pilot') {
+      openPoolPilotScreen();
+    } else if (restoreScreen === 'swiss-pilot') {
+      openSwissPilotScreen();
+    } else if (restoreScreen === 'challenge-pilot') {
+      openChallengePilotView();
+    } else {
+      goTo(restoreScreen === 'landing' ? 'results' : restoreScreen, { skipConfigConfirmation: true });
+    }
   } else {
-    goTo(state.currentScreen && state.currentScreen !== 'landing' ? state.currentScreen : 'type');
+    goTo(state.currentScreen && state.currentScreen !== 'landing' ? state.currentScreen : 'type', {
+      skipConfigConfirmation: true,
+    });
   }
   setLiveModeAvailability(Boolean(state.schedule));
   elements.regenerateBtn.disabled = !state.schedule;
@@ -2425,6 +3006,9 @@ function goTo(screen, options = {}) {
   }
   if (screen === 'ladder-pilot') {
     renderLadderPilotModal();
+  }
+  if (screen === 'pool-pilot') {
+    renderPoolPilotScreen();
   }
   if (screen === 'swiss-pilot') {
     renderSwissPilotScreen();
@@ -3180,21 +3764,16 @@ function setResultsMode(mode) {
 function updateResultsModeNote() {
   if (!elements.resultsModeNote) return;
   if (uiState.resultsMode === 'read') {
-    elements.resultsModeNote.textContent = 'Passez en mode « Pilotage » pour ajuster les rotations ou accéder aux actions avancées.';
+    elements.resultsModeNote.textContent = getModeLaunchHint();
   } else {
-    if (state.schedule?.format === 'swiss') {
-      elements.resultsModeNote.textContent = 'Mode Pilotage : ouvre la page dédiée de saisie de la ronde suisse en cours.';
-      return;
-    }
-    elements.resultsModeNote.textContent = isLadderLiveMode(state.schedule)
-      ? 'Mode Pilotage : ouvre la console de saisie dédiée de la rotation en cours.'
-      : 'Mode Pilotage : toutes les actions de préparation et de saisie sont visibles ci-dessous.';
+    elements.resultsModeNote.textContent = 'Lancez la séance pour saisir les scores et suivre l’avancement.';
   }
 }
 
 function enterUniverse(universeId) {
   const universe = UNIVERSES[universeId];
   if (!universe) return;
+  resetForNewSession({ universeId });
   state.universeId = universeId;
   updateTheme(universeId);
   const availableModes = universe.modeIds || [];
@@ -3206,7 +3785,7 @@ function enterUniverse(universeId) {
     updateModeScreenCopy();
   }
   persistState();
-  goTo('type');
+  goTo('type', { skipConfigConfirmation: true });
 }
 
 function handleModeSelection(modeId) {
@@ -5969,7 +6548,7 @@ function handleChallengeDialogAction(event) {
 function handleChallengeNav(action) {
   switch (action) {
     case 'back':
-      goTo('options');
+      requestConfigurationEdit('options', () => goTo('options', { skipConfigConfirmation: true }));
       break;
     case 'results':
       goTo('results');
@@ -5983,7 +6562,7 @@ function handleChallengeNav(action) {
       openProjectionScreen();
       break;
     case 'options':
-      goTo('options');
+      requestConfigurationEdit('options', () => goTo('options', { skipConfigConfirmation: true }));
       break;
     default:
       break;
@@ -6496,6 +7075,17 @@ function showFinalRankingModal(uptoRotation) {
   if (!elements.finalRankingModal || !state.schedule) return;
   goTo('results');
   setActiveView('rankings');
+  if (elements.finalRankingTitle) {
+    if (state.schedule.format === 'challenge') {
+      elements.finalRankingTitle.textContent = 'Classement Défi';
+    } else if (state.schedule.format === 'swiss') {
+      elements.finalRankingTitle.textContent = 'Classement final — Ronde Suisse';
+    } else if (isLadderLiveMode(state.schedule)) {
+      elements.finalRankingTitle.textContent = 'Classement final — Montée-descente';
+    } else {
+      elements.finalRankingTitle.textContent = 'Classement final';
+    }
+  }
   const upto =
     uptoRotation ||
     (state.schedule.rotations[state.liveRotationIndex] && state.schedule.rotations[state.liveRotationIndex].number) ||
@@ -6767,6 +7357,9 @@ function openRankingModal() {
   if (!rankingReturnScreen && isLadderPilotModalOpen()) {
     rankingReturnScreen = 'ladder-pilot';
   }
+  if (!rankingReturnScreen && isPoolPilotScreenOpen()) {
+    rankingReturnScreen = 'pool-pilot';
+  }
   renderRankingModal();
   elements.rankingModal.classList.remove('hidden');
   syncBodyModalState();
@@ -6782,11 +7375,28 @@ function closeRankingModal() {
     renderLadderPilotModal();
     return;
   }
+  if (rankingReturnScreen === 'pool-pilot' && isRaquettesPoulePilotMode(state.schedule)) {
+    rankingReturnScreen = null;
+    goTo('pool-pilot');
+    renderPoolPilotScreen();
+    return;
+  }
   rankingReturnScreen = null;
 }
 
 function renderRankingModal() {
   if (!elements.rankingModalBody || !state.schedule) return;
+  if (elements.rankingModalTitle) {
+    if (state.schedule.format === 'challenge') {
+      elements.rankingModalTitle.textContent = 'Classement Défi';
+    } else if (state.schedule.format === 'swiss') {
+      elements.rankingModalTitle.textContent = 'Classement Ronde Suisse';
+    } else if (isLadderLiveMode(state.schedule)) {
+      elements.rankingModalTitle.textContent = 'Classement montée-descente';
+    } else {
+      elements.rankingModalTitle.textContent = 'Classement actuel';
+    }
+  }
   const rows = buildRankingModalRows();
   if (!rows.length) {
     elements.rankingModalBody.innerHTML = '<p>Aucun classement disponible pour le moment.</p>';
@@ -7026,6 +7636,10 @@ function handleContextTab(context) {
       alert('Générez un planning avant d’ouvrir le mode live.');
       return;
     }
+    if (isRaquettesPoulePilotMode(state.schedule)) {
+      openPoolPilotScreen();
+      return;
+    }
     goTo('live');
     renderLiveRotation();
     return;
@@ -7045,7 +7659,9 @@ function syncBodyModalState() {
   const rankingOpen = elements.rankingModal && !elements.rankingModal.classList.contains('hidden');
   const statusOpen = elements.statusModal && !elements.statusModal.classList.contains('hidden');
   const challengeOpen = elements.challengeModal && !elements.challengeModal.classList.contains('hidden');
-  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen || challengeOpen;
+  const sessionSaveOpen = elements.sessionSaveModal && !elements.sessionSaveModal.classList.contains('hidden');
+  const configEditOpen = elements.configEditModal && !elements.configEditModal.classList.contains('hidden');
+  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen || challengeOpen || sessionSaveOpen || configEditOpen;
   document.body.classList.toggle('modal-open', shouldLock);
 }
 
@@ -7172,6 +7788,104 @@ function startLiveMode() {
   renderLiveRotation();
 }
 
+function isRaquettesPoulePilotMode(schedule = state.schedule) {
+  return Boolean(state.activeModeId === 'raquettes-poule' && schedule?.format === 'round-robin');
+}
+
+function getModeLaunchCtaLabel() {
+  switch (state.activeModeId) {
+    case 'raquettes-poule':
+      return 'Lancer les poules';
+    case 'raquettes-ronde-suisse':
+      return 'Lancer la ronde suisse';
+    case 'raquettes-defi':
+      return 'Lancer les défis';
+    case 'sportco-championnat':
+      return 'Lancer le championnat';
+    case 'sportco-worldcup':
+      return 'Lancer le tournoi';
+    case 'raquettes-montee-descente':
+      return 'Lancer la montée-descente';
+    default:
+      return 'Lancer la séance';
+  }
+}
+
+function getModeLaunchHint() {
+  switch (state.activeModeId) {
+    case 'raquettes-poule':
+      return 'Lancez les poules pour saisir les scores et piloter les matchs.';
+    case 'raquettes-ronde-suisse':
+      return 'Lancez la ronde suisse pour saisir les vainqueurs et piloter la ronde en cours.';
+    case 'raquettes-defi':
+      return 'Lancez les défis pour ouvrir le classement et saisir les duels autorisés.';
+    case 'sportco-championnat':
+      return 'Lancez le championnat pour saisir les scores et piloter les matchs.';
+    case 'sportco-worldcup':
+      return 'Lancez le tournoi pour saisir les scores et piloter les matchs.';
+    case 'raquettes-montee-descente':
+      return 'Lancez la montée-descente pour saisir les scores et piloter les terrains.';
+    default:
+      return 'Lancez la séance pour saisir les scores et piloter les matchs.';
+  }
+}
+
+function getStageLabel(mode = state.activeModeId, rotation = null, schedule = state.schedule, options = {}) {
+  const includeTotal = Boolean(options.includeTotal);
+  const total =
+    options.total ||
+    getLadderRotationTotal(schedule) ||
+    schedule?.meta?.rotationCount ||
+    schedule?.rotations?.length ||
+    null;
+
+  if (mode === 'raquettes-defi' || schedule?.format === 'challenge') {
+    return 'Classement Défi';
+  }
+
+  if (mode === 'raquettes-ronde-suisse' || schedule?.format === 'swiss') {
+    const roundNumber = rotation?.number || rotation?.round || schedule?.swiss?.round || 1;
+    return includeTotal && total ? `Ronde ${roundNumber} / ${total}` : `Ronde ${roundNumber}`;
+  }
+
+  if (mode === 'sportco-worldcup') {
+    const phaseLabel = rotation?.title || rotation?.groupLabel || '';
+    if (/demi-finale|finale|petite finale/i.test(phaseLabel)) {
+      return phaseLabel;
+    }
+    if (phaseLabel) {
+      return `Phase de poules · ${phaseLabel}`;
+    }
+    return 'Phase de poules';
+  }
+
+  if (mode === 'sportco-championnat') {
+    const dayNumber = rotation?.number || 1;
+    return includeTotal && total ? `Journée ${dayNumber} / ${total}` : `Journée ${dayNumber}`;
+  }
+
+  const rotationNumber = rotation?.number || 1;
+  return includeTotal && total ? `Rotation ${rotationNumber} / ${total}` : `Rotation ${rotationNumber}`;
+}
+
+function getNextStageActionLabel(schedule = state.schedule) {
+  const mode = state.activeModeId;
+  if (schedule?.format === 'swiss' || mode === 'raquettes-ronde-suisse') return 'Passer à la ronde suivante';
+  if (mode === 'sportco-championnat') return 'Passer à la journée suivante';
+  if (mode === 'sportco-worldcup') return 'Passer à la phase suivante';
+  return 'Passer à la rotation suivante';
+}
+
+function openChallengePilotView() {
+  if (!state.schedule || state.schedule.format !== 'challenge') return;
+  goTo('results');
+  setResultsMode('pilot');
+  setActiveView('rotations');
+  window.requestAnimationFrame(() => {
+    elements.rotationView?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
 function isLadderLiveMode(schedule = state.schedule) {
   return Boolean(
     state.activeModeId === 'raquettes-montee-descente' ||
@@ -7193,6 +7907,10 @@ function updateLadderLiveLayout(isLadder) {
 
 function isLadderPilotModalOpen() {
   return state.currentScreen === 'ladder-pilot';
+}
+
+function isPoolPilotScreenOpen() {
+  return state.currentScreen === 'pool-pilot';
 }
 
 function isSwissPilotScreenOpen() {
@@ -7221,14 +7939,14 @@ function renderLadderPilotModal() {
     elements.ladderPilotMeta.textContent = metaParts.join(' • ');
   }
   if (elements.ladderPilotTitle) {
-    elements.ladderPilotTitle.textContent = formatLadderRotationLabel(rotation, state.schedule);
+    elements.ladderPilotTitle.textContent = `Montée-descente — ${getStageLabel('raquettes-montee-descente', rotation, state.schedule)}`;
   }
   const limitedLast = !isLadderOpenSession(state.schedule) && summary.total && rotation.number >= summary.total;
   const nextActionLabel = isLadderSessionEnded(state.schedule)
     ? 'Séance terminée'
     : limitedLast
       ? 'Terminer le tournoi'
-      : 'Rotation suivante';
+      : getNextStageActionLabel(state.schedule);
   const nextActionDisabled = summary.stateKey !== 'ready' || isLadderSessionEnded(state.schedule);
   if (elements.ladderPilotNextBtn) {
     elements.ladderPilotNextBtn.disabled = nextActionDisabled;
@@ -7245,7 +7963,7 @@ function renderLadderPilotModal() {
     <div class="ladder-focus-card ladder-focus-card-results ladder-pilot-summary-card">
       <div class="ladder-focus-copy">
         <p class="eyebrow">Console EPS</p>
-        <h3>${formatLadderRotationLabel(rotation, state.schedule)}</h3>
+        <h3>${getStageLabel('raquettes-montee-descente', rotation, state.schedule)}</h3>
         <div class="ladder-focus-stats">
           <span class="ladder-summary-pill">${summary.activeFields} terrains utilisés</span>
           <span class="ladder-summary-pill">${summary.completed} matchs saisis / ${summary.activeFields}</span>
@@ -7289,6 +8007,90 @@ function openLadderPilotModal() {
     console.error('Impossible d’ouvrir le pilotage montée-descente', error);
     goTo('results');
     alert('Impossible d’ouvrir le pilotage montée-descente.');
+  }
+}
+
+function renderPoolPilotScreen() {
+  if (!elements.poolPilotBody || !isRaquettesPoulePilotMode(state.schedule)) return;
+  const rotation = state.schedule?.rotations?.[state.liveRotationIndex] || state.schedule?.rotations?.[0];
+  if (!rotation) {
+    elements.poolPilotBody.innerHTML = '<p class="live-empty">Aucune rotation disponible pour le pilotage.</p>';
+    if (elements.poolPilotMeta) elements.poolPilotMeta.textContent = '';
+    if (elements.poolPilotNextBtn) elements.poolPilotNextBtn.disabled = true;
+    return;
+  }
+  const roleAssignments = computeRoleAssignments(rotation);
+  const missing = countMissingScores(rotation.number);
+  const totalMatches = rotation.matches.length;
+  const resolvedMatches = Math.max(0, totalMatches - missing);
+  const isComplete = totalMatches > 0 && missing === 0;
+  const isLastRotation = state.liveRotationIndex >= state.schedule.rotations.length - 1;
+  const nextLabel = isLastRotation ? 'Terminer le tournoi' : getNextStageActionLabel(state.schedule);
+  const stateLabel = isComplete ? 'Rotation prête' : `${missing} score(s) à saisir`;
+  const disabledHint = isComplete
+    ? 'Tous les scores sont renseignés. Vous pouvez enchaîner immédiatement.'
+    : 'Complétez tous les scores de la rotation pour débloquer la suite.';
+
+  if (elements.poolPilotTitle) {
+    elements.poolPilotTitle.textContent = `Poule raquettes — ${getStageLabel('raquettes-poule', rotation, state.schedule)}`;
+  }
+  if (elements.poolPilotMeta) {
+    elements.poolPilotMeta.textContent = `${resolvedMatches} / ${totalMatches} match(s) renseigné(s)`;
+  }
+  if (elements.poolPilotNextBtn) {
+    elements.poolPilotNextBtn.disabled = !isComplete;
+    elements.poolPilotNextBtn.textContent = nextLabel;
+  }
+
+  elements.poolPilotBody.innerHTML = `
+    <div class="ladder-focus-card ladder-focus-card-results pool-pilot-summary-card">
+      <div class="ladder-focus-copy">
+        <p class="eyebrow">Rotation en cours</p>
+        <h3>${getStageLabel('raquettes-poule', rotation, state.schedule)}</h3>
+        <p class="ladder-focus-lead">Saisissez les scores directement sur les cartes terrain, puis passez à la rotation suivante sans quitter l’écran.</p>
+        <div class="ladder-focus-stats">
+          <span class="ladder-summary-pill">${totalMatches} terrain${totalMatches > 1 ? 's' : ''} en jeu</span>
+          <span class="ladder-summary-pill">${resolvedMatches} / ${totalMatches} score(s) saisi(s)</span>
+          ${rotation.startLabel ? `<span class="ladder-summary-pill">${rotation.startLabel}</span>` : ''}
+        </div>
+      </div>
+      <div class="ladder-focus-actions">
+        <span class="state-pill ${isComplete ? 'live' : 'next'}">${stateLabel}</span>
+      </div>
+    </div>
+    <div class="pool-pilot-console">
+      <div class="pool-pilot-list">${buildLiveMatchCards(rotation, roleAssignments)}</div>
+      <div class="pool-pilot-next-cta">
+        <button type="button" class="btn primary xl" data-pool-next-cta ${isComplete ? '' : 'disabled'}>
+          ${nextLabel}
+        </button>
+        <p class="pool-pilot-next-hint">${disabledHint}</p>
+      </div>
+    </div>
+  `;
+}
+
+function openPoolPilotScreen() {
+  if (!isRaquettesPoulePilotMode(state.schedule) || !elements.poolPilotScreen) return;
+  closeOverflowPanels();
+  goTo('pool-pilot');
+  renderPoolPilotScreen();
+}
+
+function closePoolPilotScreen() {
+  if (!elements.poolPilotScreen) return;
+  goTo('results');
+  setActiveView('rotations');
+}
+
+function advancePoolPilotRotation() {
+  const progressed = advanceLiveRotation();
+  if (
+    progressed &&
+    isRaquettesPoulePilotMode(state.schedule) &&
+    !(elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden'))
+  ) {
+    openPoolPilotScreen();
   }
 }
 
@@ -7353,7 +8155,7 @@ function renderSwissPilotScreen() {
   const totalCount = (schedule.swiss.currentMatches || []).length;
   const canValidate = totalCount > 0 && (schedule.swiss.currentMatches || []).every(match => isSwissWinnerResolved(match));
   if (elements.swissPilotTitle) {
-    elements.swissPilotTitle.textContent = `Ronde Suisse — Ronde ${currentRound}`;
+    elements.swissPilotTitle.textContent = `Ronde Suisse — ${getStageLabel('raquettes-ronde-suisse', { number: currentRound }, schedule)}`;
   }
   if (elements.swissPilotMeta) {
     elements.swissPilotMeta.textContent = `${resolvedCount} / ${totalCount} match(s) résolus`;
@@ -7399,12 +8201,17 @@ function closeSwissPilotScreen() {
 }
 
 function closeLadderPilotModal() {
-  goTo('options');
+  requestConfigurationEdit('options', () => goTo('options', { skipConfigConfirmation: true }));
 }
 
 function refreshLadderPilotModalIfOpen() {
   if (!isLadderPilotModalOpen()) return;
   renderLadderPilotModal();
+}
+
+function refreshPoolPilotScreenIfOpen() {
+  if (!isPoolPilotScreenOpen()) return;
+  renderPoolPilotScreen();
 }
 
 function renderLiveRotation() {
@@ -7417,7 +8224,7 @@ function renderLiveRotation() {
   if (!state.schedule) {
     updateLadderLiveLayout(ladderLiveMode);
     renderLadderCurrentRotationCard();
-    elements.liveRotationTitle.textContent = 'Rotation';
+    elements.liveRotationTitle.textContent = 'Étape en cours';
     renderLiveMeta(null);
     elements.liveRotationContent.innerHTML = '<p>Générez un planning avant de lancer les rotations.</p>';
     if (elements.liveLadderSecondary) {
@@ -7448,17 +8255,15 @@ function renderLiveRotation() {
     return;
   }
   elements.liveRotationTitle.textContent = isLadderLiveMode(state.schedule)
-    ? formatLadderRotationLabel(rotation, state.schedule)
-    : rotation.groupLabel
-      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${state.schedule.meta.rotationCount}`
-      : `Rotation ${rotation.number} / ${state.schedule.meta.rotationCount}`;
+    ? getStageLabel('raquettes-montee-descente', rotation, state.schedule, { includeTotal: true })
+    : getStageLabel(state.activeModeId, rotation, state.schedule, { includeTotal: true });
   renderLiveMeta(state.schedule.meta);
   elements.liveRotationContent.dataset.rotation = rotation.number;
   renderLadderCurrentRotationCard();
   const roleAssignments = computeRoleAssignments(rotation);
   if (ladderLiveMode) {
     updateLadderLiveLayout(true);
-    if (elements.liveNowLabel) elements.liveNowLabel.textContent = 'Terrains pilotables';
+    if (elements.liveNowLabel) elements.liveNowLabel.textContent = 'Terrains à suivre';
     if (elements.liveScoreEyebrow) elements.liveScoreEyebrow.textContent = 'Mouvements';
     if (elements.liveScoreTitle) elements.liveScoreTitle.textContent = 'Après validation';
     if (elements.liveLadderSecondary) {
@@ -7475,7 +8280,7 @@ function renderLiveRotation() {
     elements.liveRotationContent.innerHTML = '';
   } else {
     updateLadderLiveLayout(false);
-    if (elements.liveNowLabel) elements.liveNowLabel.textContent = 'Terrains en jeu';
+    if (elements.liveNowLabel) elements.liveNowLabel.textContent = state.activeModeId === 'raquettes-defi' ? 'Classement Défi' : 'Terrains en jeu';
     if (elements.liveScoreEyebrow) elements.liveScoreEyebrow.textContent = 'Scores en direct';
     if (elements.liveScoreTitle) elements.liveScoreTitle.textContent = 'Gestion des matchs';
     if (elements.liveLadderSecondary) {
@@ -8123,7 +8928,7 @@ function renderChronoScreen() {
       state.schedule && state.schedule.format === 'challenge'
         ? 'Le mode Défi ne dispose pas de chronomètre dédié.'
         : 'Générez un planning puis activez le chronomètre pour utiliser ce mode.';
-    elements.chronoRotationLabel.textContent = 'Rotation --';
+    elements.chronoRotationLabel.textContent = 'Étape --';
     if (elements.chronoMatchMeta) {
       elements.chronoMatchMeta.textContent = message;
     }
@@ -8147,10 +8952,8 @@ function renderChronoScreen() {
   const roleAssignments = computeRoleAssignments(rotation);
   const total = getLadderRotationTotal(state.schedule) || state.schedule.rotations.length;
   elements.chronoRotationLabel.textContent = isLadderLiveMode(state.schedule)
-    ? formatLadderRotationLabel(rotation, state.schedule)
-    : rotation.groupLabel
-      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${total}`
-      : `Rotation ${rotation.number} / ${total}`;
+    ? getStageLabel('raquettes-montee-descente', rotation, state.schedule, { includeTotal: true, total })
+    : getStageLabel(state.activeModeId, rotation, state.schedule, { includeTotal: true, total });
   const missing = countMissingScores(rotation.number);
   const isComplete = rotation.matches.length > 0 && missing === 0;
   const isLast = isLadderOpenSession(state.schedule) ? false : rotation.number === total;
@@ -8201,11 +9004,11 @@ function renderProjectionScreen() {
     hydrateScheduleForSpecialModes(state.schedule);
   }
   if (!state.schedule || !state.schedule.rotations.length) {
-    const message =
+  const message =
       state.schedule && state.schedule.format === 'challenge'
         ? 'Le mode Défi utilise le tableau interactif, projection désactivée.'
         : 'Générez un planning pour activer la projection.';
-    elements.projectionRotation.textContent = 'Rotation --';
+    elements.projectionRotation.textContent = 'Étape --';
     elements.projectionFields.innerHTML = `<p class="projection-empty">${message}</p>`;
     if (elements.projectionNext) {
       elements.projectionNext.innerHTML = '';
@@ -8227,10 +9030,8 @@ function renderProjectionScreen() {
   const fieldLabel = formatFieldLabel({ practiceType, capitalized: true });
   const roleAssignments = computeRoleAssignments(rotation);
   elements.projectionRotation.textContent = isLadderLiveMode(state.schedule)
-    ? formatLadderRotationLabel(rotation, state.schedule)
-    : rotation.groupLabel
-      ? `${rotation.groupLabel} · Rotation ${rotation.number} / ${total}`
-      : `Rotation ${rotation.number} / ${total}`;
+    ? getStageLabel('raquettes-montee-descente', rotation, state.schedule, { includeTotal: true, total })
+    : getStageLabel(state.activeModeId, rotation, state.schedule, { includeTotal: true, total });
   if (state.schedule.format === 'ladder') {
     const movementFeed = computeLadderMovementFeed(state.schedule, rotation, roleAssignments);
     const bench = computeLadderBenchData(state.schedule, rotation, roleAssignments);
@@ -8527,6 +9328,7 @@ function validateMatch(matchId) {
   }
   renderChronoScreen();
   refreshLadderPilotModalIfOpen();
+  refreshPoolPilotScreenIfOpen();
 }
 
 function unlockValidatedMatch(matchId, options = {}) {
@@ -8545,6 +9347,7 @@ function unlockValidatedMatch(matchId, options = {}) {
   }
   renderChronoScreen();
   refreshLadderPilotModalIfOpen();
+  refreshPoolPilotScreenIfOpen();
   if (options.openEditor) {
     toggleLadderScoreEditor(matchId, { forceOpen: true });
   }
@@ -8572,7 +9375,7 @@ function updateLiveControls() {
         ? 'Séance terminée'
         : !ladderOpen && isLast
           ? 'Terminer le tournoi'
-          : 'Rotation suivante';
+          : getNextStageActionLabel(state.schedule);
   }
   const timerNextBtn = getTimerNextButton();
   if (timerNextBtn) {
@@ -8934,10 +9737,19 @@ function handleLiveClick(event) {
     }
     return;
   }
+  const poolNextRotationCta = event.target.closest('[data-pool-next-cta]');
+  if (poolNextRotationCta) {
+    if (!poolNextRotationCta.disabled) {
+      advancePoolPilotRotation();
+    }
+    return;
+  }
   const openCurrentButton = event.target.closest('[data-open-current-rotation]');
   if (openCurrentButton) {
     if (isLadderLiveMode(state.schedule)) {
       openLadderPilotModal();
+    } else if (isRaquettesPoulePilotMode(state.schedule)) {
+      openPoolPilotScreen();
     } else {
       focusCurrentLadderRotation();
     }
@@ -9031,6 +9843,7 @@ function applyScoreChange(matchId, side, value) {
     renderTeamView(teamsView);
   }
   refreshLadderPilotModalIfOpen();
+  refreshPoolPilotScreenIfOpen();
 }
 
 function syncScoreInputs(matchId, side, value) {
@@ -9158,7 +9971,15 @@ function setLiveTimerControlsAvailability(enabled) {
 
 function updateTimerDisplay(statusOverride) {
   if (elements.timerRotationLabel) {
-    elements.timerRotationLabel.textContent = `Rotation ${timerState.currentRotation}`;
+    const labelPrefix =
+      state.activeModeId === 'raquettes-ronde-suisse'
+        ? 'Ronde'
+        : state.activeModeId === 'sportco-championnat'
+          ? 'Journée'
+          : state.activeModeId === 'sportco-worldcup'
+            ? 'Phase'
+            : 'Rotation';
+    elements.timerRotationLabel.textContent = `${labelPrefix} ${timerState.currentRotation}`;
   }
   const formatted = formatSeconds(timerState.remainingSeconds);
   if (elements.timerDisplay) {
@@ -11334,6 +12155,8 @@ function handleRotationViewClick(event) {
   if (openCurrentButton) {
     if (isLadderLiveMode(state.schedule)) {
       openLadderPilotModal();
+    } else if (isRaquettesPoulePilotMode(state.schedule)) {
+      openPoolPilotScreen();
     } else {
       focusCurrentLadderRotation({ ensureLive: true });
     }
@@ -12080,41 +12903,19 @@ function setLiveModeAvailability(enabled) {
   if (!elements.startLiveBtn) return;
   const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
   const ladderMode = isLadderLiveMode(state.schedule);
+  const poolPilotMode = isRaquettesPoulePilotMode(state.schedule);
   const swissMode = state.schedule?.format === 'swiss';
-  elements.startLiveBtn.disabled = !enabled || !hasRotations;
-  const rotationNumber =
-    state.schedule && state.schedule.rotations[state.liveRotationIndex]
-      ? state.schedule.rotations[state.liveRotationIndex].number
-      : 1;
-  if (enabled) {
-    if (swissMode) {
-      elements.startLiveBtn.textContent =
-        state.schedule?.swiss?.round > 1 ? `Ouvrir le pilotage (Ronde ${rotationNumber})` : 'Ouvrir le pilotage';
-    } else if (ladderMode) {
-      elements.startLiveBtn.textContent =
-        state.liveRotationIndex > 0 ? `Ouvrir le pilotage (Rotation ${rotationNumber})` : 'Ouvrir le pilotage';
-    } else {
-      elements.startLiveBtn.textContent =
-        state.liveRotationIndex > 0 ? `Reprendre le live (Rotation ${rotationNumber})` : 'Démarrer le live';
-    }
-  } else {
-    elements.startLiveBtn.textContent = ladderMode ? 'Ouvrir le pilotage' : 'Démarrer le live';
-  }
+  const challengeMode = state.schedule?.format === 'challenge';
+  const canLaunch = enabled && (hasRotations || challengeMode);
+  elements.startLiveBtn.disabled = !canLaunch;
+  elements.startLiveBtn.textContent = getModeLaunchCtaLabel();
   if (elements.resultsPrimaryHint) {
-    if (!enabled) {
-      elements.resultsPrimaryHint.textContent = ladderMode
+    if (!canLaunch) {
+      elements.resultsPrimaryHint.textContent = ladderMode || poolPilotMode
         ? 'Générez un planning pour ouvrir le pilotage.'
         : 'Générez un planning pour activer le mode live.';
-    } else if (swissMode) {
-      elements.resultsPrimaryHint.textContent = 'La Ronde Suisse se pilote directement dans la liste des matchs de la ronde.';
-    } else if (!hasRotations) {
-      elements.resultsPrimaryHint.textContent = 'Le mode live est désactivé pour le mode Défi. Utilisez la colonne classement pour gérer vos défis.';
-    } else if (ladderMode) {
-      elements.resultsPrimaryHint.textContent = 'La saisie des scores se fait directement dans la page de pilotage dédiée.';
-    } else if (state.liveRotationIndex > 0) {
-      elements.resultsPrimaryHint.textContent = `Reprenez directement à la rotation ${rotationNumber} ou ajustez les scores.`;
     } else {
-      elements.resultsPrimaryHint.textContent = 'Passez en mode live pour piloter les rotations et les scores.';
+      elements.resultsPrimaryHint.textContent = getModeLaunchHint();
     }
   }
   if (elements.returnLiveBtn) {

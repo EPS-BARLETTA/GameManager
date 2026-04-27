@@ -87,18 +87,33 @@
               <button class="btn primary hero" id="quickModeBtn">Mode EPS rapide</button>
               <button class="btn secondary hero" id="resumeFlow">Reprendre ma dernière configuration</button>
               <button class="btn success hero" id="toolsImportJsonBtnLanding">Importer une sauvegarde JSON</button>
+              <button class="btn secondary hero" id="landingSavesBtn">Mes sauvegardes</button>
             </div>
+            <p class="landing-hint">Simple en façade · puissant derrière · utilisable sur iPad, téléphone et TV.</p>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="saves">
+          <div class="landing-card hero saves-card">
+            <p class="landing-eyebrow">Sauvegardes locales</p>
+            <h2>Mes sauvegardes</h2>
+            <p class="landing-subtitle">Reprenez une séance enregistrée sur cet iPad, renommez-la, exportez-la ou supprimez-la.</p>
             <section class="landing-sessions-panel" aria-labelledby="landingSessionsTitle">
               <div class="landing-sessions-head">
                 <div>
                   <p class="mega-eyebrow">Reprise locale</p>
-                  <h3 id="landingSessionsTitle">Mes séances</h3>
+                  <h3 id="landingSessionsTitle">Séances enregistrées</h3>
                 </div>
-                <p class="landing-sessions-hint" id="landingSessionsHint">Aucune séance locale enregistrée pour le moment.</p>
+                <div class="landing-sessions-head-actions">
+                  <button class="btn ghost small hidden" id="savesBackToClassesBtn">Retour aux classes</button>
+                  <p class="landing-sessions-hint" id="landingSessionsHint">Aucune séance locale enregistrée pour le moment.</p>
+                </div>
               </div>
               <div class="landing-sessions-list" id="landingSessionsList"></div>
             </section>
-            <p class="landing-hint">Simple en façade · puissant derrière · utilisable sur iPad, téléphone et TV.</p>
+            <div class="nav-actions wrap">
+              <button class="btn ghost" data-nav="landing">Retour accueil</button>
+            </div>
           </div>
         </section>
 
@@ -364,7 +379,7 @@
                 <header>
                   <p class="eyebrow">Montée-descente</p>
                   <div class="section-title-row">
-                    <h4>Pilotage terrain EPS</h4>
+                    <h4>Suivi terrain EPS</h4>
                     <button
                       type="button"
                       class="info-trigger"
@@ -586,17 +601,17 @@
           <p class="time-indicator hidden" id="timeIndicator"></p>
           <div class="results-mode-switch" id="resultsModeSwitch" role="group" aria-label="Mode d’affichage des résultats">
             <button class="mode-toggle active" data-results-mode-target="read" aria-pressed="true">Lecture</button>
-            <button class="mode-toggle" data-results-mode-target="pilot" aria-pressed="false">Pilotage</button>
+            <button class="mode-toggle" data-results-mode-target="pilot" aria-pressed="false">Suivi terrain</button>
           </div>
-          <p class="results-mode-note" id="resultsModeNote">Passez en mode « Pilotage » pour ajuster les rotations ou accéder aux actions avancées.</p>
+          <p class="results-mode-note" id="resultsModeNote">Lancez la séance pour saisir les scores et suivre l’avancement.</p>
           <div class="results-action-stack">
             <div class="results-primary-cta">
-              <button class="btn primary hero" id="startLiveBtn" disabled>Démarrer / reprendre le live</button>
-              <p class="action-hint" id="resultsPrimaryHint">Passez en mode live pour piloter les rotations et les scores.</p>
+              <button class="btn primary hero" id="startLiveBtn" disabled>Lancer la séance</button>
+              <p class="action-hint" id="resultsPrimaryHint">Lancez la séance pour saisir les scores et suivre l’avancement.</p>
             </div>
             <div class="results-secondary-cta">
+              <button class="btn secondary" data-nav="options">Modifier la configuration</button>
               <button class="btn success" id="saveSessionBtn">Sauvegarder la séance</button>
-              <button class="btn secondary" data-nav="options">Modifier</button>
               <button class="btn secondary" id="printBtn">Imprimer</button>
             </div>
             <div class="view-shortcuts">
@@ -635,13 +650,13 @@
           <div class="live-shell" id="liveShell">
             <header class="live-header">
               <div class="live-header-block">
-                <p class="eyebrow">Mode live terrain</p>
-                <h2 id="liveRotationTitle">Rotation</h2>
+                <p class="eyebrow">Suivi de la séance</p>
+                <h2 id="liveRotationTitle">Étape en cours</h2>
                 <p id="liveMeta" class="live-meta"></p>
                 <p id="liveStatus" class="live-status"></p>
               </div>
               <div class="live-header-actions">
-                <button class="btn primary" id="liveCurrentRotationBtn">Rotation en cours</button>
+                <button class="btn primary" id="liveCurrentRotationBtn">Étape en cours</button>
                 <button class="btn ghost small" id="liveActionsToggle" aria-expanded="false" aria-controls="liveActionsPanel">Options live</button>
                 <div class="live-actions-panel hidden" id="liveActionsPanel">
                   <button class="btn ghost small" id="liveModeToggle">Mode projection</button>
@@ -666,7 +681,7 @@
                     <button class="btn secondary" id="liveTimerResetBtn">Reset</button>
                   </div>
                   <div class="timer-actions stacked">
-                    <button class="btn primary" id="liveNextBtn" disabled>Rotation suivante</button>
+                    <button class="btn primary" id="liveNextBtn" disabled>Étape suivante</button>
                     <button class="btn secondary" id="liveRankingBtn">Voir classement</button>
                   </div>
                 </section>
@@ -678,7 +693,7 @@
               </div>
               <section class="live-matches" id="currentRotationMatchesAnchor">
                 <header class="live-now-header">
-                  <p class="eyebrow">Rotation en cours</p>
+                  <p class="eyebrow">Étape en cours</p>
                   <h3 id="liveNowLabel">Terrains en jeu</h3>
                 </header>
                 <div class="live-field-board" id="liveFieldBoard"></div>
@@ -718,7 +733,7 @@
             <header>
               <div>
                 <p class="eyebrow">Affichage projection</p>
-                <h2 id="projectionRotation">Rotation -- / --</h2>
+                <h2 id="projectionRotation">Étape -- / --</h2>
               </div>
               <button class="btn ghost" id="projectionBackBtn">Retour live</button>
             </header>
@@ -746,7 +761,7 @@
             </header>
             <div class="chrono-body">
               <p class="eyebrow">Chronomètre</p>
-              <h2 id="chronoRotationLabel">Rotation -- / --</h2>
+              <h2 id="chronoRotationLabel">Étape -- / --</h2>
               <div class="chrono-display" id="chronoDisplay">--:--</div>
               <p class="chrono-state" id="chronoStateLabel">Inactif</p>
               <p class="chrono-meta" id="chronoMatchMeta">Activez le chronomètre dans les options pour commencer.</p>
@@ -756,7 +771,7 @@
                 <button class="btn secondary xl" id="chronoStartBtn">Start</button>
                 <button class="btn secondary xl" id="chronoPauseBtn">Pause</button>
                 <button class="btn secondary xl" id="chronoResetBtn">Reset</button>
-                <button class="btn primary xl" id="chronoNextBtn">Rotation suivante</button>
+                <button class="btn primary xl" id="chronoNextBtn">Étape suivante</button>
               </div>
             </div>
           </div>
@@ -767,7 +782,7 @@
     <aside class="timer hidden" id="timerWidget" aria-live="polite">
       <header>
         <p>Chrono rotation</p>
-        <span id="timerRotationLabel">Rotation 1</span>
+        <span id="timerRotationLabel">Étape 1</span>
         <button class="timer-close" id="timerCloseBtn" aria-label="Masquer le chrono">×</button>
       </header>
       <div class="timer-display" id="timerDisplay">12:00</div>
@@ -775,7 +790,7 @@
         <button data-timer="start">START</button>
         <button data-timer="pause">PAUSE</button>
         <button data-timer="reset">RESET</button>
-        <button data-timer="next">Rotation suivante</button>
+        <button data-timer="next">Étape suivante</button>
       </div>
       <div class="timer-footer">
         <button id="timerRanking">Voir le classement</button>
@@ -807,7 +822,7 @@
         <header>
           <div>
             <p class="eyebrow">Classement en direct</p>
-            <h3 id="rankingModalTitle">Positions actuelles</h3>
+            <h3 id="rankingModalTitle">Classement actuel</h3>
           </div>
           <button class="btn ghost small" id="rankingModalClose" aria-label="Fermer le classement">Fermer</button>
         </header>
@@ -819,8 +834,8 @@
           <div class="ladder-pilot-screen-shell ladder-pilot-modal-card">
         <header>
           <div>
-            <p class="eyebrow">Pilotage</p>
-            <h3 id="ladderPilotTitle">Rotation en cours</h3>
+            <p class="eyebrow">Montée-descente</p>
+            <h3 id="ladderPilotTitle">Montée-descente — Rotation 1</h3>
             <p class="live-meta" id="ladderPilotMeta"></p>
           </div>
           <button class="btn ghost small" id="ladderPilotCloseBtn" aria-label="Fermer le pilotage">Fermer</button>
@@ -828,7 +843,7 @@
         <div class="ladder-pilot-toolbar">
           <button class="btn secondary" id="ladderPilotBackBtn">Retour configuration</button>
           <button class="btn success" id="ladderPilotSaveBtn">Sauvegarder la séance</button>
-          <button class="btn primary" id="ladderPilotNextBtn">Rotation suivante</button>
+          <button class="btn primary" id="ladderPilotNextBtn">Passer à la rotation suivante</button>
           <button class="btn secondary" id="ladderPilotFinishBtn">Terminer la montée-descente</button>
           <button class="btn ghost" id="ladderPilotRankingBtn">Voir le classement</button>
         </div>
@@ -836,11 +851,31 @@
           </div>
         </section>
 
+        <section class="screen ladder-pilot-screen pool-pilot-screen" data-screen="pool-pilot" id="poolPilotScreen">
+          <div class="ladder-pilot-screen-shell ladder-pilot-modal-card pool-pilot-card">
+            <header>
+              <div>
+                <p class="eyebrow">Poule raquettes</p>
+                <h3 id="poolPilotTitle">Poule raquettes — Rotation 1</h3>
+                <p class="live-meta" id="poolPilotMeta"></p>
+              </div>
+              <button class="btn ghost small" id="poolPilotCloseBtn" aria-label="Fermer le pilotage poule">Fermer</button>
+            </header>
+            <div class="ladder-pilot-toolbar pool-pilot-toolbar">
+              <button class="btn secondary" id="poolPilotBackBtn">Retour planning</button>
+              <button class="btn success" id="poolPilotSaveBtn">Sauvegarder la séance</button>
+              <button class="btn primary" id="poolPilotNextBtn">Passer à la rotation suivante</button>
+              <button class="btn ghost" id="poolPilotRankingBtn">Voir le classement</button>
+            </div>
+            <div class="ladder-pilot-modal-body pool-pilot-body" id="poolPilotBody"></div>
+          </div>
+        </section>
+
         <section class="screen ladder-pilot-screen swiss-pilot-screen" data-screen="swiss-pilot" id="swissPilotScreen">
           <div class="ladder-pilot-screen-shell ladder-pilot-modal-card swiss-pilot-card">
             <header>
               <div>
-                <p class="eyebrow">Pilotage</p>
+                <p class="eyebrow">Ronde Suisse</p>
                 <h3 id="swissPilotTitle">Ronde Suisse — Ronde 1</h3>
                 <p class="live-meta" id="swissPilotMeta"></p>
               </div>
@@ -902,6 +937,52 @@
             <button type="submit" class="btn primary">Valider</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="sessionSaveModal" role="dialog" aria-modal="true" aria-labelledby="sessionSaveModalTitle">
+      <div class="modal-card session-save-modal-card">
+        <header>
+          <div>
+            <p class="eyebrow">Sauvegarder la séance</p>
+            <h3 id="sessionSaveModalTitle">Sauvegarder la séance</h3>
+          </div>
+          <button class="btn ghost small" id="sessionSaveModalCloseBtn" aria-label="Fermer la sauvegarde">Fermer</button>
+        </header>
+        <form id="sessionSaveModalForm" class="session-save-modal-form">
+          <p class="session-save-modal-copy">Choisissez la classe / groupe pour cette séance.</p>
+          <p class="session-save-modal-mode" id="sessionSaveModalMode">Mode · Univers</p>
+          <label class="field">
+            <span>Classe existante</span>
+            <select id="sessionSaveClassSelect"></select>
+          </label>
+          <label class="field hidden" id="sessionSaveNewClassField">
+            <span>Nouvelle classe / groupe</span>
+            <input type="text" id="sessionSaveNewClassInput" placeholder="ex : 3A, 5B, AS Badminton" />
+            <div class="field-hint hidden" id="sessionSaveNewClassHint">Nom requis pour retrouver cette séance</div>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" id="sessionSaveModalCancelBtn">Annuler</button>
+            <button type="submit" class="btn success" id="sessionSaveModalConfirmBtn">Sauvegarder</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="configEditModal" role="dialog" aria-modal="true" aria-labelledby="configEditModalTitle">
+      <div class="modal-card config-edit-modal-card">
+        <header>
+          <div>
+            <p class="eyebrow">Séance commencée</p>
+            <h3 id="configEditModalTitle">Modifier une séance commencée ?</h3>
+          </div>
+          <button class="btn ghost small" id="configEditModalCloseBtn" aria-label="Fermer la confirmation">Fermer</button>
+        </header>
+        <p class="config-edit-modal-copy">Cette séance contient déjà des scores. Modifier la configuration peut casser le suivi.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="configEditModalCancelBtn">Annuler</button>
+          <button type="button" class="btn primary" id="configEditModalConfirmBtn">Continuer</button>
+        </div>
       </div>
     </div>
 
