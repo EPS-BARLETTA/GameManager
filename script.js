@@ -22,7 +22,7 @@ const UNIVERSES = {
     baseline: 'Handball · Basket · Futsal · Rugby à toucher',
     themeClass: 'theme-sportco',
     practiceType: 'sport-co',
-    modeIds: ['sportco-championnat', 'sportco-worldcup'],
+    modeIds: ['sportco-championnat', 'sportco-worldcup', 'sportco-poules-tournantes'],
   },
   raquettes: {
     id: 'raquettes',
@@ -52,6 +52,15 @@ const MODE_DEFINITIONS = {
     tournamentType: 'groups-finals',
     practiceType: 'sport-co',
     badge: 'Coupe du monde',
+  },
+  'sportco-poules-tournantes': {
+    id: 'sportco-poules-tournantes',
+    universe: 'sportco',
+    label: 'Poules tournantes',
+    description: 'Équipes variables, rotations équilibrées et classement individuel adapté à l’EPS.',
+    tournamentType: 'rotating-teams',
+    practiceType: 'eleve',
+    badge: 'Poules tournantes',
   },
   'raquettes-poule': {
     id: 'raquettes-poule',
@@ -97,6 +106,7 @@ const TOURNAMENT_MODES = {
   ladder: { label: 'Montée-descente' },
   challenge: { label: 'Défi' },
   swiss: { label: 'Ronde Suisse' },
+  'rotating-teams': { label: 'Poules tournantes' },
 };
 const STATUS_TYPES = {
   active: { key: 'active', label: 'Actif', cssClass: 'status-active' },
@@ -126,6 +136,7 @@ function getPracticeLabels(practiceType = state.practiceType || 'sport-co') {
   const map = {
     'sport-co': { singular: 'équipe', plural: 'équipes' },
     raquette: { singular: 'participant', plural: 'participants' },
+    eleve: { singular: 'élève', plural: 'élèves' },
   };
   return map[practiceType] || map['sport-co'];
 }
@@ -141,6 +152,7 @@ function getFieldLabels(practiceType = state.practiceType || 'sport-co') {
   const map = {
     'sport-co': { singular: 'terrain', plural: 'terrains' },
     raquette: { singular: 'terrain', plural: 'terrains' },
+    eleve: { singular: 'terrain', plural: 'terrains' },
   };
   return map[practiceType] || map['sport-co'];
 }
@@ -438,6 +450,13 @@ const elements = {
   configEditModalCloseBtn: document.getElementById('configEditModalCloseBtn'),
   configEditModalCancelBtn: document.getElementById('configEditModalCancelBtn'),
   configEditModalConfirmBtn: document.getElementById('configEditModalConfirmBtn'),
+  sessionOrganizationModal: document.getElementById('sessionOrganizationModal'),
+  sessionOrganizationCloseBtn: document.getElementById('sessionOrganizationCloseBtn'),
+  sessionOrganizationGrid: document.getElementById('sessionOrganizationGrid'),
+  sessionOrganizationNotes: document.getElementById('sessionOrganizationNotes'),
+  sessionOrganizationLaunchBtn: document.getElementById('sessionOrganizationLaunchBtn'),
+  sessionOrganizationOptionsBtn: document.getElementById('sessionOrganizationOptionsBtn'),
+  sessionOrganizationModeBtn: document.getElementById('sessionOrganizationModeBtn'),
   sessionSaveFeedback: document.getElementById('sessionSaveFeedback'),
   quickModeBtn: document.getElementById('quickModeBtn'),
   openHelpFromLanding: document.getElementById('openHelpFromLanding'),
@@ -495,6 +514,17 @@ const elements = {
   practiceTypeSelect: document.getElementById('practiceType'),
   matchModeSelect: document.getElementById('matchMode'),
   scoreTargetInput: document.getElementById('scoreTarget'),
+  rotatingTeamSize: document.getElementById('rotatingTeamSize'),
+  rotatingOrganization: document.getElementById('rotatingOrganization'),
+  rotatingPoolCountField: document.getElementById('rotatingPoolCountField'),
+  rotatingPoolCount: document.getElementById('rotatingPoolCount'),
+  rotatingAutoAssignField: document.getElementById('rotatingAutoAssignField'),
+  rotatingAutoAssign: document.getElementById('rotatingAutoAssign'),
+  rotatingTargetMatches: document.getElementById('rotatingTargetMatches'),
+  rotatingWinPoints: document.getElementById('rotatingWinPoints'),
+  rotatingDrawPoints: document.getElementById('rotatingDrawPoints'),
+  rotatingLossPoints: document.getElementById('rotatingLossPoints'),
+  rotatingPoolsPreview: document.getElementById('rotatingPoolsPreview'),
   matchDurationField: document.getElementById('matchDurationField'),
   scoreTargetField: document.getElementById('scoreTargetField'),
   worldCupGroupCount: document.getElementById('worldCupGroupCount'),
@@ -642,6 +672,15 @@ const elements = {
   swissPilotBackBtn: document.getElementById('swissPilotBackBtn'),
   swissPilotSaveBtn: document.getElementById('swissPilotSaveBtn'),
   swissPilotExportBtn: document.getElementById('swissPilotExportBtn'),
+  rotatingPilotScreen: document.getElementById('rotatingPilotScreen'),
+  rotatingPilotTitle: document.getElementById('rotatingPilotTitle'),
+  rotatingPilotMeta: document.getElementById('rotatingPilotMeta'),
+  rotatingPilotBody: document.getElementById('rotatingPilotBody'),
+  rotatingPilotCloseBtn: document.getElementById('rotatingPilotCloseBtn'),
+  rotatingPilotBackBtn: document.getElementById('rotatingPilotBackBtn'),
+  rotatingPilotSaveBtn: document.getElementById('rotatingPilotSaveBtn'),
+  rotatingPilotNextBtn: document.getElementById('rotatingPilotNextBtn'),
+  rotatingPilotRankingBtn: document.getElementById('rotatingPilotRankingBtn'),
   challengeModal: document.getElementById('challengeModal'),
   challengeForm: document.getElementById('challengeForm'),
   challengeDialogInfo: document.getElementById('challengeDialogInfo'),
@@ -700,6 +739,7 @@ let rankingReturnScreen = null;
 let sessionSaveFeedbackTimeout = null;
 let pendingSessionSaveRequest = null;
 let pendingConfigEditAction = null;
+let pendingSessionLaunchAction = null;
 const MIN_TURNAROUND_MINUTES = 1;
 const IDEAL_TURNAROUND_MINUTES = 2;
 let challengeIdSeed = 0;
@@ -707,6 +747,35 @@ const APP_SAVE_TYPE = 'gamemanager-save';
 const APP_SAVE_VERSION = 1;
 const APP_SESSIONS_KEY = 'gamemanager-sessions-v1';
 const APP_SESSION_CLASS_META_KEY = 'gamemanager-session-classes-v1';
+
+function getRotatingTeamSize(options = state.options) {
+  return clampNumber(Number(options?.rotatingTeams?.teamSize) || 2, 2, 6, 2);
+}
+
+function getRotatingTargetMatches(options = state.options) {
+  return clampNumber(Number(options?.rotatingTeams?.targetMatches) || 3, 1, 12, 3);
+}
+
+function getRotatingScoring(options = state.options) {
+  const source = options?.rotatingTeams || {};
+  return {
+    win: clampNumber(Number(source.winPoints), 0, 10, 3),
+    draw: clampNumber(Number(source.drawPoints), 0, 10, 1),
+    loss: clampNumber(Number(source.lossPoints), 0, 10, 0),
+  };
+}
+
+function getRotatingOrganization(options = state.options) {
+  return options?.rotatingTeams?.organization === 'full-random' ? 'full-random' : 'pools';
+}
+
+function getRotatingPoolCount(options = state.options, participantCount = state.participants) {
+  return clampNumber(Number(options?.rotatingTeams?.poolCount) || 1, 1, Math.min(6, Math.max(1, participantCount)), 1);
+}
+
+function isRotatingTeamsMode(schedule = state.schedule) {
+  return Boolean(state.activeModeId === 'sportco-poules-tournantes' && schedule?.format === 'rotating-teams');
+}
 
 function generateChallengePlayerId() {
   challengeIdSeed += 1;
@@ -741,6 +810,19 @@ function updateGenerateButtonState() {
   const disabled = requiresClass && !hasChallengeClassName();
   elements.generateBtn.disabled = disabled;
   elements.generateBtn.title = disabled ? 'Renseignez une classe ou un groupe pour sauvegarder ce classement.' : '';
+}
+
+function normalizeRotatingTeamsOptions(target = state.options) {
+  if (!target) return null;
+  target.rotatingTeams = {
+    organization: getRotatingOrganization(target),
+    poolCount: getRotatingPoolCount(target),
+    autoAssign: 'balanced',
+    teamSize: getRotatingTeamSize(target),
+    targetMatches: getRotatingTargetMatches(target),
+    ...getRotatingScoring(target),
+  };
+  return target.rotatingTeams;
 }
 
 function triggerDownload({ content, type, filename }) {
@@ -858,6 +940,13 @@ function closeConfigEditModal() {
   syncBodyModalState();
 }
 
+function closeSessionOrganizationModal() {
+  if (!elements.sessionOrganizationModal) return;
+  elements.sessionOrganizationModal.classList.add('hidden');
+  pendingSessionLaunchAction = null;
+  syncBodyModalState();
+}
+
 function openConfigEditModal(onConfirm) {
   if (!elements.configEditModal) {
     if (typeof onConfirm === 'function') onConfirm();
@@ -876,7 +965,141 @@ function requestConfigurationEdit(targetScreen, onConfirm, sourceState = state) 
   openConfigEditModal(onConfirm);
 }
 
+function buildSessionOrganizationCheck(schedule = state.schedule) {
+  if (!schedule || sessionHasRecordedProgress()) return null;
+  const managedModes = [
+    'raquettes-poule',
+    'raquettes-montee-descente',
+    'raquettes-ronde-suisse',
+    'sportco-poules-tournantes',
+  ];
+  if (!managedModes.includes(state.activeModeId)) return null;
+  const rotation = schedule.rotations?.[state.liveRotationIndex] || schedule.rotations?.[0];
+  if (!rotation) return null;
+  if (isLadderLiveMode(schedule)) {
+    const roleAssignments = computeRoleAssignments(rotation);
+    const groupData = getLadderGroupManagementData(schedule, rotation, roleAssignments);
+    const summary = buildLadderCurrentRotationSummary(schedule);
+    const participants = summary?.playerCount || schedule.meta?.teamCount || state.participants;
+    const fields = summary?.activeFields || rotation.matches.length;
+    const activePlayers = groupData.inPlay.length;
+    const referees = groupData.referees.length;
+    const waitingCount = Math.max(participants - activePlayers - referees, 0);
+    if (waitingCount <= 0) return null;
+    return {
+      participants,
+      fields,
+      activePlayers,
+      referees,
+      waiting: waitingCount,
+      waitingCount,
+      notes: groupData.notes,
+    };
+  }
+  if (isRotatingTeamsMode(schedule)) {
+    const groupData = getRotatingTeamsGroupData(schedule, rotation);
+    const participants = schedule.meta?.teamCount || state.participants;
+    const fields = schedule.meta?.fieldCount || rotation.matches.length;
+    const activePlayers = groupData.inPlay.length;
+    const referees = groupData.referees.length;
+    const waitingCount = Math.max(participants - activePlayers - referees, 0);
+    if (waitingCount <= 0) return null;
+    return {
+      participants,
+      fields,
+      activePlayers,
+      referees,
+      waiting: waitingCount,
+      waitingCount,
+      notes: groupData.notes,
+    };
+  }
+  if (schedule.format === 'round-robin') {
+    const roleAssignments = computeRoleAssignments(rotation);
+    const waiting = filterRestTeams(rotation.byes || [], roleAssignments);
+    const roleTeams = collectRoleTeams(roleAssignments);
+    const participants = schedule.meta?.teamCount || state.participants;
+    const fields = clampNumber(Number(state.options.fields) || 1, 1, 16, 1);
+    const activePlayers = Math.min(
+      Array.from(
+        new Set(
+          rotation.matches.flatMap(match => {
+            const currentParticipants = resolveMatchParticipants(match, schedule);
+            return [currentParticipants.home, currentParticipants.away];
+          })
+        )
+      ).length,
+      fields * 2
+    );
+    const referees = roleTeams.arbitre.length;
+    const waitingCount = Math.max(participants - activePlayers - referees, waiting.length, 0);
+    if (waitingCount <= 0) return null;
+    return {
+      participants,
+      fields,
+      activePlayers,
+      referees,
+      waiting: waitingCount,
+      waitingCount,
+      notes: ['Les élèves en attente seront réintégrés progressivement selon les rotations.'],
+    };
+  }
+  if (schedule.format === 'swiss') {
+    const waiting = Array.isArray(rotation.byes) ? rotation.byes.filter(Boolean) : [];
+    const participants = schedule.meta?.teamCount || state.participants;
+    const fields = clampNumber(Number(state.options.fields) || 1, 1, 16, 1);
+    const activePlayers = Math.min(rotation.matches.length * 2, fields * 2);
+    const referees = 0;
+    const waitingCount = Math.max(participants - activePlayers - referees, waiting.length, participants % 2 === 1 ? 1 : 0, 0);
+    if (waitingCount <= 0) return null;
+    return {
+      participants,
+      fields,
+      activePlayers,
+      referees,
+      waiting: waitingCount,
+      waitingCount,
+      notes: ['Les élèves en attente seront réintégrés progressivement selon les rotations.'],
+    };
+  }
+  return null;
+}
+
+function openSessionOrganizationModal(summary, onLaunch) {
+  if (!elements.sessionOrganizationModal || !summary) {
+    if (typeof onLaunch === 'function') onLaunch();
+    return;
+  }
+  pendingSessionLaunchAction = typeof onLaunch === 'function' ? onLaunch : null;
+  if (elements.sessionOrganizationGrid) {
+    elements.sessionOrganizationGrid.innerHTML = [
+      ['Participants', summary.participants],
+      ['Terrains', summary.fields],
+      ['Élèves en jeu par rotation', summary.activePlayers],
+      ['Arbitres', summary.referees],
+      ['Élèves en attente', summary.waiting],
+    ]
+      .map(
+        ([label, value]) => `
+          <div class="session-organization-item">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(String(value))}</strong>
+          </div>
+        `
+      )
+      .join('');
+  }
+  if (elements.sessionOrganizationNotes) {
+    elements.sessionOrganizationNotes.innerHTML = (summary.notes || [])
+      .map(note => `<p>${escapeHtml(note)}</p>`)
+      .join('');
+  }
+  elements.sessionOrganizationModal.classList.remove('hidden');
+  syncBodyModalState();
+}
+
 function resetForNewSession(options = {}) {
+  challengeIdSeed = 0;
   const defaults = createDefaultState();
   const preservedParticipants = Number.isInteger(state.participants) ? state.participants : defaults.participants;
   const preservedOptions = {
@@ -934,6 +1157,7 @@ function getSavedSessionRestoreScreen(restoredState, snapshot = null) {
   if (schedule.meta?.sessionEnded) {
     return 'results';
   }
+  if (schedule.format === 'rotating-teams') return 'rotating-pilot';
   if (schedule.format === 'swiss') return 'swiss-pilot';
   if (schedule.format === 'challenge') return 'challenge-pilot';
   if (isLadderLiveMode(schedule)) return 'ladder-pilot';
@@ -1221,7 +1445,7 @@ function showSessionSaveFeedback(message = 'Séance sauvegardée sur cet iPad') 
   }
   sessionSaveFeedbackTimeout = window.setTimeout(() => {
     elements.sessionSaveFeedback.classList.add('hidden');
-  }, 2200);
+  }, 4000);
 }
 
 function getAvailableSessionClassNames() {
@@ -1666,6 +1890,8 @@ function restoreAppSaveState(snapshot) {
     persistState();
     if (restoreScreen === 'ladder-pilot' && isLadderLiveMode(state.schedule)) {
       openLadderPilotModal();
+    } else if (restoreScreen === 'rotating-pilot' && isRotatingTeamsMode(state.schedule)) {
+      openRotatingTeamsPilotScreen();
     } else if (restoreScreen === 'pool-pilot' && isRaquettesPoulePilotMode(state.schedule)) {
       openPoolPilotScreen();
     } else if (restoreScreen === 'swiss-pilot' && state.schedule.format === 'swiss') {
@@ -2119,6 +2345,35 @@ function bindNavigation() {
       }
     });
   }
+  if (elements.sessionOrganizationCloseBtn) {
+    elements.sessionOrganizationCloseBtn.addEventListener('click', closeSessionOrganizationModal);
+  }
+  if (elements.sessionOrganizationLaunchBtn) {
+    elements.sessionOrganizationLaunchBtn.addEventListener('click', () => {
+      const action = pendingSessionLaunchAction;
+      closeSessionOrganizationModal();
+      if (typeof action === 'function') action();
+    });
+  }
+  if (elements.sessionOrganizationOptionsBtn) {
+    elements.sessionOrganizationOptionsBtn.addEventListener('click', () => {
+      closeSessionOrganizationModal();
+      goTo('options');
+    });
+  }
+  if (elements.sessionOrganizationModeBtn) {
+    elements.sessionOrganizationModeBtn.addEventListener('click', () => {
+      closeSessionOrganizationModal();
+      goTo('type');
+    });
+  }
+  if (elements.sessionOrganizationModal) {
+    elements.sessionOrganizationModal.addEventListener('click', event => {
+      if (event.target === elements.sessionOrganizationModal) {
+        closeSessionOrganizationModal();
+      }
+    });
+  }
   if (elements.ladderPilotSaveBtn) {
     elements.ladderPilotSaveBtn.addEventListener('click', () => {
       saveSessionLocally();
@@ -2330,6 +2585,78 @@ function bindNavigation() {
       persistState();
     });
   }
+  if (elements.rotatingTeamSize) {
+    elements.rotatingTeamSize.addEventListener('change', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.teamSize = clampNumber(Number(event.target.value), 2, 6, 2);
+      event.target.value = state.options.rotatingTeams.teamSize;
+      renderRotatingPoolsPreview();
+      persistState();
+    });
+  }
+  if (elements.rotatingOrganization) {
+    elements.rotatingOrganization.addEventListener('change', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.organization = event.target.value === 'full-random' ? 'full-random' : 'pools';
+      updateRotatingOptionsVisibility();
+      renderRotatingPoolsPreview();
+      persistState();
+    });
+  }
+  if (elements.rotatingPoolCount) {
+    elements.rotatingPoolCount.addEventListener('input', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.poolCount = clampNumber(
+        Number(event.target.value),
+        1,
+        Math.min(6, Math.max(1, state.participants)),
+        1
+      );
+      event.target.value = state.options.rotatingTeams.poolCount;
+      renderRotatingPoolsPreview();
+      persistState();
+    });
+  }
+  if (elements.rotatingAutoAssign) {
+    elements.rotatingAutoAssign.addEventListener('change', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.autoAssign = event.target.value === 'balanced' ? 'balanced' : 'balanced';
+      renderRotatingPoolsPreview();
+      persistState();
+    });
+  }
+  if (elements.rotatingTargetMatches) {
+    elements.rotatingTargetMatches.addEventListener('input', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.targetMatches = clampNumber(Number(event.target.value), 1, 12, 3);
+      event.target.value = state.options.rotatingTeams.targetMatches;
+      persistState();
+    });
+  }
+  if (elements.rotatingWinPoints) {
+    elements.rotatingWinPoints.addEventListener('input', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.winPoints = clampNumber(Number(event.target.value), 0, 10, 3);
+      event.target.value = state.options.rotatingTeams.winPoints;
+      persistState();
+    });
+  }
+  if (elements.rotatingDrawPoints) {
+    elements.rotatingDrawPoints.addEventListener('input', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.drawPoints = clampNumber(Number(event.target.value), 0, 10, 1);
+      event.target.value = state.options.rotatingTeams.drawPoints;
+      persistState();
+    });
+  }
+  if (elements.rotatingLossPoints) {
+    elements.rotatingLossPoints.addEventListener('input', event => {
+      normalizeRotatingTeamsOptions();
+      state.options.rotatingTeams.lossPoints = clampNumber(Number(event.target.value), 0, 10, 0);
+      event.target.value = state.options.rotatingTeams.lossPoints;
+      persistState();
+    });
+  }
   if (elements.worldCupGroupCount) {
     elements.worldCupGroupCount.addEventListener('change', event => {
       const requested = Number(event.target.value);
@@ -2488,23 +2815,7 @@ function bindNavigation() {
   }
   if (elements.startLiveBtn) {
     elements.startLiveBtn.addEventListener('click', () => {
-      if (state.schedule?.format === 'swiss') {
-        openSwissPilotScreen();
-        return;
-      }
-      if (state.schedule?.format === 'challenge') {
-        openChallengePilotView();
-        return;
-      }
-      if (isLadderLiveMode(state.schedule)) {
-        openLadderPilotModal();
-        return;
-      }
-      if (isRaquettesPoulePilotMode(state.schedule)) {
-        openPoolPilotScreen();
-        return;
-      }
-      startLiveMode();
+      requestSessionLaunch();
     });
   }
   if (elements.liveActionsToggle) {
@@ -2512,15 +2823,7 @@ function bindNavigation() {
   }
   if (elements.liveCurrentRotationBtn) {
     elements.liveCurrentRotationBtn.addEventListener('click', () => {
-      if (isLadderLiveMode(state.schedule)) {
-        openLadderPilotModal();
-        return;
-      }
-      if (isRaquettesPoulePilotMode(state.schedule)) {
-        openPoolPilotScreen();
-        return;
-      }
-      focusCurrentLadderRotation();
+      requestSessionLaunch();
     });
   }
 
@@ -2570,6 +2873,10 @@ function bindNavigation() {
   if (elements.poolPilotBody) {
     elements.poolPilotBody.addEventListener('input', handleScoreInput);
     elements.poolPilotBody.addEventListener('click', handleLiveClick);
+  }
+  if (elements.rotatingPilotBody) {
+    elements.rotatingPilotBody.addEventListener('input', handleScoreInput);
+    elements.rotatingPilotBody.addEventListener('click', handleLiveClick);
   }
   if (elements.rotationView) {
     elements.rotationView.addEventListener('click', handleRotationViewClick);
@@ -2646,6 +2953,10 @@ function bindNavigation() {
     elements.finalRankingLiveBtn.addEventListener('click', () => {
       hideFinalRankingModal();
       if (state.schedule) {
+        if (isRotatingTeamsMode(state.schedule)) {
+          openRotatingTeamsPilotScreen();
+          return;
+        }
         goTo('live');
         renderLiveRotation();
       }
@@ -2725,6 +3036,24 @@ function bindNavigation() {
   }
   if (elements.poolPilotNextBtn) {
     elements.poolPilotNextBtn.addEventListener('click', advancePoolPilotRotation);
+  }
+  if (elements.rotatingPilotCloseBtn) {
+    elements.rotatingPilotCloseBtn.addEventListener('click', closeRotatingTeamsPilotScreen);
+  }
+  if (elements.rotatingPilotBackBtn) {
+    elements.rotatingPilotBackBtn.addEventListener('click', closeRotatingTeamsPilotScreen);
+  }
+  if (elements.rotatingPilotSaveBtn) {
+    elements.rotatingPilotSaveBtn.addEventListener('click', () => saveSessionLocally());
+  }
+  if (elements.rotatingPilotRankingBtn) {
+    elements.rotatingPilotRankingBtn.addEventListener('click', () => {
+      rankingReturnScreen = 'rotating-pilot';
+      openRankingModal();
+    });
+  }
+  if (elements.rotatingPilotNextBtn) {
+    elements.rotatingPilotNextBtn.addEventListener('click', advanceRotatingTeamsRotation);
   }
   if (elements.swissPilotCloseBtn) {
     elements.swissPilotCloseBtn.addEventListener('click', closeSwissPilotScreen);
@@ -2810,15 +3139,19 @@ function bindNavigation() {
       if (!btn) return;
       setResultsMode(btn.dataset.resultsModeTarget);
       if (btn.dataset.resultsModeTarget === 'pilot' && state.schedule?.format === 'swiss') {
-        openSwissPilotScreen();
+        requestSessionLaunch();
         return;
       }
       if (btn.dataset.resultsModeTarget === 'pilot' && isLadderLiveMode(state.schedule)) {
-        openLadderPilotModal();
+        requestSessionLaunch();
         return;
       }
       if (btn.dataset.resultsModeTarget === 'pilot' && isRaquettesPoulePilotMode(state.schedule)) {
-        openPoolPilotScreen();
+        requestSessionLaunch();
+        return;
+      }
+      if (btn.dataset.resultsModeTarget === 'pilot' && isRotatingTeamsMode(state.schedule)) {
+        requestSessionLaunch();
       }
     });
   }
@@ -2860,6 +3193,10 @@ function bindNavigation() {
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     let handled = false;
+    if (elements.sessionOrganizationModal && !elements.sessionOrganizationModal.classList.contains('hidden')) {
+      closeSessionOrganizationModal();
+      handled = true;
+    }
     if (elements.configEditModal && !elements.configEditModal.classList.contains('hidden')) {
       closeConfigEditModal();
       handled = true;
@@ -2886,6 +3223,10 @@ function bindNavigation() {
     }
     if (state.currentScreen === 'pool-pilot') {
       closePoolPilotScreen();
+      handled = true;
+    }
+    if (state.currentScreen === 'rotating-pilot') {
+      closeRotatingTeamsPilotScreen();
       handled = true;
     }
     if (state.currentScreen === 'swiss-pilot') {
@@ -2952,6 +3293,8 @@ function handleResume() {
     const restoreScreen = getSavedSessionRestoreScreen(state, { viewState: { restoreScreen: state.currentScreen } });
     if (restoreScreen === 'ladder-pilot') {
       openLadderPilotModal();
+    } else if (restoreScreen === 'rotating-pilot') {
+      openRotatingTeamsPilotScreen();
     } else if (restoreScreen === 'pool-pilot') {
       openPoolPilotScreen();
     } else if (restoreScreen === 'swiss-pilot') {
@@ -3210,8 +3553,10 @@ function updateLadderSettingsVisibility() {
     const summaryLines = [
       `<strong>${state.participants}</strong> élèves`,
       `<strong>${summary.activeCourts}</strong> terrain${summary.activeCourts > 1 ? 's' : ''} actif${summary.activeCourts > 1 ? 's' : ''}`,
+      `<strong>${summary.playingPlayers}</strong> joueurs en match`,
       `<strong>${summary.refereeCourts}</strong> terrain${summary.refereeCourts > 1 ? 's' : ''} avec arbitre`,
       `<strong>${summary.freeCourts}</strong> terrain${summary.freeCourts > 1 ? 's' : ''} sans arbitre`,
+      `<strong>${formatLadderCourtModeLabel(courtUsage.courtMode)}</strong> mode choisi`,
       `<strong>${summary.waitingPlayers}</strong> élève${summary.waitingPlayers > 1 ? 's' : ''} en attente`,
       `<strong>${summary.refereePlayers}</strong> arbitre${summary.refereePlayers > 1 ? 's' : ''} mobilisé${summary.refereePlayers > 1 ? 's' : ''}`,
       `<strong>${state.options.duration}</strong> min par match`,
@@ -3638,11 +3983,7 @@ function applyImportedLadderNames(names) {
   persistState();
   const schedule = generateSchedule(getFinalTeamNames(), state.options);
   renderResults(schedule, { resetScores: true });
-  if (isLadderLiveMode(schedule)) {
-    openLadderPilotModal();
-  } else {
-    goTo('results');
-  }
+  goTo('results');
 }
 
 function applyImportedSwissNames(names) {
@@ -3729,7 +4070,15 @@ function updateModeContextPanel() {
 function updateModeParticipantsLabel() {
   if (!elements.modeParticipantsLabel) return;
   const practice = state.practiceType || 'sport-co';
-  elements.modeParticipantsLabel.textContent = practice === 'sport-co' ? 'Nombre d’équipes' : 'Nombre de joueurs';
+  if (practice === 'sport-co') {
+    elements.modeParticipantsLabel.textContent = 'Nombre d’équipes';
+    return;
+  }
+  if (practice === 'eleve') {
+    elements.modeParticipantsLabel.textContent = 'Nombre d’élèves';
+    return;
+  }
+  elements.modeParticipantsLabel.textContent = 'Nombre de joueurs';
 }
 
 function updateModeFieldVisibility() {
@@ -3910,6 +4259,31 @@ function syncOptionInputs() {
   if (elements.scoreTargetInput) {
     elements.scoreTargetInput.value = state.options.scoreTarget ?? 11;
   }
+  normalizeRotatingTeamsOptions();
+  if (elements.rotatingTeamSize) {
+    elements.rotatingTeamSize.value = state.options.rotatingTeams.teamSize;
+  }
+  if (elements.rotatingOrganization) {
+    elements.rotatingOrganization.value = state.options.rotatingTeams.organization;
+  }
+  if (elements.rotatingPoolCount) {
+    elements.rotatingPoolCount.value = state.options.rotatingTeams.poolCount;
+  }
+  if (elements.rotatingAutoAssign) {
+    elements.rotatingAutoAssign.value = state.options.rotatingTeams.autoAssign;
+  }
+  if (elements.rotatingTargetMatches) {
+    elements.rotatingTargetMatches.value = state.options.rotatingTeams.targetMatches;
+  }
+  if (elements.rotatingWinPoints) {
+    elements.rotatingWinPoints.value = state.options.rotatingTeams.winPoints;
+  }
+  if (elements.rotatingDrawPoints) {
+    elements.rotatingDrawPoints.value = state.options.rotatingTeams.drawPoints;
+  }
+  if (elements.rotatingLossPoints) {
+    elements.rotatingLossPoints.value = state.options.rotatingTeams.lossPoints;
+  }
   if (elements.worldCupGroupCount) {
     elements.worldCupGroupCount.value = state.options.worldCupGroupCount ?? 2;
   }
@@ -3927,6 +4301,7 @@ function syncOptionInputs() {
   }
   renderLadderManualPlacementGrid();
   updateLadderSettingsVisibility();
+  updateRotatingOptionsVisibility();
   if (elements.modeParticipantsInput) {
     elements.modeParticipantsInput.value = state.participants;
   }
@@ -3935,6 +4310,7 @@ function syncOptionInputs() {
   updateCountScreenCopy();
   updateRoleControlsState();
   updateModeContextPanel();
+  renderRotatingPoolsPreview();
   updateGenerateButtonState();
 }
 
@@ -3979,6 +4355,14 @@ function handleGenerate() {
       alert(`Ajoutez au moins deux ${formatParticipantLabel({ plural: true })}.`);
       return;
     }
+    if (state.activeModeId === 'sportco-poules-tournantes') {
+      const validation = validateRotatingPoolsConfig(teams, state.options);
+      if (!validation.valid) {
+        renderRotatingPoolsPreview();
+        alert([validation.message, validation.suggestion].filter(Boolean).join(' '));
+        return;
+      }
+    }
     state.teamNames = teams;
     buildTeamFields(state.participants);
     const schedule = generateSchedule(teams, state.options);
@@ -3986,10 +4370,6 @@ function handleGenerate() {
       ensureCurrentSessionMetadata({ forceNew: true });
     }
     renderResults(schedule, { resetScores: true });
-    if (isLadderLiveMode(schedule)) {
-      openLadderPilotModal();
-      return;
-    }
     goTo('results');
   } catch (error) {
     console.error('Erreur lors du lancement du tournoi', error);
@@ -4003,6 +4383,7 @@ function renderResults(schedule, options = {}) {
   const isChallenge = schedule?.format === 'challenge';
   const isLadder = isLadderLiveMode(schedule);
   const isSwiss = schedule?.format === 'swiss';
+  const isRotatingTeams = schedule?.format === 'rotating-teams';
   if (resetScores) {
     state.scores = {};
     state.validatedMatches = {};
@@ -4032,13 +4413,19 @@ function renderResults(schedule, options = {}) {
     timeStyle: 'short',
   })}`;
   state.liveRotationIndex = 0;
-  schedule.meta.timeSummary = computeTimeSummary(schedule, state.options);
-  if (schedule.meta.timeSummary) {
-    schedule.meta.estimatedDuration = humanizeDuration(schedule.meta.timeSummary.totalMinutes);
-    schedule.meta.endTime = schedule.meta.timeSummary.estimatedEnd;
-  } else {
+  if (isRotatingTeams && schedule.meta?.generationError) {
+    schedule.meta.timeSummary = null;
     schedule.meta.estimatedDuration = null;
     schedule.meta.endTime = null;
+  } else {
+    schedule.meta.timeSummary = computeTimeSummary(schedule, state.options);
+    if (schedule.meta.timeSummary) {
+      schedule.meta.estimatedDuration = humanizeDuration(schedule.meta.timeSummary.totalMinutes);
+      schedule.meta.endTime = schedule.meta.timeSummary.estimatedEnd;
+    } else {
+      schedule.meta.estimatedDuration = null;
+      schedule.meta.endTime = null;
+    }
   }
   renderSummary(schedule.meta);
   updateMatchInsight(state.schedule);
@@ -4050,10 +4437,12 @@ function renderResults(schedule, options = {}) {
     saveChallengeClassSnapshot();
   } else if (isSwiss) {
     renderSwissBoard(schedule);
+  } else if (isRotatingTeams) {
+    renderRotationView(schedule.rotations);
   } else {
     renderRotationView(schedule.rotations);
   }
-  const teamEntries = buildTeamEntriesFromSchedule(schedule);
+  const teamEntries = isRotatingTeams ? buildRotatingTeamsEntriesFromSchedule(schedule) : buildTeamEntriesFromSchedule(schedule);
   schedule.teams = teamEntries;
   renderTeamView(teamEntries);
   renderRankingView(schedule);
@@ -4362,6 +4751,12 @@ function handleSimulationRequest() {
       renderSimulationResult({ error: 'Simulation impossible avec les paramètres actuels.' });
       return;
     }
+    if (preview.meta.generationError) {
+      renderSimulationResult({
+        error: [preview.meta.generationError, preview.meta.generationSuggestion].filter(Boolean).join(' '),
+      });
+      return;
+    }
     const summary = computeTimeSummary(preview, state.options);
     renderSimulationResult({ meta: preview.meta, summary });
   } catch (error) {
@@ -4562,10 +4957,6 @@ function handleQuickGenerate(event) {
   }
   const schedule = generateSchedule(teams, state.options);
   renderResults(schedule, { resetScores: true });
-  if (isLadderLiveMode(schedule)) {
-    openLadderPilotModal();
-    return;
-  }
   goTo('results');
 }
 
@@ -4643,8 +5034,9 @@ function updateCountScreenCopy() {
   if (!elements.countTitle) return;
   const practice = state.practiceType || 'sport-co';
   const isSportCo = practice === 'sport-co';
-  const label = isSportCo ? 'Nombre d’équipes' : 'Nombre de participants';
-  const actionLabel = isSportCo ? 'd’équipes' : 'de participants';
+  const isEleve = practice === 'eleve';
+  const label = isSportCo ? 'Nombre d’équipes' : isEleve ? 'Nombre d’élèves' : 'Nombre de participants';
+  const actionLabel = isSportCo ? 'd’équipes' : isEleve ? 'd’élèves' : 'de participants';
   elements.countTitle.textContent = label;
   if (elements.countMinus) {
     elements.countMinus.setAttribute('aria-label', `Moins ${actionLabel}`);
@@ -4682,6 +5074,78 @@ function updateRoleControlsState() {
     }
   }
   syncQuickRoleInputs(settings);
+}
+
+function updateRotatingOptionsVisibility() {
+  const isPoolsMode = getRotatingOrganization() === 'pools';
+  if (elements.rotatingPoolCountField) {
+    elements.rotatingPoolCountField.classList.toggle('hidden', !isPoolsMode);
+  }
+  if (elements.rotatingAutoAssignField) {
+    elements.rotatingAutoAssignField.classList.toggle('hidden', !isPoolsMode);
+  }
+}
+
+function renderRotatingPoolsPreview() {
+  if (!elements.rotatingPoolsPreview) return;
+  if (state.activeModeId !== 'sportco-poules-tournantes') {
+    elements.rotatingPoolsPreview.innerHTML = '';
+    return;
+  }
+  const names = getFinalTeamNames();
+  if (!names.length) {
+    elements.rotatingPoolsPreview.innerHTML = '<p class="ladder-group-empty">Ajoutez des élèves pour prévisualiser l’organisation.</p>';
+    return;
+  }
+  const poolConfig = buildRotatingPoolsConfig(names, state.options);
+  const validation = validateRotatingPoolsConfig(names, state.options);
+  const teamSize = poolConfig.teamSize;
+  const playersPerMatch = teamSize * 2;
+  const alertHtml = validation.valid
+    ? ''
+    : `
+      <div class="rotating-config-alert" role="alert">
+        <strong>${escapeHtml(validation.message)}</strong>
+        ${validation.suggestion ? `<p>${escapeHtml(validation.suggestion)}</p>` : ''}
+      </div>
+    `;
+  const intro =
+    poolConfig.organization === 'full-random'
+      ? `<p class="ladder-group-note">Toute la classe sera remélangée à chaque rotation. Les équipes temporaires seront équilibrées sur l’ensemble du groupe.</p>`
+      : `<p class="ladder-group-note">Les élèves restent dans leur poule pendant toute la séance. Les équipes changent à l’intérieur de chaque poule uniquement.</p>`;
+  const cards = poolConfig.pools
+    .map(pool => {
+      const members = pool.playerIds
+        .map(playerId => poolConfig.players.find(player => player.id === playerId))
+        .filter(Boolean);
+      const maxMatches = Math.floor(members.length / playersPerMatch);
+      const waitingCount = Math.max(members.length - maxMatches * playersPerMatch, 0);
+      return `
+        <article class="ladder-group-card rotating-pool-preview-card">
+          <header class="rotating-pool-preview-head">
+            <div>
+              <h5>${escapeHtml(pool.label)}</h5>
+              <p>${members.length} élève${members.length > 1 ? 's' : ''}</p>
+            </div>
+            <span class="ladder-summary-pill">${maxMatches} match${maxMatches > 1 ? 's' : ''} possible${maxMatches > 1 ? 's' : ''} / rotation</span>
+          </header>
+          ${buildRotatingTeamsBadgeListHTML(members.map(player => player.name))}
+          <p class="ladder-group-note">
+            ${waitingCount > 0 ? `${waitingCount} élève${waitingCount > 1 ? 's' : ''} en attente possible${waitingCount > 1 ? 's' : ''} selon la rotation.` : 'Tous les élèves de cette poule peuvent être utilisés sur une rotation complète.'}
+          </p>
+        </article>
+      `;
+    })
+    .join('');
+  elements.rotatingPoolsPreview.innerHTML = `
+    <div class="ladder-group-panel-head">
+      <h4>${poolConfig.organization === 'full-random' ? 'Classe entière' : `${poolConfig.poolCount} poule${poolConfig.poolCount > 1 ? 's' : ''} prévues`}</h4>
+      <span class="ladder-summary-pill">${teamSize}c${teamSize} · ${playersPerMatch} élèves mobilisés par match</span>
+    </div>
+    ${alertHtml}
+    ${intro}
+    <div class="ladder-group-grid">${cards}</div>
+  `;
 }
 
 function syncQuickRoleInputs(settings = getRoleSettings()) {
@@ -5117,6 +5581,9 @@ function handleOptionsReset() {
   state.options.matchMode = defaults.matchMode;
   state.options.scoreTarget = defaults.scoreTarget;
   state.options.worldCupGroupCount = defaults.worldCupGroupCount;
+  state.options.rotatingTeams = {
+    ...defaults.rotatingTeams,
+  };
   state.options.timer = defaults.timer;
   state.options.sound = defaults.sound;
   state.options.vibration = defaults.vibration;
@@ -5148,6 +5615,21 @@ function handleOptionsReset() {
   }
   if (elements.worldCupGroupCount) {
     elements.worldCupGroupCount.value = state.options.worldCupGroupCount;
+  }
+  if (elements.rotatingTeamSize) {
+    elements.rotatingTeamSize.value = state.options.rotatingTeams.teamSize;
+  }
+  if (elements.rotatingTargetMatches) {
+    elements.rotatingTargetMatches.value = state.options.rotatingTeams.targetMatches;
+  }
+  if (elements.rotatingWinPoints) {
+    elements.rotatingWinPoints.value = state.options.rotatingTeams.winPoints;
+  }
+  if (elements.rotatingDrawPoints) {
+    elements.rotatingDrawPoints.value = state.options.rotatingTeams.drawPoints;
+  }
+  if (elements.rotatingLossPoints) {
+    elements.rotatingLossPoints.value = state.options.rotatingTeams.lossPoints;
   }
   if (elements.timerToggle) {
     elements.timerToggle.checked = state.options.timer;
@@ -5699,6 +6181,64 @@ function buildTeamEntriesFromSchedule(schedule) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function buildRotatingTeamsEntriesFromSchedule(schedule) {
+  if (!schedule?.rotatingTeams?.players?.length) return [];
+  const entries = schedule.rotatingTeams.players.map(player => ({
+    name: player.name,
+    poolId: player.poolId || null,
+    matches: [],
+  }));
+  const indexByName = new Map(entries.map((entry, index) => [entry.name, index]));
+  schedule.rotations.forEach(rotation => {
+    rotation.matches.forEach(match => {
+      const homeNames = Array.isArray(match.homePlayers) ? match.homePlayers : [];
+      const awayNames = Array.isArray(match.awayPlayers) ? match.awayPlayers : [];
+      const homeLabel = getRotatingTeamLabel(homeNames);
+      const awayLabel = getRotatingTeamLabel(awayNames);
+      homeNames.forEach(name => {
+        const index = indexByName.get(name);
+        if (index == null) return;
+        entries[index].matches.push({
+          rotation: rotation.number,
+          field: match.field,
+          start: rotation.startLabel,
+          phase: rotation.phase,
+          title: rotation.title,
+          matchId: match.id,
+          group: match.groupLabel || '',
+          opponent: `avec ${homeNames.filter(entry => entry !== name).join(', ')} · contre ${awayLabel}`,
+        });
+      });
+      awayNames.forEach(name => {
+        const index = indexByName.get(name);
+        if (index == null) return;
+        entries[index].matches.push({
+          rotation: rotation.number,
+          field: match.field,
+          start: rotation.startLabel,
+          phase: rotation.phase,
+          title: rotation.title,
+          matchId: match.id,
+          group: match.groupLabel || '',
+          opponent: `avec ${awayNames.filter(entry => entry !== name).join(', ')} · contre ${homeLabel}`,
+        });
+      });
+    });
+    (rotation.byes || []).forEach(name => {
+      const index = indexByName.get(name);
+      if (index == null) return;
+      entries[index].matches.push({
+        bye: true,
+        rotation: rotation.number,
+        start: rotation.startLabel,
+        phase: rotation.phase,
+        title: rotation.title,
+      });
+    });
+  });
+  return entries;
+}
+
 function renderTeamView(teams) {
   const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
   const fieldLabel = formatFieldLabel({ practiceType, capitalized: true });
@@ -5728,6 +6268,158 @@ function renderTeamView(teams) {
     .join('');
 }
 
+function buildRotatingTeamsRankingRows(schedule = state.schedule, uptoRotation = null) {
+  if (!schedule?.rotatingTeams?.players?.length) {
+    return { table: [], complete: false };
+  }
+  const scoring = schedule.rotatingTeams.scoring || getRotatingScoring(schedule.meta?.optionsSnapshot || state.options);
+  const poolLabelById = new Map((schedule.rotatingTeams.pools || []).map(pool => [pool.id, pool.label]));
+  const rows = schedule.rotatingTeams.players.map(player => ({
+    id: player.id,
+    name: player.name,
+    poolId: player.poolId || null,
+    poolLabel: player.poolId ? poolLabelById.get(player.poolId) || player.poolId : '',
+    played: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    points: 0,
+    goalDiff: 0,
+    goalAverage: 0,
+  }));
+  const rowMap = new Map(rows.map(row => [row.id, row]));
+  const targetRotation = uptoRotation ?? schedule.rotations?.[state.liveRotationIndex]?.number ?? schedule.meta?.rotationCount ?? 1;
+  let complete = true;
+  schedule.rotations.forEach(rotation => {
+    if (rotation.number > targetRotation) return;
+    rotation.matches.forEach(match => {
+      const record = state.scores?.[match.id];
+      if (!record || !Number.isFinite(record.home) || !Number.isFinite(record.away)) {
+        complete = false;
+        return;
+      }
+      if (!state.validatedMatches?.[match.id]) {
+        complete = false;
+        return;
+      }
+      const homeIds = Array.isArray(match.homePlayerIds) ? match.homePlayerIds : [];
+      const awayIds = Array.isArray(match.awayPlayerIds) ? match.awayPlayerIds : [];
+      homeIds.forEach(playerId => {
+        const row = rowMap.get(playerId);
+        if (!row) return;
+        row.played += 1;
+        row.goalsFor += record.home;
+        row.goalsAgainst += record.away;
+        if (record.home > record.away) {
+          row.wins += 1;
+          row.points += scoring.win;
+        } else if (record.home < record.away) {
+          row.losses += 1;
+          row.points += scoring.loss;
+        } else {
+          row.draws += 1;
+          row.points += scoring.draw;
+        }
+      });
+      awayIds.forEach(playerId => {
+        const row = rowMap.get(playerId);
+        if (!row) return;
+        row.played += 1;
+        row.goalsFor += record.away;
+        row.goalsAgainst += record.home;
+        if (record.away > record.home) {
+          row.wins += 1;
+          row.points += scoring.win;
+        } else if (record.away < record.home) {
+          row.losses += 1;
+          row.points += scoring.loss;
+        } else {
+          row.draws += 1;
+          row.points += scoring.draw;
+        }
+      });
+    });
+  });
+  rows.forEach(row => {
+    row.goalDiff = row.goalsFor - row.goalsAgainst;
+    row.goalAverage = row.goalDiff;
+  });
+  rows.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.goalAverage !== a.goalAverage) return b.goalAverage - a.goalAverage;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (a.played !== b.played) return a.played - b.played;
+    return a.name.localeCompare(b.name);
+  });
+  const playerMap = new Map(schedule.rotatingTeams.players.map(player => [player.id, player]));
+  rows.forEach(row => {
+    const player = playerMap.get(row.id);
+    if (!player) return;
+    player.stats = {
+      played: row.played,
+      wins: row.wins,
+      draws: row.draws,
+      losses: row.losses,
+      points: row.points,
+      goalsFor: row.goalsFor,
+      goalsAgainst: row.goalsAgainst,
+      goalAverage: row.goalAverage,
+    };
+  });
+  return { table: rows, complete };
+}
+
+function buildRotatingRankingCard(schedule = state.schedule, options = {}) {
+  const { title = 'Classement individuel — Poules tournantes', compact = false, uptoRotation = null } = options;
+  const snapshot = buildRotatingTeamsRankingRows(schedule, uptoRotation);
+  const showPool = (schedule.rotatingTeams?.organization || 'pools') === 'pools' && (schedule.rotatingTeams?.pools?.length || 0) > 1;
+  const rows = snapshot.table
+    .map(
+      (row, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.name}</td>
+          ${showPool ? `<td>${escapeHtml(row.poolLabel || 'Sans poule')}</td>` : ''}
+          <td>${row.points}</td>
+          <td>${row.played}</td>
+          <td>${row.wins}</td>
+          <td>${row.draws}</td>
+          <td>${row.losses}</td>
+          <td>${row.goalAverage > 0 ? `+${row.goalAverage}` : row.goalAverage}</td>
+        </tr>`
+    )
+    .join('');
+  return {
+    snapshot,
+    html: `
+      <article class="ranking-card rotating-ranking-card ${compact ? 'compact' : ''}">
+        <header>
+          <h3>${title}</h3>
+          <span class="ranking-status">${snapshot.complete ? 'Rotation complète' : 'Scores en attente'}</span>
+        </header>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Élève</th>
+              ${showPool ? '<th>Poule</th>' : ''}
+              <th>Pts</th>
+              <th>J</th>
+              <th>G</th>
+              <th>N</th>
+              <th>P</th>
+              <th>Diff</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </article>
+    `,
+  };
+}
+
 function renderRankingView(schedule) {
   if (!schedule) {
     elements.rankingView.innerHTML = '';
@@ -5754,6 +6446,11 @@ function renderRankingView(schedule) {
   }
   if (schedule.format === 'challenge') {
     renderChallengeRanking(schedule);
+    appendRankingSessionSavePanel();
+    return;
+  }
+  if (schedule.format === 'rotating-teams') {
+    elements.rankingView.innerHTML = buildRotatingRankingCard(schedule).html;
     appendRankingSessionSavePanel();
     return;
   }
@@ -6881,6 +7578,50 @@ function renderLiveRankingPanel(uptoRotation) {
     renderLiveRankingForChallenge();
     return;
   }
+  if (state.schedule.format === 'rotating-teams') {
+    const target =
+      uptoRotation ||
+      (state.schedule.rotations[state.liveRotationIndex] && state.schedule.rotations[state.liveRotationIndex].number) ||
+      1;
+    const snapshot = buildRotatingTeamsRankingRows(state.schedule, target);
+    if (elements.liveRankingTitle) {
+      elements.liveRankingTitle.textContent = 'Rang · Élève · Pts';
+    }
+    if (!snapshot.table.length) {
+      elements.liveRankingTable.innerHTML = '<p>Ajoutez des scores pour lancer le classement individuel.</p>';
+      return;
+    }
+    const rows = snapshot.table
+      .slice(0, Math.min(snapshot.table.length, 12))
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${row.name}</td>
+            <td>${row.points}</td>
+            <td>${row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff}</td>
+            <td>${row.played}</td>
+          </tr>
+        `
+      )
+      .join('');
+    elements.liveRankingTable.innerHTML = `
+      <p class="live-ranking-meta">Après rotation ${target}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Élève</th>
+            <th>Pts</th>
+            <th>Diff</th>
+            <th>J</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    return;
+  }
   if (state.schedule.format === 'swiss') {
     const rows = updateSwissRanking(state.schedule);
     if (elements.liveRankingTitle) {
@@ -7052,7 +7793,11 @@ function renderLiveRankingForChallenge() {
 
 function handleLiveFinish() {
   if (!state.schedule) return;
-  const finishLabel = isLadderLiveMode(state.schedule) ? 'terminer la montée-descente' : 'terminer le tournoi';
+  const finishLabel = isLadderLiveMode(state.schedule)
+    ? 'terminer la montée-descente'
+    : isRotatingTeamsMode(state.schedule)
+      ? 'terminer les poules tournantes'
+      : 'terminer le tournoi';
   const confirmed = window.confirm(
     `Êtes-vous sûr de vouloir ${finishLabel} ? Les matchs non complétés resteront affichés comme incomplets.`
   );
@@ -7078,6 +7823,8 @@ function showFinalRankingModal(uptoRotation) {
   if (elements.finalRankingTitle) {
     if (state.schedule.format === 'challenge') {
       elements.finalRankingTitle.textContent = 'Classement Défi';
+    } else if (state.schedule.format === 'rotating-teams') {
+      elements.finalRankingTitle.textContent = 'Classement final — Poules tournantes';
     } else if (state.schedule.format === 'swiss') {
       elements.finalRankingTitle.textContent = 'Classement final — Ronde Suisse';
     } else if (isLadderLiveMode(state.schedule)) {
@@ -7094,6 +7841,8 @@ function showFinalRankingModal(uptoRotation) {
   finalRankingSnapshot =
     state.schedule.format === 'ladder'
       ? { kind: 'ladder', table: computeLadderStandings(state.schedule), complete: true, uptoRotation: upto }
+      : state.schedule.format === 'rotating-teams'
+        ? { kind: 'rotating-teams', ...buildRotatingTeamsRankingRows(state.schedule, upto), uptoRotation: upto }
       : state.schedule.format === 'swiss'
         ? { kind: 'swiss', table: updateSwissRanking(state.schedule), complete: true, uptoRotation: upto }
       : computeRankingSnapshot(state.schedule, upto);
@@ -7259,6 +8008,8 @@ function downloadFinalRankingCsv() {
     finalRankingSnapshot =
       state.schedule.format === 'ladder'
         ? { kind: 'ladder', table: computeLadderStandings(state.schedule), complete: true, uptoRotation: upto }
+        : state.schedule.format === 'rotating-teams'
+          ? { kind: 'rotating-teams', ...buildRotatingTeamsRankingRows(state.schedule, upto), uptoRotation: upto }
         : computeRankingSnapshot(state.schedule, upto);
   }
   if (!finalRankingSnapshot || !finalRankingSnapshot.table.length) return;
@@ -7273,6 +8024,8 @@ function downloadFinalRankingCsv() {
       ? `montee-descente_${today}.csv`
       : state.schedule?.format === 'swiss'
         ? `ronde-suisse_${today}.csv`
+        : state.schedule?.format === 'rotating-teams'
+          ? `poules-tournantes_${today}.csv`
         : `classement-final-${Date.now()}.csv`;
   document.body.appendChild(link);
   link.click();
@@ -7306,6 +8059,13 @@ function buildFinalRankingCsv(snapshot) {
       const position = index % 2 === 0 ? 'haut' : 'bas';
       return [index + 1, row.name, terrainFinal, position, row.played, row.wins, row.losses, date, 'montee-descente', duration, refereeFields].join(';');
     });
+    return [header, ...rows].join('\n');
+  }
+  if (state.schedule?.format === 'rotating-teams') {
+    const header = ['rang', 'eleve', 'points', 'joues', 'victoires', 'nuls', 'defaites', 'bp', 'bc', 'difference'].join(';');
+    const rows = snapshot.table.map((row, index) =>
+      [index + 1, row.name, row.points, row.played, row.wins, row.draws, row.losses, row.goalsFor, row.goalsAgainst, row.goalDiff].join(';')
+    );
     return [header, ...rows].join('\n');
   }
   const header = ['Pos', columnLabel, 'Points', 'Joués', 'G', 'N', 'P', 'BP', 'BC', 'Diff'].join(';');
@@ -7357,6 +8117,9 @@ function openRankingModal() {
   if (!rankingReturnScreen && isLadderPilotModalOpen()) {
     rankingReturnScreen = 'ladder-pilot';
   }
+  if (!rankingReturnScreen && isRotatingTeamsPilotScreenOpen()) {
+    rankingReturnScreen = 'rotating-pilot';
+  }
   if (!rankingReturnScreen && isPoolPilotScreenOpen()) {
     rankingReturnScreen = 'pool-pilot';
   }
@@ -7381,6 +8144,12 @@ function closeRankingModal() {
     renderPoolPilotScreen();
     return;
   }
+  if (rankingReturnScreen === 'rotating-pilot' && isRotatingTeamsMode(state.schedule)) {
+    rankingReturnScreen = null;
+    goTo('rotating-pilot');
+    renderRotatingTeamsPilot();
+    return;
+  }
   rankingReturnScreen = null;
 }
 
@@ -7389,6 +8158,8 @@ function renderRankingModal() {
   if (elements.rankingModalTitle) {
     if (state.schedule.format === 'challenge') {
       elements.rankingModalTitle.textContent = 'Classement Défi';
+    } else if (state.schedule.format === 'rotating-teams') {
+      elements.rankingModalTitle.textContent = 'Classement individuel — Poules tournantes';
     } else if (state.schedule.format === 'swiss') {
       elements.rankingModalTitle.textContent = 'Classement Ronde Suisse';
     } else if (isLadderLiveMode(state.schedule)) {
@@ -7470,6 +8241,41 @@ function renderRankingModal() {
     `;
     return;
   }
+  if (state.schedule.format === 'rotating-teams') {
+    const tableRows = rows
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${row.name}</td>
+            <td>${row.points}</td>
+            <td>${row.played}</td>
+            <td>${row.wins}</td>
+            <td>${row.draws}</td>
+            <td>${row.losses}</td>
+            <td>${row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff}</td>
+          </tr>`
+      )
+      .join('');
+    elements.rankingModalBody.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Élève</th>
+            <th>Pts</th>
+            <th>J</th>
+            <th>G</th>
+            <th>N</th>
+            <th>P</th>
+            <th>Diff</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    `;
+    return;
+  }
   if (state.schedule.format === 'swiss' && state.schedule.swiss) {
     const tableRows = rows
       .map(
@@ -7544,6 +8350,9 @@ function buildRankingModalRows() {
   }
   if (state.schedule.format === 'challenge' && state.schedule.challenge) {
     return buildChallengeRankingRows(state.schedule);
+  }
+  if (state.schedule.format === 'rotating-teams') {
+    return buildRotatingTeamsRankingRows(state.schedule).table;
   }
   if (state.schedule.format === 'swiss' && state.schedule.swiss) {
     return updateSwissRanking(state.schedule);
@@ -7636,12 +8445,7 @@ function handleContextTab(context) {
       alert('Générez un planning avant d’ouvrir le mode live.');
       return;
     }
-    if (isRaquettesPoulePilotMode(state.schedule)) {
-      openPoolPilotScreen();
-      return;
-    }
-    goTo('live');
-    renderLiveRotation();
+    requestSessionLaunch();
     return;
   }
   if (context === 'projection') {
@@ -7661,7 +8465,8 @@ function syncBodyModalState() {
   const challengeOpen = elements.challengeModal && !elements.challengeModal.classList.contains('hidden');
   const sessionSaveOpen = elements.sessionSaveModal && !elements.sessionSaveModal.classList.contains('hidden');
   const configEditOpen = elements.configEditModal && !elements.configEditModal.classList.contains('hidden');
-  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen || challengeOpen || sessionSaveOpen || configEditOpen;
+  const organizationOpen = elements.sessionOrganizationModal && !elements.sessionOrganizationModal.classList.contains('hidden');
+  const shouldLock = finalOpen || helpOpen || rankingOpen || statusOpen || challengeOpen || sessionSaveOpen || configEditOpen || organizationOpen;
   document.body.classList.toggle('modal-open', shouldLock);
 }
 
@@ -7788,12 +8593,61 @@ function startLiveMode() {
   renderLiveRotation();
 }
 
+function requestSessionLaunch() {
+  if (!state.schedule) return;
+  if (state.schedule.format === 'rotating-teams' && state.schedule.meta?.generationError) {
+    const launchMessage = [state.schedule.meta.generationError, state.schedule.meta.generationSuggestion].filter(Boolean).join(' ');
+    if (elements.resultsPrimaryHint) {
+      elements.resultsPrimaryHint.textContent = launchMessage;
+    }
+    alert(launchMessage);
+    return;
+  }
+  const organizationCheck = buildSessionOrganizationCheck(state.schedule);
+  if (organizationCheck && organizationCheck.waitingCount > 0) {
+    openSessionOrganizationModal(organizationCheck, launchCurrentSessionView);
+    return;
+  }
+  launchCurrentSessionView();
+}
+
+function launchCurrentSessionView() {
+  if (!state.schedule) return;
+  if (state.schedule?.format === 'swiss') {
+    openSwissPilotScreen();
+    return;
+  }
+  if (state.schedule?.format === 'challenge') {
+    openChallengePilotView();
+    return;
+  }
+  if (state.schedule?.format === 'rotating-teams') {
+    if (state.schedule.meta?.generationError) {
+      alert([state.schedule.meta.generationError, state.schedule.meta.generationSuggestion].filter(Boolean).join(' '));
+      return;
+    }
+    openRotatingTeamsPilotScreen();
+    return;
+  }
+  if (isLadderLiveMode(state.schedule)) {
+    openLadderPilotModal();
+    return;
+  }
+  if (isRaquettesPoulePilotMode(state.schedule)) {
+    openPoolPilotScreen();
+    return;
+  }
+  startLiveMode();
+}
+
 function isRaquettesPoulePilotMode(schedule = state.schedule) {
   return Boolean(state.activeModeId === 'raquettes-poule' && schedule?.format === 'round-robin');
 }
 
 function getModeLaunchCtaLabel() {
   switch (state.activeModeId) {
+    case 'sportco-poules-tournantes':
+      return 'Lancer les poules tournantes';
     case 'raquettes-poule':
       return 'Lancer les poules';
     case 'raquettes-ronde-suisse':
@@ -7813,6 +8667,8 @@ function getModeLaunchCtaLabel() {
 
 function getModeLaunchHint() {
   switch (state.activeModeId) {
+    case 'sportco-poules-tournantes':
+      return 'Lancez les poules tournantes pour saisir les scores et piloter les rotations.';
     case 'raquettes-poule':
       return 'Lancez les poules pour saisir les scores et piloter les matchs.';
     case 'raquettes-ronde-suisse':
@@ -7864,6 +8720,11 @@ function getStageLabel(mode = state.activeModeId, rotation = null, schedule = st
     return includeTotal && total ? `Journée ${dayNumber} / ${total}` : `Journée ${dayNumber}`;
   }
 
+  if (mode === 'sportco-poules-tournantes' || schedule?.format === 'rotating-teams') {
+    const rotationNumber = rotation?.number || 1;
+    return includeTotal && total ? `Rotation ${rotationNumber} / ${total}` : `Rotation ${rotationNumber}`;
+  }
+
   const rotationNumber = rotation?.number || 1;
   return includeTotal && total ? `Rotation ${rotationNumber} / ${total}` : `Rotation ${rotationNumber}`;
 }
@@ -7884,6 +8745,10 @@ function openChallengePilotView() {
   window.requestAnimationFrame(() => {
     elements.rotationView?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+}
+
+function isRotatingTeamsPilotScreenOpen() {
+  return state.currentScreen === 'rotating-pilot';
 }
 
 function isLadderLiveMode(schedule = state.schedule) {
@@ -7926,8 +8791,15 @@ function renderLadderPilotModal() {
     if (elements.ladderPilotNextBtn) elements.ladderPilotNextBtn.disabled = true;
     return;
   }
+  if (summary.activeFields === 0) {
+    elements.ladderPilotBody.innerHTML = '<p class="live-empty">Pas assez de participants pour former des matchs avec les terrains configurés. Réduisez le nombre de terrains ou augmentez le nombre de participants.</p>';
+    if (elements.ladderPilotMeta) elements.ladderPilotMeta.textContent = '';
+    if (elements.ladderPilotNextBtn) elements.ladderPilotNextBtn.disabled = true;
+    return;
+  }
   const rotation = summary.rotation;
   const roleAssignments = computeRoleAssignments(rotation);
+  const groupPanel = buildLadderGroupManagementPanel(state.schedule, rotation, roleAssignments);
   const metaParts = [
     formatLadderRotationLabel(rotation, state.schedule),
     `${summary.activeFields} terrains`,
@@ -7976,6 +8848,7 @@ function renderLadderPilotModal() {
       </div>
     </div>
     <div class="ladder-pilot-console">
+      ${groupPanel}
       <div class="ladder-pilot-modal-list">${cards}</div>
       <div class="ladder-pilot-next-cta">
         <button type="button" class="btn primary xl" data-ladder-next-cta ${nextActionDisabled ? 'disabled' : ''}>
@@ -8094,6 +8967,259 @@ function advancePoolPilotRotation() {
   }
 }
 
+function getRotatingTeamsGroupData(schedule = state.schedule, rotation = schedule?.rotations?.[state.liveRotationIndex]) {
+  if (!schedule || schedule.format !== 'rotating-teams' || !rotation) {
+    return { inPlay: [], referees: [], waiting: [], nextIn: [], notes: [] };
+  }
+  const inPlay = Array.from(
+    new Set(
+      rotation.matches.flatMap(match => [
+        ...(Array.isArray(match.homePlayers) ? match.homePlayers : []),
+        ...(Array.isArray(match.awayPlayers) ? match.awayPlayers : []),
+      ])
+    )
+  );
+  const referees = Array.from(
+    new Set([
+      ...(Array.isArray(rotation.referees) ? rotation.referees : []),
+      ...rotation.matches.flatMap(match => (Array.isArray(match.refereeNames) ? match.refereeNames : [])),
+    ].filter(Boolean))
+  );
+  const waiting = Array.from(
+    new Set([
+      ...(Array.isArray(rotation.byes) ? rotation.byes : []),
+      ...rotation.matches.flatMap(match => (Array.isArray(match.restNames) ? match.restNames : [])),
+    ].filter(Boolean))
+  ).filter(name => !inPlay.includes(name) && !referees.includes(name));
+  const nextRotation = schedule.rotations[state.liveRotationIndex + 1] || null;
+  const nextIn = nextRotation
+    ? Array.from(
+        new Set(
+          nextRotation.matches
+            .flatMap(match => [
+              ...(Array.isArray(match.homePlayers) ? match.homePlayers : []),
+              ...(Array.isArray(match.awayPlayers) ? match.awayPlayers : []),
+            ])
+            .filter(name => !inPlay.includes(name))
+        )
+      )
+    : [];
+  return {
+    inPlay,
+    referees,
+    waiting,
+    nextIn,
+    notes: [
+      'Les élèves en attente réintègrent progressivement les terrains selon les rotations.',
+      'Poules tournantes : les équipes changent pour équilibrer partenaires, adversaires et temps de jeu.',
+    ],
+  };
+}
+
+function buildRotatingTeamsBadgeListHTML(items) {
+  if (!items.length) {
+    return '<p class="ladder-group-empty">Aucun élève concerné sur cette rotation.</p>';
+  }
+  return `<div class="rest-badges">${items.map(name => `<span class="rest-badge">${escapeHtml(name)}</span>`).join('')}</div>`;
+}
+
+function buildRotatingPilotTeamColumn(side, label, names, score, matchId, options = {}) {
+  const disabled = options.disabled ? 'disabled' : '';
+  const displayLabel = `${label} · ${names.join(', ')}`;
+  const pills = names
+    .map(name => `<span class="rotating-player-pill ${side === 'home' ? 'team-a' : 'team-b'}">${escapeHtml(name)}</span>`)
+    .join('');
+  return `
+    <div class="live-team rotating-team">
+      <div class="rotating-team-head">
+        <span>${label}</span>
+        <div class="rotating-player-pill-list">${pills}</div>
+      </div>
+      <div class="live-score-pad">
+        <button type="button" class="score-adjust" aria-label="Diminuer le score de ${escapeHtml(displayLabel)}" data-score-side="${side}" data-score-step="-1" data-match-id="${matchId}" ${disabled}>−</button>
+        <input type="number" min="0" inputmode="numeric" aria-label="Score ${escapeHtml(displayLabel)}" data-match-id="${matchId}" data-score-input="${side}" value="${score}" ${disabled} />
+        <button type="button" class="score-adjust" aria-label="Augmenter le score de ${escapeHtml(displayLabel)}" data-score-side="${side}" data-score-step="1" data-match-id="${matchId}" ${disabled}>+</button>
+      </div>
+    </div>
+  `;
+}
+
+function buildRotatingPilotMatchCards(rotation) {
+  if (!rotation.matches.length) {
+    return '<p class="live-empty">Aucun match prévu pour cette rotation.</p>';
+  }
+  return rotation.matches
+    .map(match => {
+      const matchId = match.id || buildMatchKey(rotation.number, match.home, match.away);
+      // Ne pas muter match.id — stable depuis la génération
+      const homeScore = formatScoreValue(getScoreValue(matchId, 'home'));
+      const awayScore = formatScoreValue(getScoreValue(matchId, 'away'));
+      const complete = isMatchCompleteById(matchId);
+      const validated = isMatchValidated(matchId);
+      const controlsDisabled = validated;
+      const groupPill = match.groupLabel ? `<span class="group-pill">${escapeHtml(match.groupLabel)}</span>` : '';
+      const actionButtons = `
+        <button type="button" class="btn ghost tiny live-validate ${validated ? 'hidden' : ''}" data-validate-match="${matchId}" ${complete ? '' : 'disabled'}>Valider</button>
+        <button type="button" class="btn ghost tiny live-edit ${validated ? '' : 'hidden'}" data-edit-match="${matchId}">Modifier</button>
+      `;
+      const metaBlocks = [
+        Array.isArray(match.refereeNames) && match.refereeNames.length
+          ? `<p><strong>Arbitres :</strong> ${escapeHtml(match.refereeNames.join(', '))}</p>`
+          : '',
+        Array.isArray(match.restNames) && match.restNames.length
+          ? `<p><strong>Repos :</strong> ${escapeHtml(match.restNames.join(', '))}</p>`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('');
+      return `
+        <article class="live-match-card rotating-match-card ${validated ? 'validated' : 'active'}${complete || validated ? '' : ' incomplete'}" data-match-id="${matchId}">
+          <header>
+            <div class="live-card-meta">
+              ${groupPill}
+              <span>Terrain ${match.field || '—'}${rotation.startLabel ? ` · ${rotation.startLabel}` : ''}</span>
+            </div>
+            <span class="live-badge ${validated ? 'success' : 'info'}">${validated ? 'VALIDÉ' : 'EN COURS'}</span>
+          </header>
+          <div class="teams rotating-teams-grid">
+            ${buildRotatingPilotTeamColumn('home', 'Équipe A', Array.isArray(match.homePlayers) ? match.homePlayers : [], homeScore, matchId, { disabled: controlsDisabled })}
+            ${buildRotatingPilotTeamColumn('away', 'Équipe B', Array.isArray(match.awayPlayers) ? match.awayPlayers : [], awayScore, matchId, { disabled: controlsDisabled })}
+          </div>
+          ${metaBlocks ? `<div class="rotating-card-meta">${metaBlocks}</div>` : ''}
+          <div class="live-card-actions">
+            ${actionButtons}
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderRotatingTeamsPilot() {
+  if (!elements.rotatingPilotBody || !isRotatingTeamsMode(state.schedule)) return;
+  const rotation = state.schedule?.rotations?.[state.liveRotationIndex] || state.schedule?.rotations?.[0];
+  if (!rotation) {
+    elements.rotatingPilotBody.innerHTML = '<p class="live-empty">Aucune rotation disponible pour le pilotage.</p>';
+    if (elements.rotatingPilotMeta) elements.rotatingPilotMeta.textContent = '';
+    if (elements.rotatingPilotNextBtn) elements.rotatingPilotNextBtn.disabled = true;
+    return;
+  }
+  const groupData = getRotatingTeamsGroupData(state.schedule, rotation);
+  const totalMatches = rotation.matches.length;
+  const missing = countMissingScores(rotation.number);
+  const resolvedMatches = Math.max(0, totalMatches - missing);
+  const isComplete = totalMatches > 0 && missing === 0;
+  const isLastRotation = state.liveRotationIndex >= state.schedule.rotations.length - 1;
+  const nextLabel = isLastRotation ? 'Terminer la séance' : getNextStageActionLabel(state.schedule);
+  const disabledHint = isComplete
+    ? 'Tous les scores sont renseignés. Vous pouvez enchaîner immédiatement.'
+    : 'Complétez tous les scores pour débloquer la rotation suivante.';
+  const rankingCard = buildRotatingRankingCard(state.schedule, {
+    title: 'Classement individuel live',
+    compact: true,
+    uptoRotation: rotation.number,
+  });
+  if (elements.rotatingPilotTitle) {
+    elements.rotatingPilotTitle.textContent = `Poules tournantes — ${getStageLabel('sportco-poules-tournantes', rotation, state.schedule)}`;
+  }
+  if (elements.rotatingPilotMeta) {
+    elements.rotatingPilotMeta.textContent = `${resolvedMatches} / ${totalMatches} match(s) renseigné(s)`;
+  }
+  if (elements.rotatingPilotNextBtn) {
+    elements.rotatingPilotNextBtn.disabled = !isComplete;
+    elements.rotatingPilotNextBtn.textContent = nextLabel;
+  }
+  elements.rotatingPilotBody.innerHTML = `
+    <div class="ladder-focus-card ladder-focus-card-results pool-pilot-summary-card">
+      <div class="ladder-focus-copy">
+        <p class="eyebrow">Rotation en cours</p>
+        <h3>${getStageLabel('sportco-poules-tournantes', rotation, state.schedule)}</h3>
+        <p class="ladder-focus-lead">Saisissez les scores terrain par terrain puis faites entrer les prochains élèves à la rotation suivante.</p>
+        <div class="ladder-focus-stats">
+          <span class="ladder-summary-pill">${totalMatches} terrain${totalMatches > 1 ? 's' : ''} en jeu</span>
+          <span class="ladder-summary-pill">${resolvedMatches} / ${totalMatches} score(s) saisi(s)</span>
+          ${rotation.startLabel ? `<span class="ladder-summary-pill">${rotation.startLabel}</span>` : ''}
+        </div>
+      </div>
+      <div class="ladder-focus-actions">
+        <span class="state-pill ${isComplete ? 'live' : 'next'}">${isComplete ? 'Rotation prête' : `${missing} score(s) à saisir`}</span>
+      </div>
+    </div>
+    <section class="ladder-group-panel">
+      <div class="ladder-group-panel-head">
+        <h4>Gestion du groupe</h4>
+      </div>
+      <div class="ladder-group-grid">
+        <article class="ladder-group-card">
+          <h5>En jeu</h5>
+          ${buildRotatingTeamsBadgeListHTML(groupData.inPlay)}
+        </article>
+        <article class="ladder-group-card">
+          <h5>Arbitres</h5>
+          ${buildRotatingTeamsBadgeListHTML(groupData.referees)}
+        </article>
+        <article class="ladder-group-card">
+          <h5>En attente</h5>
+          ${buildRotatingTeamsBadgeListHTML(groupData.waiting)}
+        </article>
+        <article class="ladder-group-card">
+          <h5>Prochains entrants</h5>
+          ${buildRotatingTeamsBadgeListHTML(groupData.nextIn)}
+        </article>
+      </div>
+      <div class="ladder-group-notes">
+        ${(groupData.notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('')}
+      </div>
+    </section>
+    <div class="pool-pilot-console rotating-pilot-console">
+      <div class="pool-pilot-list">${buildRotatingPilotMatchCards(rotation)}</div>
+      <div class="rotating-ranking-wrap">${rankingCard.html}</div>
+      <div class="pool-pilot-next-cta">
+        <button type="button" class="btn primary xl" data-rotating-next-cta ${isComplete ? '' : 'disabled'}>
+          ${nextLabel}
+        </button>
+        <p class="pool-pilot-next-hint">${disabledHint}</p>
+      </div>
+    </div>
+  `;
+}
+
+function openRotatingTeamsPilotScreen() {
+  if (!isRotatingTeamsMode(state.schedule) || !elements.rotatingPilotScreen) return;
+  if (state.schedule?.meta?.generationError) {
+    goTo('results');
+    if (elements.resultsPrimaryHint) {
+      elements.resultsPrimaryHint.textContent = state.schedule.meta.generationError;
+    }
+    return;
+  }
+  closeOverflowPanels();
+  goTo('rotating-pilot');
+  renderRotatingTeamsPilot();
+}
+
+function closeRotatingTeamsPilotScreen() {
+  if (!elements.rotatingPilotScreen) return;
+  goTo('results');
+  setActiveView('rotations');
+}
+
+function advanceRotatingTeamsRotation() {
+  const progressed = advanceLiveRotation();
+  if (
+    progressed &&
+    isRotatingTeamsMode(state.schedule) &&
+    !(elements.finalRankingModal && !elements.finalRankingModal.classList.contains('hidden'))
+  ) {
+    openRotatingTeamsPilotScreen();
+  }
+}
+
+function refreshRotatingTeamsPilotIfOpen() {
+  if (!isRotatingTeamsPilotScreenOpen()) return;
+  renderRotatingTeamsPilot();
+}
+
 function isSwissWinnerResolved(match) {
   if (!match) return false;
   if (match.bye) return true;
@@ -8201,7 +9327,8 @@ function closeSwissPilotScreen() {
 }
 
 function closeLadderPilotModal() {
-  requestConfigurationEdit('options', () => goTo('options', { skipConfigConfirmation: true }));
+  goTo('results');
+  setActiveView('rotations');
 }
 
 function refreshLadderPilotModalIfOpen() {
@@ -8508,8 +9635,8 @@ function renderLiveRest(byes = [], roleAssignments) {
   }
   const practiceType = getPracticeTypeFromMeta(state.schedule?.meta);
   const waitingLabel = waiting.length > 1
-    ? `${formatParticipantLabel({ practiceType, plural: true, capitalized: true })} en attente`
-    : `${formatParticipantLabel({ practiceType, capitalized: true })} en attente`;
+    ? `${formatParticipantLabel({ practiceType, plural: true, capitalized: true })} en attente (entrent à la rotation suivante)`
+    : `${formatParticipantLabel({ practiceType, capitalized: true })} en attente (entre à la rotation suivante)`;
   const waitingBlock = hasWaiting ? `<strong>${waitingLabel} :</strong> ${waiting.join(', ')}` : '';
   const roleBlock = buildRoleSummaryMarkup(roleTeams);
   const hintBlock = buildRestRoleHint();
@@ -9034,7 +10161,7 @@ function renderProjectionScreen() {
     : getStageLabel(state.activeModeId, rotation, state.schedule, { includeTotal: true, total });
   if (state.schedule.format === 'ladder') {
     const movementFeed = computeLadderMovementFeed(state.schedule, rotation, roleAssignments);
-    const bench = computeLadderBenchData(state.schedule, rotation, roleAssignments);
+    const groupData = getLadderGroupManagementData(state.schedule, rotation, roleAssignments);
     const standings = computeLadderStandings(state.schedule).slice(0, 8);
     elements.projectionFields.innerHTML = rotation.matches.length
       ? rotation.matches
@@ -9085,15 +10212,18 @@ function renderProjectionScreen() {
       elements.projectionRest.innerHTML = `
         <header>
           <div class="projection-section-meta">
-            <h4>Flux de classe</h4>
-            <span>Attente, entrées, indisponibles</span>
+            <h4>Gestion du groupe</h4>
+            <span>En jeu, arbitres, attente, prochains entrants</span>
           </div>
           <span class="state-pill rest">Organisation</span>
         </header>
         <div class="ladder-projection-rest">
-          <p><strong>En attente :</strong> ${bench.waiting.length ? bench.waiting.join(', ') : 'Personne'}</p>
-          <p><strong>Prochains entrants :</strong> ${bench.nextEntrants.length ? bench.nextEntrants.join(', ') : 'Aucun changement'}</p>
-          <p><strong>Indisponibles :</strong> ${bench.unavailable.length ? bench.unavailable.join(', ') : 'Aucun'}</p>
+          <p><strong>En jeu :</strong> ${groupData.inPlay.length ? groupData.inPlay.join(', ') : 'Personne'}</p>
+          <p><strong>Arbitres :</strong> ${groupData.referees.length ? groupData.referees.join(', ') : 'Aucun'}</p>
+          <p><strong>En attente :</strong> ${groupData.waiting.length ? groupData.waiting.join(', ') : 'Personne'}</p>
+          <p><strong>Entrent ensuite :</strong> ${groupData.nextEntrants.length ? groupData.nextEntrants.join(', ') : 'Aucun changement'}</p>
+          <p><strong>Indisponibles :</strong> ${groupData.unavailable.length ? groupData.unavailable.join(', ') : 'Aucun'}</p>
+          ${groupData.notes.map(note => `<p>${escapeHtml(note)}</p>`).join('')}
         </div>
       `;
       elements.projectionRest.classList.remove('hidden');
@@ -9329,6 +10459,7 @@ function validateMatch(matchId) {
   renderChronoScreen();
   refreshLadderPilotModalIfOpen();
   refreshPoolPilotScreenIfOpen();
+  refreshRotatingTeamsPilotIfOpen();
 }
 
 function unlockValidatedMatch(matchId, options = {}) {
@@ -9348,6 +10479,7 @@ function unlockValidatedMatch(matchId, options = {}) {
   renderChronoScreen();
   refreshLadderPilotModalIfOpen();
   refreshPoolPilotScreenIfOpen();
+  refreshRotatingTeamsPilotIfOpen();
   if (options.openEditor) {
     toggleLadderScoreEditor(matchId, { forceOpen: true });
   }
@@ -9451,6 +10583,8 @@ function isRotationComplete(rotationNumber) {
   return rotation.matches.every(match => {
     const participants = resolveMatchParticipants(match, state.schedule);
     if (isMatchNeutralized(participants)) return true;
+    if (isEntityInactive(getEntityStatusByName(participants.home)) ||
+        isEntityInactive(getEntityStatusByName(participants.away))) return true;
     const key = match.id || buildMatchKey(rotation.number, participants.home, participants.away);
     return isMatchCompleteById(key);
   });
@@ -9744,15 +10878,16 @@ function handleLiveClick(event) {
     }
     return;
   }
+  const rotatingNextRotationCta = event.target.closest('[data-rotating-next-cta]');
+  if (rotatingNextRotationCta) {
+    if (!rotatingNextRotationCta.disabled) {
+      advanceRotatingTeamsRotation();
+    }
+    return;
+  }
   const openCurrentButton = event.target.closest('[data-open-current-rotation]');
   if (openCurrentButton) {
-    if (isLadderLiveMode(state.schedule)) {
-      openLadderPilotModal();
-    } else if (isRaquettesPoulePilotMode(state.schedule)) {
-      openPoolPilotScreen();
-    } else {
-      focusCurrentLadderRotation();
-    }
+    requestSessionLaunch();
     return;
   }
   const closeCurrentButton = event.target.closest('[data-close-current-rotation]');
@@ -9838,12 +10973,15 @@ function applyScoreChange(matchId, side, value) {
     updateLiveControls();
     renderChronoScreen();
     renderProjectionScreen();
-    const teamsView = buildTeamEntriesFromSchedule(state.schedule);
+    const teamsView = state.schedule.format === 'rotating-teams'
+      ? buildRotatingTeamsEntriesFromSchedule(state.schedule)
+      : buildTeamEntriesFromSchedule(state.schedule);
     state.schedule.teams = teamsView;
     renderTeamView(teamsView);
   }
   refreshLadderPilotModalIfOpen();
   refreshPoolPilotScreenIfOpen();
+  refreshRotatingTeamsPilotIfOpen();
 }
 
 function syncScoreInputs(matchId, side, value) {
@@ -10052,6 +11190,9 @@ function generateSchedule(teams, options) {
   if (format === 'round-robin') {
     return buildSinglePoolSchedule(teams, options);
   }
+  if (format === 'rotating-teams') {
+    return generateRotatingTeamsSchedule(teams, options);
+  }
   if (format === 'ladder') {
     return buildLadderSchedule(teams, options);
   }
@@ -10073,6 +11214,839 @@ function generateSchedule(teams, options) {
     return buildSinglePoolSchedule(teams, options);
   }
   return buildGroupedSchedule(groups, teams, options, { finals: format === 'groups-finals' });
+}
+
+function getRotatingTeamLabel(names) {
+  return names.filter(Boolean).join(' · ');
+}
+
+function getRotatingPairCount(map, leftId, rightId) {
+  return map.get(`${Math.min(leftId, rightId)}:${Math.max(leftId, rightId)}`) || 0;
+}
+
+function incrementRotatingPairCount(map, leftId, rightId) {
+  const key = `${Math.min(leftId, rightId)}:${Math.max(leftId, rightId)}`;
+  map.set(key, (map.get(key) || 0) + 1);
+}
+
+function chooseRotatingCandidate(available, currentTeam, partnerCounts, playedCounts) {
+  let bestIndex = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+  available.forEach((candidate, index) => {
+    const partnerPenalty = currentTeam.reduce((sum, player) => sum + getRotatingPairCount(partnerCounts, player.id, candidate.id), 0);
+    const score = partnerPenalty * 100 + (playedCounts.get(candidate.id) || 0) * 10 + (candidate.seed || 0);
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  return available.splice(bestIndex, 1)[0];
+}
+
+function buildRotatingTeamSets(players, teamSize, partnerCounts, playedCounts) {
+  const pool = [...players];
+  const teams = [];
+  while (pool.length >= teamSize) {
+    const first = pool.shift();
+    const team = [first];
+    while (team.length < teamSize && pool.length) {
+      team.push(chooseRotatingCandidate(pool, team, partnerCounts, playedCounts));
+    }
+    teams.push(team);
+  }
+  return teams;
+}
+
+function getRotatingOpponentPenalty(teamA, teamB, opponentCounts) {
+  return teamA.reduce(
+    (sum, left) => sum + teamB.reduce((inner, right) => inner + getRotatingPairCount(opponentCounts, left.id, right.id), 0),
+    0
+  );
+}
+
+function buildRotatingTeamsMatchEntry(rotationNumber, fieldNumber, homeTeam, awayTeam) {
+  const homeNames = homeTeam.map(player => player.name);
+  const awayNames = awayTeam.map(player => player.name);
+  const homePlayerIds = homeTeam.map(player => player.id);
+  const awayPlayerIds = awayTeam.map(player => player.id);
+  const poolId = homeTeam[0]?.poolId ?? null;
+  const poolSegment = poolId ? `-${poolId}` : '';
+  return {
+    id: `rotating${poolSegment}-${rotationNumber}-${fieldNumber}`,
+    phase: 'rotating-teams',
+    field: fieldNumber,
+    order: 1,
+    home: getRotatingTeamLabel(homeNames),
+    away: getRotatingTeamLabel(awayNames),
+    homePlayers: homeNames,
+    awayPlayers: awayNames,
+    homePlayerIds,
+    awayPlayerIds,
+  };
+}
+
+function buildRotatingConfig(options = state.options, participantCount = state.participants) {
+  return {
+    organization: getRotatingOrganization(options),
+    poolCount: getRotatingPoolCount(options, participantCount),
+    teamSize: getRotatingTeamSize(options),
+    targetMatches: getRotatingTargetMatches(options),
+    points: getRotatingScoring(options),
+    fieldCount: clampNumber(Number(options?.fields) || 1, 1, 16, 1),
+    duration: clampNumber(Number(options?.duration) || 12, 1, 180, 12),
+    startTime: options?.startTime || state.options.startTime,
+    rotationBuffer: clampNumber(Number(options?.turnaround) || 0, 0, 60, 0),
+    autoAssign: options?.rotatingTeams?.autoAssign === 'balanced' ? 'balanced' : 'balanced',
+  };
+}
+
+function buildRotatingPlayers(teams, config) {
+  const names = [...teams];
+  const players = names.map((name, index) => ({
+    id: index + 1,
+    seed: index,
+    name,
+    poolId: null,
+    stats: {
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      points: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalAverage: 0,
+    },
+  }));
+  if (config.organization !== 'pools') {
+    return players;
+  }
+  const poolCount = Math.max(1, Math.min(config.poolCount, players.length));
+  const baseSize = Math.floor(players.length / poolCount);
+  const extra = players.length % poolCount;
+  let cursor = 0;
+  for (let index = 0; index < poolCount; index += 1) {
+    const size = baseSize + (index < extra ? 1 : 0);
+    const poolId = String.fromCharCode(65 + index);
+    for (let slot = 0; slot < size; slot += 1) {
+      if (!players[cursor]) break;
+      players[cursor].poolId = poolId;
+      cursor += 1;
+    }
+  }
+  return players;
+}
+
+function groupPlayersByPool(players) {
+  return players.reduce((groups, player) => {
+    const key = player.poolId || 'ALL';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(player);
+    return groups;
+  }, {});
+}
+
+function buildRotatingPoolsConfig(names, options) {
+  const config = buildRotatingConfig(options, names.length);
+  const players = buildRotatingPlayers(names, config);
+  const grouped = groupPlayersByPool(players);
+  const pools =
+    config.organization === 'pools'
+      ? Object.entries(grouped).map(([poolId, poolPlayers]) => ({
+          id: poolId,
+          label: `Poule ${poolId}`,
+          playerIds: poolPlayers.map(player => player.id),
+        }))
+      : [
+          {
+            id: 'all',
+            label: 'Classe entière',
+            playerIds: players.map(player => player.id),
+          },
+        ];
+  return {
+    organization: config.organization,
+    poolCount: pools.length,
+    players,
+    pools,
+    teamSize: config.teamSize,
+  };
+}
+
+function getRotatingPoolsSuggestion(payload) {
+  const config = payload?.config || buildRotatingConfig();
+  const playerCount = Number(payload?.playerCount) || 0;
+  const minPlayersPerMatch = Math.max(2, config.teamSize * 2);
+  const suggestions = [];
+  if (config.teamSize > 2 && playerCount >= (config.teamSize - 1) * 2) {
+    suggestions.push(`passez en ${config.teamSize - 1}c${config.teamSize - 1}`);
+  }
+  if (config.organization === 'pools') {
+    const maxPools = Math.max(1, Math.floor(playerCount / minPlayersPerMatch));
+    if (config.poolCount > maxPools) {
+      suggestions.push(`réduisez le nombre de poules à ${maxPools}`);
+    }
+    suggestions.push('choisissez classe entière');
+  }
+  if (!suggestions.length && playerCount < minPlayersPerMatch) {
+    suggestions.push(`ajoutez des élèves pour atteindre ${minPlayersPerMatch}`);
+  }
+  if (!suggestions.length) return '';
+  if (suggestions.length === 1) {
+    return `Conseil : ${suggestions[0]}.`;
+  }
+  return `Conseil : ${suggestions.slice(0, -1).join(', ')} ou ${suggestions[suggestions.length - 1]}.`;
+}
+
+function validateRotatingPoolsConfig(teams, options = state.options) {
+  const names = [...teams].filter(Boolean);
+  const config = buildRotatingConfig(options, names.length);
+  const players = buildRotatingPlayers(names, config);
+  const groups = config.organization === 'pools'
+    ? Object.entries(groupPlayersByPool(players)).map(([poolId, poolPlayers]) => ({
+        id: poolId,
+        label: `Poule ${poolId}`,
+        players: poolPlayers,
+      }))
+    : [{ id: 'all', label: 'Classe entière', players }];
+  const minPlayersPerMatch = config.teamSize * 2;
+  const firstTooSmallGroup = groups.find(group => group.players.length < minPlayersPerMatch);
+  if (firstTooSmallGroup) {
+    const scopeLabel = config.organization === 'pools' ? 'par poule' : 'au total';
+    const message = `Configuration impossible : en ${config.teamSize}c${config.teamSize}, il faut au moins ${minPlayersPerMatch} élèves ${scopeLabel}.`;
+    return {
+      valid: false,
+      config,
+      players,
+      groups,
+      message,
+      suggestion: getRotatingPoolsSuggestion({
+        config,
+        playerCount: names.length,
+      }),
+    };
+  }
+  const totalPossibleMatches = groups.reduce(
+    (sum, group) => sum + Math.floor(group.players.length / minPlayersPerMatch),
+    0
+  );
+  if (totalPossibleMatches <= 0) {
+    return {
+      valid: false,
+      config,
+      players,
+      groups,
+      message: `Configuration impossible : aucun match ${config.teamSize}c${config.teamSize} ne peut être formé avec les réglages actuels.`,
+      suggestion: getRotatingPoolsSuggestion({
+        config,
+        playerCount: names.length,
+      }),
+    };
+  }
+  return {
+    valid: true,
+    config,
+    players,
+    groups,
+    message: '',
+    suggestion: '',
+  };
+}
+
+function generateRotatingGroups(poolConfig) {
+  const playerMap = new Map(poolConfig.players.map(player => [player.id, player]));
+  return (poolConfig.pools || [])
+    .map(pool => ({
+      id: pool.id,
+      label: pool.label,
+      players: (pool.playerIds || []).map(playerId => playerMap.get(playerId)).filter(Boolean),
+    }))
+    .filter(group => group.players.length > 0);
+}
+
+function scoreRotatingCandidateMatch(teamA, teamB, context) {
+  const { opponentCounts, playedCounts, targetMatches } = context;
+  const combined = [...teamA, ...teamB];
+  const opponentPenalty = getRotatingOpponentPenalty(teamA, teamB, opponentCounts);
+  const playedValues = combined.map(player => playedCounts.get(player.id) || 0);
+  const spreadPenalty = Math.max(...playedValues) - Math.min(...playedValues);
+  const overTargetPenalty = combined.reduce(
+    (sum, player) => sum + Math.max((playedCounts.get(player.id) || 0) + 1 - targetMatches, 0),
+    0
+  );
+  const volumePenalty = playedValues.reduce((sum, value) => sum + value, 0);
+  return opponentPenalty * 1000 + overTargetPenalty * 100 + spreadPenalty * 10 + volumePenalty;
+}
+
+function pairRotatingTeams(teams, opponentCounts, context = {}) {
+  const pending = [...teams];
+  const pairs = [];
+  while (pending.length >= 2) {
+    const homeTeam = pending.shift();
+    let bestIndex = 0;
+    let bestScore = Number.POSITIVE_INFINITY;
+    pending.forEach((candidate, index) => {
+      const score = scoreRotatingCandidateMatch(homeTeam, candidate, {
+        opponentCounts,
+        playedCounts: context.playedCounts || new Map(),
+        targetMatches: context.targetMatches || 3,
+      });
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+    const awayTeam = pending.splice(bestIndex, 1)[0];
+    pairs.push([homeTeam, awayTeam]);
+  }
+  return pairs;
+}
+
+function distributeRotatingFields(groups, totalFields, teamSize, rotationNumber) {
+  const eligibleGroups = groups
+    .map((group, index) => ({
+      ...group,
+      index,
+      maxMatches: Math.floor(group.players.length / (teamSize * 2)),
+    }))
+    .filter(group => group.maxMatches > 0);
+  if (!eligibleGroups.length || totalFields <= 0) return new Map();
+  const quotaMap = new Map(eligibleGroups.map(group => [group.id, 0]));
+  const totalPlayers = eligibleGroups.reduce((sum, group) => sum + group.players.length, 0);
+  let assigned = 0;
+  eligibleGroups.forEach(group => {
+    const raw = (group.players.length / totalPlayers) * totalFields;
+    const base = Math.min(group.maxMatches, Math.floor(raw));
+    quotaMap.set(group.id, base);
+    assigned += base;
+  });
+  let remaining = Math.max(0, totalFields - assigned);
+  const rotatingOrder = [...eligibleGroups].sort((a, b) => ((a.index + rotationNumber) % eligibleGroups.length) - ((b.index + rotationNumber) % eligibleGroups.length));
+  while (remaining > 0) {
+    let granted = false;
+    rotatingOrder.forEach(group => {
+      if (remaining <= 0) return;
+      const current = quotaMap.get(group.id) || 0;
+      if (current >= group.maxMatches) return;
+      quotaMap.set(group.id, current + 1);
+      remaining -= 1;
+      granted = true;
+    });
+    if (!granted) break;
+  }
+  return quotaMap;
+}
+
+function getRotatingCandidateMatchKey(teamA, teamB) {
+  const left = [...teamA.map(player => player.id)].sort((a, b) => a - b).join('-');
+  const right = [...teamB.map(player => player.id)].sort((a, b) => a - b).join('-');
+  return [left, right].sort().join('_vs_');
+}
+
+function getRotatingPartnerPenalty(team, partnerCounts) {
+  let penalty = 0;
+  for (let index = 0; index < team.length; index += 1) {
+    for (let inner = index + 1; inner < team.length; inner += 1) {
+      penalty += getRotatingPairCount(partnerCounts, team[index].id, team[inner].id);
+    }
+  }
+  return penalty;
+}
+
+function buildRotatingPriorityPlayers(groupPlayers, context, attempt = 0) {
+  const { playedCounts, restCounts, lastPlayedRotation, targetMatches, rotationNumber } = context;
+  return [...groupPlayers].sort((a, b) => {
+    const aPlayed = playedCounts.get(a.id) || 0;
+    const bPlayed = playedCounts.get(b.id) || 0;
+    const aUnderTarget = aPlayed < targetMatches ? 0 : 1;
+    const bUnderTarget = bPlayed < targetMatches ? 0 : 1;
+    if (aUnderTarget !== bUnderTarget) return aUnderTarget - bUnderTarget;
+    if (aPlayed !== bPlayed) return aPlayed - bPlayed;
+    const aRest = restCounts.get(a.id) || 0;
+    const bRest = restCounts.get(b.id) || 0;
+    if (aRest !== bRest) return bRest - aRest;
+    const aLast = lastPlayedRotation.get(a.id) || 0;
+    const bLast = lastPlayedRotation.get(b.id) || 0;
+    if (aLast !== bLast) return aLast - bLast;
+    const aJitter = (a.seed + rotationNumber + attempt) % Math.max(groupPlayers.length, 1);
+    const bJitter = (b.seed + rotationNumber + attempt) % Math.max(groupPlayers.length, 1);
+    if (aJitter !== bJitter) return aJitter - bJitter;
+    return a.seed - b.seed;
+  });
+}
+
+function generateAllPossibleMatches(groupPlayers, config, context) {
+  const teamSize = clampNumber(Number(config.teamSize) || 2, 2, 6, 2);
+  const fieldQuota = Math.max(1, Number(context.fieldQuota) || 1);
+  const attemptLimit = Math.max(18, Math.min(96, groupPlayers.length * 4));
+  const candidates = new Map();
+  for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
+    const orderedPlayers = buildRotatingPriorityPlayers(groupPlayers, context, attempt);
+    const teams = buildRotatingTeamSets(orderedPlayers, teamSize, context.partnerCounts, context.playedCounts);
+    const pairs = pairRotatingTeams(teams, context.opponentCounts, {
+      playedCounts: context.playedCounts,
+      targetMatches: context.targetMatches,
+    });
+    pairs.slice(0, Math.max(fieldQuota * 2, 1)).forEach(pair => {
+      const [teamA, teamB] = pair;
+      if (teamA.length !== teamSize || teamB.length !== teamSize) return;
+      const key = getRotatingCandidateMatchKey(teamA, teamB);
+      if (candidates.has(key)) return;
+      candidates.set(key, {
+        key,
+        teamA,
+        teamB,
+      });
+    });
+  }
+  return [...candidates.values()];
+}
+
+function selectBalancedMatches(allMatches, groupPlayers, config, context) {
+  const teamSize = clampNumber(Number(config.teamSize) || 2, 2, 6, 2);
+  const fieldQuota = Math.max(0, Number(context.fieldQuota) || 0);
+  if (!fieldQuota || !allMatches.length) {
+    return {
+      matches: [],
+      waitingPlayers: [...groupPlayers],
+      referees: [],
+      inPlayPlayers: [],
+    };
+  }
+  const scored = allMatches
+    .map(candidate => {
+      const players = [...candidate.teamA, ...candidate.teamB];
+      const playedValues = players.map(player => context.playedCounts.get(player.id) || 0);
+      const teammatePenalty =
+        getRotatingPartnerPenalty(candidate.teamA, context.partnerCounts) +
+        getRotatingPartnerPenalty(candidate.teamB, context.partnerCounts);
+      const opponentPenalty = getRotatingOpponentPenalty(candidate.teamA, candidate.teamB, context.opponentCounts);
+      const overTargetPenalty = players.reduce(
+        (sum, player) => sum + Math.max((context.playedCounts.get(player.id) || 0) + 1 - context.targetMatches, 0),
+        0
+      );
+      const spreadPenalty = Math.max(...playedValues) - Math.min(...playedValues);
+      const restBonus = players.reduce((sum, player) => sum + (context.restCounts.get(player.id) || 0), 0);
+      return {
+        ...candidate,
+        score: teammatePenalty * 1000 + opponentPenalty * 800 + overTargetPenalty * 120 + spreadPenalty * 30 - restBonus,
+      };
+    })
+    .sort((a, b) => a.score - b.score);
+
+  const selected = [];
+  const usedIds = new Set();
+  scored.forEach(candidate => {
+    if (selected.length >= fieldQuota) return;
+    const ids = [...candidate.teamA, ...candidate.teamB].map(player => player.id);
+    if (ids.some(playerId => usedIds.has(playerId))) return;
+    if (candidate.teamA.length !== teamSize || candidate.teamB.length !== teamSize) return;
+    selected.push(candidate);
+    ids.forEach(playerId => usedIds.add(playerId));
+  });
+
+  const inPlayPlayers = Array.from(new Set(selected.flatMap(candidate => [...candidate.teamA, ...candidate.teamB])));
+  const waitingPool = groupPlayers.filter(player => !usedIds.has(player.id));
+  const referees = waitingPool.slice(0, Math.min(waitingPool.length, selected.length));
+  const refereeIds = new Set(referees.map(player => player.id));
+  const waitingPlayers = waitingPool.filter(player => !refereeIds.has(player.id));
+  const matches = selected.map((candidate, index) => {
+    const referee = referees[index] ? [referees[index]] : [];
+    return {
+      ...buildRotatingTeamsMatchEntry(context.rotationNumber, index + 1, candidate.teamA, candidate.teamB),
+      poolId: context.group.id,
+      groupLabel: context.group.label,
+      refereePlayerIds: referee.map(player => player.id),
+      refereeNames: referee.map(player => player.name),
+      restPlayerIds: waitingPlayers.map(player => player.id),
+      restNames: waitingPlayers.map(player => player.name),
+      status: 'pending',
+    };
+  });
+
+  inPlayPlayers.forEach(player => {
+    context.playedCounts.set(player.id, (context.playedCounts.get(player.id) || 0) + 1);
+    context.lastPlayedRotation.set(player.id, context.rotationNumber);
+  });
+  [...waitingPlayers, ...referees].forEach(player => {
+    context.restCounts.set(player.id, (context.restCounts.get(player.id) || 0) + 1);
+  });
+  matches.forEach(match => {
+    match.homePlayerIds.forEach((playerId, playerIndex) => {
+      for (let index = playerIndex + 1; index < match.homePlayerIds.length; index += 1) {
+        incrementRotatingPairCount(context.partnerCounts, playerId, match.homePlayerIds[index]);
+      }
+    });
+    match.awayPlayerIds.forEach((playerId, playerIndex) => {
+      for (let index = playerIndex + 1; index < match.awayPlayerIds.length; index += 1) {
+        incrementRotatingPairCount(context.partnerCounts, playerId, match.awayPlayerIds[index]);
+      }
+    });
+    match.homePlayerIds.forEach(leftId => {
+      match.awayPlayerIds.forEach(rightId => {
+        incrementRotatingPairCount(context.opponentCounts, leftId, rightId);
+      });
+    });
+  });
+
+  return {
+    matches,
+    waitingPlayers,
+    referees,
+    inPlayPlayers,
+  };
+}
+
+function generateBalancedMatchesForGroup(group, context) {
+  const { teamSize, fieldQuota, rotationNumber, playedCounts, lastPlayedRotation, restCounts, partnerCounts, opponentCounts, targetMatches } = context;
+  const maxMatches = Math.min(fieldQuota, Math.floor(group.players.length / (teamSize * 2)));
+  if (!maxMatches) {
+    return {
+      matches: [],
+      waitingPlayers: [...group.players],
+      referees: [],
+      inPlayPlayers: [],
+    };
+  }
+  const allPossibleMatches = generateAllPossibleMatches(group.players, { teamSize, fieldQuota: maxMatches }, {
+    group,
+    teamSize,
+    fieldQuota: maxMatches,
+    rotationNumber,
+    playedCounts,
+    lastPlayedRotation,
+    restCounts,
+    partnerCounts,
+    opponentCounts,
+    targetMatches,
+  });
+  return selectBalancedMatches(allPossibleMatches, group.players, { teamSize, fieldQuota: maxMatches }, {
+    group,
+    teamSize,
+    fieldQuota: maxMatches,
+    rotationNumber,
+    playedCounts,
+    lastPlayedRotation,
+    restCounts,
+    partnerCounts,
+    opponentCounts,
+    targetMatches,
+  });
+}
+
+function generateRotatingScheduleForGroup(groupPlayers, config) {
+  const players = [...groupPlayers];
+  const poolId = config.poolId || null;
+  const poolLabel = config.poolLabel || (poolId ? `Poule ${poolId}` : 'Classe entière');
+  const teamSize = clampNumber(Number(config.teamSize) || 2, 2, 6, 2);
+  const targetMatches = clampNumber(Number(config.targetMatches) || 3, 1, 12, 3);
+  const localFieldCount = Math.max(0, Math.min(Number(config.fieldCount) || 1, Math.floor(players.length / (teamSize * 2))));
+  const warnings = [];
+  if (players.length < teamSize * 2) {
+    warnings.push(`${poolLabel} : pas assez d'élèves pour former un match ${teamSize}c${teamSize}.`);
+    return {
+      poolId,
+      poolLabel,
+      players,
+      rotations: [],
+      warnings,
+      activeFields: 0,
+    };
+  }
+  const group = { id: poolId || 'ALL', label: poolLabel, players };
+  const playedCounts = new Map(players.map(player => [player.id, 0]));
+  const lastPlayedRotation = new Map(players.map(player => [player.id, 0]));
+  const restCounts = new Map(players.map(player => [player.id, 0]));
+  const partnerCounts = new Map();
+  const opponentCounts = new Map();
+  const minRotationEstimate = Math.max(1, Math.ceil((players.length * targetMatches) / Math.max(localFieldCount * teamSize * 2, 1)));
+  const rotations = [];
+  let rotationNumber = 1;
+  const remainingTarget = () => Math.min(...players.map(player => playedCounts.get(player.id) || 0));
+
+  while (rotationNumber <= 48 && (rotationNumber <= minRotationEstimate || remainingTarget() < targetMatches)) {
+    const summary = generateBalancedMatchesForGroup(group, {
+      teamSize,
+      fieldQuota: localFieldCount,
+      rotationNumber,
+      playedCounts,
+      lastPlayedRotation,
+      restCounts,
+      partnerCounts,
+      opponentCounts,
+      targetMatches,
+    });
+    if (!summary.matches.length) break;
+    const matches = summary.matches.map((match, index) => ({
+      ...match,
+      field: index + 1,
+      order: 1,
+      poolId,
+      groupLabel: poolLabel,
+    }));
+    rotations.push({
+      number: rotationNumber,
+      poolId,
+      groupLabel: poolLabel,
+      phase: 'rotating-teams',
+      title: `Rotation ${rotationNumber}`,
+      matches,
+      byes: summary.waitingPlayers.map(player => player.name),
+      byeIds: summary.waitingPlayers.map(player => player.id),
+      referees: summary.referees.map(player => player.name),
+      refereeIds: summary.referees.map(player => player.id),
+      localFieldCount: matches.length,
+    });
+    rotationNumber += 1;
+  }
+
+  return {
+    poolId,
+    poolLabel,
+    players,
+    rotations,
+    warnings,
+    activeFields: localFieldCount,
+  };
+}
+
+function mergePoolSchedulesByRotation(schedulesByPool, config) {
+  const activeSchedules = schedulesByPool.filter(entry => Array.isArray(entry.rotations) && entry.rotations.length);
+  if (!activeSchedules.length) return [];
+  const cursors = new Map(activeSchedules.map(entry => [entry.poolId, 0]));
+  const playerIdsByPool = new Map(activeSchedules.map(entry => [entry.poolId, entry.players.map(player => player.id)]));
+  const playerNamesByPool = new Map(activeSchedules.map(entry => [entry.poolId, entry.players.map(player => player.name)]));
+  const rotations = [];
+  let waveStartIndex = 0;
+  let globalRotationNumber = 1;
+  let clock = parseTime(config.startTime);
+
+  while (activeSchedules.some(entry => (cursors.get(entry.poolId) || 0) < entry.rotations.length)) {
+    let remainingFields = config.fieldCount;
+    let nextField = 1;
+    const scheduledChunks = [];
+    for (let offset = 0; offset < activeSchedules.length; offset += 1) {
+      const entry = activeSchedules[(waveStartIndex + offset) % activeSchedules.length];
+      const cursor = cursors.get(entry.poolId) || 0;
+      const localRotation = entry.rotations[cursor];
+      if (!localRotation) continue;
+      const neededFields = localRotation.matches.length;
+      if (!neededFields) {
+        cursors.set(entry.poolId, cursor + 1);
+        continue;
+      }
+      if (neededFields > remainingFields && scheduledChunks.length > 0) {
+        continue;
+      }
+      if (neededFields > remainingFields) {
+        continue;
+      }
+      const matches = localRotation.matches.map(match => ({
+        ...match,
+        rotationIndex: globalRotationNumber,
+        field: nextField++,
+      }));
+      remainingFields -= matches.length;
+      scheduledChunks.push({
+        poolId: entry.poolId,
+        poolLabel: entry.poolLabel,
+        matches,
+        byes: localRotation.byes || [],
+        byeIds: localRotation.byeIds || [],
+        referees: localRotation.referees || [],
+        refereeIds: localRotation.refereeIds || [],
+      });
+      cursors.set(entry.poolId, cursor + 1);
+      if (remainingFields <= 0) break;
+    }
+    if (!scheduledChunks.length) break;
+
+    const scheduledPoolIds = new Set(scheduledChunks.map(chunk => chunk.poolId));
+    const byeNames = [];
+    const byeIds = [];
+    const refereeNames = [];
+    const refereeIds = [];
+    const matches = [];
+
+    scheduledChunks.forEach(chunk => {
+      matches.push(...chunk.matches);
+      byeNames.push(...chunk.byes);
+      byeIds.push(...chunk.byeIds);
+      refereeNames.push(...chunk.referees);
+      refereeIds.push(...chunk.refereeIds);
+    });
+
+    activeSchedules.forEach(entry => {
+      const cursor = cursors.get(entry.poolId) || 0;
+      const hasRemaining = cursor < entry.rotations.length;
+      if (!hasRemaining || scheduledPoolIds.has(entry.poolId)) return;
+      byeNames.push(...(playerNamesByPool.get(entry.poolId) || []));
+      byeIds.push(...(playerIdsByPool.get(entry.poolId) || []));
+    });
+
+    const startLabel = clock != null ? formatTime(clock) : null;
+    const endLabel = clock != null ? formatTime(clock + config.duration) : null;
+    rotations.push({
+      number: globalRotationNumber,
+      phase: 'rotating-teams',
+      title: `Rotation ${globalRotationNumber}`,
+      matches,
+      byes: Array.from(new Set(byeNames)),
+      byeIds: Array.from(new Set(byeIds)),
+      referees: Array.from(new Set(refereeNames)),
+      refereeIds: Array.from(new Set(refereeIds)),
+      startLabel,
+      durationLabel: `${config.duration} min${endLabel ? ` · fin ${endLabel}` : ''}`,
+      fieldAssignments: Array.from({ length: matches.length }, (_, fieldIndex) => ({
+        label: `Terrain ${fieldIndex + 1}`,
+        matches: matches.filter(match => match.field === fieldIndex + 1),
+      })),
+    });
+    globalRotationNumber += 1;
+    waveStartIndex = (waveStartIndex + 1) % activeSchedules.length;
+    if (clock != null) {
+      clock += config.duration;
+    }
+  }
+
+  return rotations;
+}
+
+function validateRotatingPoolIntegrity(schedule, players, config) {
+  if (!schedule || config.organization !== 'pools') return true;
+  const playerMap = new Map(players.map(player => [String(player.id), player]));
+  for (const rotation of schedule.rotations || []) {
+    for (const match of rotation.matches || []) {
+      const expectedPoolId = match.poolId;
+      const ids = [
+        ...(match.homePlayerIds || []),
+        ...(match.awayPlayerIds || []),
+        ...(match.refereePlayerIds || []),
+        ...(match.restPlayerIds || []),
+      ];
+      for (const playerId of ids) {
+        const player = playerMap.get(String(playerId));
+        if (!player || player.poolId !== expectedPoolId) {
+          console.error('Violation poule tournante', { match, player, expectedPoolId });
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+function generateRotatingSchedule(teams, options) {
+  return generateRotatingTeamsSchedule(teams, options);
+}
+
+function generateRotatingTeamsSchedule(teams, options) {
+  const names = [...teams];
+  const validation = validateRotatingPoolsConfig(names, options);
+  const config = validation.config;
+  const players = validation.players;
+  const pools = config.organization === 'pools'
+    ? Object.entries(groupPlayersByPool(players)).map(([poolId, poolPlayers]) => ({
+        id: poolId,
+        label: `Poule ${poolId}`,
+        playerIds: poolPlayers.map(player => player.id),
+      }))
+    : [{ id: 'all', label: 'Classe entière', playerIds: players.map(player => player.id) }];
+
+  let rotations = [];
+  const warnings = [];
+
+  if (config.organization === 'pools') {
+    const schedulesByPool = Object.entries(groupPlayersByPool(players)).map(([poolId, poolPlayers]) =>
+      generateRotatingScheduleForGroup(poolPlayers, {
+        ...config,
+        fieldCount: Math.min(config.fieldCount, Math.max(1, Math.floor(poolPlayers.length / (config.teamSize * 2)))),
+        poolId,
+        poolLabel: `Poule ${poolId}`,
+      })
+    );
+    schedulesByPool.forEach(entry => warnings.push(...(entry.warnings || [])));
+    rotations = mergePoolSchedulesByRotation(schedulesByPool, config);
+  } else {
+    const fullSchedule = generateRotatingScheduleForGroup(players, {
+      ...config,
+      poolId: null,
+      poolLabel: 'Classe entière',
+    });
+    warnings.push(...(fullSchedule.warnings || []));
+    rotations = fullSchedule.rotations.map(rotation => {
+      const startLabel = null;
+      return {
+        ...rotation,
+        startLabel,
+        durationLabel: `${config.duration} min`,
+        fieldAssignments: Array.from({ length: rotation.matches.length }, (_, fieldIndex) => ({
+          label: `Terrain ${fieldIndex + 1}`,
+          matches: rotation.matches.filter(match => match.field === fieldIndex + 1),
+        })),
+      };
+    });
+    let clock = parseTime(config.startTime);
+    rotations = rotations.map(rotation => {
+      const startLabel = clock != null ? formatTime(clock) : null;
+      const endLabel = clock != null ? formatTime(clock + config.duration) : null;
+      if (clock != null) clock += config.duration;
+      return {
+        ...rotation,
+        startLabel,
+        durationLabel: `${config.duration} min${endLabel ? ` · fin ${endLabel}` : ''}`,
+      };
+    });
+  }
+
+  const activeFields = rotations.reduce((max, rotation) => Math.max(max, rotation.matches.length), 0);
+  const schedule = {
+    format: 'rotating-teams',
+    rotations,
+    teams: names.map(name => ({ name })),
+    meta: {
+      format: 'rotating-teams',
+      teamCount: names.length,
+      rotationCount: rotations.length,
+      matchCount: rotations.reduce((sum, rotation) => sum + rotation.matches.length, 0),
+      fieldCount: activeFields,
+      configuredCourts: config.fieldCount,
+      formatLabel: TOURNAMENT_MODES['rotating-teams'].label,
+      practiceType: options.practiceType || state.practiceType,
+      durationMinutes: config.duration,
+      generationWarning: warnings.length ? warnings.join(' ') : '',
+      generationError: validation.valid ? '' : validation.message,
+      generationSuggestion: validation.valid ? '' : validation.suggestion,
+    },
+    rotatingTeams: {
+      players,
+      pools,
+      organization: config.organization,
+      teamSize: config.teamSize,
+      targetMatches: config.targetMatches,
+      scoring: config.points,
+      configuredFields: config.fieldCount,
+      activeFields,
+    },
+  };
+
+  if (!validation.valid) {
+    return schedule;
+  }
+
+  if (!schedule.meta.matchCount || !schedule.meta.rotationCount) {
+    schedule.meta.generationError = `Configuration impossible : aucun match ${config.teamSize}c${config.teamSize} n’a pu être généré avec ces réglages.`;
+    schedule.meta.generationSuggestion = getRotatingPoolsSuggestion({
+      config,
+      playerCount: names.length,
+    });
+  }
+
+  if (!validateRotatingPoolIntegrity(schedule, players, config)) {
+    schedule.meta.generationError = 'Erreur de génération : une poule contient des joueurs d’une autre poule.';
+  }
+
+  return schedule;
 }
 
 function createLadderRotationEntry(rotationNumber, fieldCount, duration, playerCount) {
@@ -10804,29 +12778,33 @@ function computeSwissRankingRows(schedule = state.schedule) {
     seed: Number(player.seed) || 0,
   }));
   const rowMap = new Map(rows.map(row => [row.id, row]));
-  (schedule.swiss.currentMatches || []).forEach(match => {
-    if (match.bye) {
-      const player = rowMap.get(Number(match.p1Id));
-      if (player) {
-        player.points += 1;
-        player.bye += 1;
+  const currentRoundNumber = schedule.swiss.round || 1;
+  const alreadyCommitted = (schedule.swiss.history || []).some(r => r.round === currentRoundNumber);
+  if (!alreadyCommitted) {
+    (schedule.swiss.currentMatches || []).forEach(match => {
+      if (match.bye) {
+        const player = rowMap.get(Number(match.p1Id));
+        if (player) {
+          player.points += 1;
+          player.bye += 1;
+        }
+        return;
       }
-      return;
-    }
-    const p1 = rowMap.get(Number(match.p1Id));
-    const p2 = rowMap.get(Number(match.p2Id));
-    if (!p1 || !p2 || !isSwissWinnerResolved(match)) return;
-    const winnerId = Number(match.winnerId);
-    const loserId = winnerId === p1.id ? p2.id : p1.id;
-    const winner = rowMap.get(winnerId);
-    const loser = rowMap.get(loserId);
-    if (!winner || !loser) return;
-    winner.points += 1;
-    winner.played += 1;
-    winner.wins += 1;
-    loser.played += 1;
-    loser.losses += 1;
-  });
+      const p1 = rowMap.get(Number(match.p1Id));
+      const p2 = rowMap.get(Number(match.p2Id));
+      if (!p1 || !p2 || !isSwissWinnerResolved(match)) return;
+      const winnerId = Number(match.winnerId);
+      const loserId = winnerId === p1.id ? p2.id : p1.id;
+      const winner = rowMap.get(winnerId);
+      const loser = rowMap.get(loserId);
+      if (!winner || !loser) return;
+      winner.points += 1;
+      winner.played += 1;
+      winner.wins += 1;
+      loser.played += 1;
+      loser.losses += 1;
+    });
+  }
   rows.sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.wins !== a.wins) return b.wins - a.wins;
@@ -10997,6 +12975,9 @@ function setSwissWinner(matchId, winnerId) {
 
 function validateSwissRound() {
   if (!state.schedule?.swiss) return;
+  const roundNumber = state.schedule.swiss.round || 1;
+  const confirmed = window.confirm(`Valider la ronde ${roundNumber} et générer les pairings suivants ? Cette action ne peut pas être annulée.`);
+  if (!confirmed) return;
   const stayInPilot = isSwissPilotScreenOpen();
   const swiss = state.schedule.swiss;
   const playerMap = getSwissPlayerMap(state.schedule);
@@ -11577,6 +13558,89 @@ function hydrateScheduleForSpecialModes(schedule) {
     syncSwissRotations(schedule);
     updateSwissRanking(schedule);
   }
+  if (schedule.format === 'rotating-teams') {
+    schedule.meta = schedule.meta || {};
+    schedule.meta.format = 'rotating-teams';
+    schedule.meta.formatLabel = TOURNAMENT_MODES['rotating-teams'].label;
+    schedule.meta.practiceType = 'eleve';
+    if (!schedule.meta.durationMinutes) {
+      schedule.meta.durationMinutes = clampNumber(Number(state.options.duration) || 12, 1, 180, 12);
+    }
+    if (!schedule.rotatingTeams) {
+      const names = (schedule.teams || []).map(team => team.name).filter(Boolean);
+      schedule.rotatingTeams = {
+        players: names.map((name, index) => ({ id: index + 1, seed: index, name })),
+        teamSize: getRotatingTeamSize(state.options),
+        targetMatches: getRotatingTargetMatches(state.options),
+        scoring: getRotatingScoring(state.options),
+        configuredFields: clampNumber(Number(schedule.meta?.configuredCourts) || Number(state.options.fields) || 1, 1, 16, 1),
+        activeFields: clampNumber(Number(schedule.meta?.fieldCount) || 1, 0, 16, 0),
+      };
+    }
+    if (!schedule.rotatingTeams.players?.length) {
+      schedule.rotatingTeams.players = (schedule.teams || []).map((team, index) => ({
+        id: index + 1,
+        seed: index,
+        name: team.name,
+        poolId: null,
+        stats: {
+          played: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          points: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalAverage: 0,
+        },
+      }));
+    }
+    schedule.rotatingTeams.players = schedule.rotatingTeams.players.map((player, index) => ({
+      id: Number(player.id) || index + 1,
+      seed: Number.isInteger(player.seed) ? player.seed : index,
+      name: player.name || `Élève ${index + 1}`,
+      poolId: player.poolId || null,
+      stats: {
+        played: Number(player.stats?.played) || 0,
+        wins: Number(player.stats?.wins) || 0,
+        draws: Number(player.stats?.draws) || 0,
+        losses: Number(player.stats?.losses) || 0,
+        points: Number(player.stats?.points) || 0,
+        goalsFor: Number(player.stats?.goalsFor) || 0,
+        goalsAgainst: Number(player.stats?.goalsAgainst) || 0,
+        goalAverage: Number(player.stats?.goalAverage) || 0,
+      },
+    }));
+    if (!schedule.rotatingTeams.pools?.length) {
+      const rebuiltPools = new Map();
+      schedule.rotatingTeams.players.forEach(player => {
+        const poolId = player.poolId || 'pool-1';
+        const label = poolId === 'all' ? 'Classe entière' : `Poule ${String.fromCharCode(64 + rebuiltPools.size + 1)}`;
+        if (!rebuiltPools.has(poolId)) {
+          rebuiltPools.set(poolId, { id: poolId, label, playerIds: [] });
+        }
+        rebuiltPools.get(poolId).playerIds.push(player.id);
+      });
+      schedule.rotatingTeams.pools = [...rebuiltPools.values()];
+    }
+    schedule.rotatingTeams.organization =
+      schedule.rotatingTeams.organization === 'full-random'
+        ? 'full-random'
+        : (schedule.rotatingTeams.pools?.length || 0) > 1
+          ? 'pools'
+          : 'full-random';
+    schedule.rotatingTeams.teamSize = clampNumber(Number(schedule.rotatingTeams.teamSize), 2, 6, getRotatingTeamSize(state.options));
+    schedule.rotatingTeams.targetMatches = clampNumber(
+      Number(schedule.rotatingTeams.targetMatches),
+      1,
+      12,
+      getRotatingTargetMatches(state.options)
+    );
+    schedule.rotatingTeams.scoring = {
+      ...getRotatingScoring(state.options),
+      ...(schedule.rotatingTeams.scoring || {}),
+    };
+  }
 }
 
 function hydrateChallengeBoard(schedule) {
@@ -11981,6 +14045,87 @@ function computeLadderBenchData(schedule = state.schedule, rotation = getCurrent
   return { waiting, nextEntrants, unavailable };
 }
 
+function getLadderGroupManagementData(schedule = state.schedule, rotation = getCurrentLadderRotation(schedule), roleAssignments) {
+  if (!schedule || schedule.format !== 'ladder' || !rotation) {
+    return {
+      inPlay: [],
+      referees: [],
+      waiting: [],
+      nextEntrants: [],
+      unavailable: [],
+      notes: [],
+    };
+  }
+  const inPlay = Array.from(
+    new Set(
+      rotation.matches.flatMap(match => {
+        const participants = resolveMatchParticipants(match, schedule);
+        return [participants.home, participants.away];
+      })
+    )
+  ).filter(name => name && !isEntityInactive(getEntityStatusByName(name)));
+  const roleTeams = collectRoleTeams(roleAssignments);
+  const bench = computeLadderBenchData(schedule, rotation, roleAssignments);
+  const notes = [
+    'Les élèves en attente réintègrent progressivement les terrains selon les rotations. Les arbitres peuvent entrer en jeu à la rotation suivante selon le mode choisi.',
+  ];
+  if ((schedule.ladder?.courtMode || 'optimized') === 'optimized') {
+    notes.push('Mode optimisé : certains élèves peuvent attendre pour garder des rotations fluides.');
+  } else {
+    notes.push("Maximum de terrains : l’app utilise le plus de terrains possible.");
+  }
+  return {
+    inPlay,
+    referees: roleTeams.arbitre,
+    waiting: bench.waiting,
+    nextEntrants: bench.nextEntrants,
+    unavailable: bench.unavailable,
+    notes,
+  };
+}
+
+function buildLadderBadgeListHTML(names = [], emptyMessage = 'Aucun élève') {
+  if (!names.length) {
+    return `<p class="ladder-group-empty">${escapeHtml(emptyMessage)}</p>`;
+  }
+  return `<div class="rest-badges">${names.map(name => `<span class="rest-badge">${escapeHtml(name)}</span>`).join('')}</div>`;
+}
+
+function buildLadderGroupManagementPanel(schedule = state.schedule, rotation = getCurrentLadderRotation(schedule), roleAssignments) {
+  const groupData = getLadderGroupManagementData(schedule, rotation, roleAssignments);
+  return `
+    <section class="ladder-group-panel">
+      <header class="ladder-group-panel-head">
+        <div>
+          <p class="eyebrow">Gestion du groupe</p>
+          <h4>Qui joue, arbitre ou attend</h4>
+        </div>
+      </header>
+      <div class="ladder-group-grid">
+        <article class="ladder-group-card">
+          <h5>En jeu</h5>
+          ${buildLadderBadgeListHTML(groupData.inPlay, 'Aucun élève en jeu.')}
+        </article>
+        <article class="ladder-group-card">
+          <h5>Arbitres</h5>
+          ${buildLadderBadgeListHTML(groupData.referees, 'Aucun arbitre sur cette rotation.')}
+        </article>
+        <article class="ladder-group-card">
+          <h5>En attente</h5>
+          ${buildLadderBadgeListHTML(groupData.waiting, 'Aucun élève en attente.')}
+        </article>
+        <article class="ladder-group-card">
+          <h5>Entrent ensuite</h5>
+          ${buildLadderBadgeListHTML(groupData.nextEntrants, 'Pas de nouvel entrant prévu à la rotation suivante.')}
+        </article>
+      </div>
+      <div class="ladder-group-notes">
+        ${groupData.notes.map(note => `<p>${escapeHtml(note)}</p>`).join('')}
+      </div>
+    </section>
+  `;
+}
+
 function buildLadderCurrentRotationSummary(schedule = state.schedule) {
   if (!schedule || !isLadderLiveMode(schedule) || !schedule.rotations?.length) return null;
   const rotation = getCurrentLadderRotation(schedule);
@@ -12153,13 +14298,7 @@ function handleRotationViewClick(event) {
   }
   const openCurrentButton = event.target.closest('[data-open-current-rotation]');
   if (openCurrentButton) {
-    if (isLadderLiveMode(state.schedule)) {
-      openLadderPilotModal();
-    } else if (isRaquettesPoulePilotMode(state.schedule)) {
-      openPoolPilotScreen();
-    } else {
-      focusCurrentLadderRotation({ ensureLive: true });
-    }
+    requestSessionLaunch();
     return;
   }
   const rankingButton = event.target.closest('[data-open-current-ranking]');
@@ -12645,6 +14784,16 @@ function createDefaultState() {
       vibration: true,
       schedulingMode: 'pedagogique',
       worldCupGroupCount: 2,
+      rotatingTeams: {
+        organization: 'pools',
+        poolCount: 1,
+        autoAssign: 'balanced',
+        teamSize: 2,
+        targetMatches: 3,
+        winPoints: 3,
+        drawPoints: 1,
+        lossPoints: 0,
+      },
       roleSettings: { ...DEFAULT_ROLE_SETTINGS },
       ladder: {
         mode: 'free',
@@ -12697,7 +14846,7 @@ function sanitizeState(raw) {
       ? MODE_DEFINITIONS[merged.activeModeId].tournamentType
       : source.tournamentType;
   merged.tournamentType = allowedModes.includes(targetTournament) ? targetTournament : base.tournamentType;
-  const allowedPractices = ['sport-co', 'raquette'];
+  const allowedPractices = ['sport-co', 'raquette', 'eleve'];
   merged.practiceType = MODE_DEFINITIONS[merged.activeModeId]?.practiceType || (allowedPractices.includes(source.practiceType) ? source.practiceType : base.practiceType);
   merged.participants = clampNumber(Number(merged.participants), 2, 32, base.participants);
   const optionSource = { ...base.options, ...(source.options || {}) };
@@ -12729,6 +14878,16 @@ function sanitizeState(raw) {
     4,
     2
   );
+  optionSource.rotatingTeams = {
+    organization: optionSource?.rotatingTeams?.organization === 'full-random' ? 'full-random' : 'pools',
+    poolCount: clampNumber(Number(optionSource?.rotatingTeams?.poolCount), 1, Math.min(6, Math.max(1, merged.participants)), 1),
+    autoAssign: 'balanced',
+    teamSize: clampNumber(Number(optionSource?.rotatingTeams?.teamSize), 2, 6, 2),
+    targetMatches: clampNumber(Number(optionSource?.rotatingTeams?.targetMatches), 1, 12, 3),
+    winPoints: clampNumber(Number(optionSource?.rotatingTeams?.winPoints), 0, 10, 3),
+    drawPoints: clampNumber(Number(optionSource?.rotatingTeams?.drawPoints), 0, 10, 1),
+    lossPoints: clampNumber(Number(optionSource?.rotatingTeams?.lossPoints), 0, 10, 0),
+  };
   const allowedSchedulingModes = ['pedagogique', 'optimise_terrains'];
   optionSource.schedulingMode = allowedSchedulingModes.includes(optionSource.schedulingMode)
     ? optionSource.schedulingMode
@@ -12904,16 +15063,24 @@ function setLiveModeAvailability(enabled) {
   const hasRotations = Boolean(state.schedule && state.schedule.rotations && state.schedule.rotations.length);
   const ladderMode = isLadderLiveMode(state.schedule);
   const poolPilotMode = isRaquettesPoulePilotMode(state.schedule);
+  const rotatingPilotMode = isRotatingTeamsMode(state.schedule);
+  const rotatingGenerationError = rotatingPilotMode ? state.schedule?.meta?.generationError : '';
+  const rotatingGenerationSuggestion = rotatingPilotMode ? state.schedule?.meta?.generationSuggestion : '';
+  const rotatingGenerationWarning = rotatingPilotMode ? state.schedule?.meta?.generationWarning : '';
   const swissMode = state.schedule?.format === 'swiss';
   const challengeMode = state.schedule?.format === 'challenge';
-  const canLaunch = enabled && (hasRotations || challengeMode);
+  const canLaunch = enabled && (hasRotations || challengeMode) && !rotatingGenerationError;
   elements.startLiveBtn.disabled = !canLaunch;
   elements.startLiveBtn.textContent = getModeLaunchCtaLabel();
   if (elements.resultsPrimaryHint) {
-    if (!canLaunch) {
-      elements.resultsPrimaryHint.textContent = ladderMode || poolPilotMode
+    if (rotatingGenerationError) {
+      elements.resultsPrimaryHint.textContent = [rotatingGenerationError, rotatingGenerationSuggestion].filter(Boolean).join(' ');
+    } else if (!canLaunch) {
+      elements.resultsPrimaryHint.textContent = ladderMode || poolPilotMode || rotatingPilotMode
         ? 'Générez un planning pour ouvrir le pilotage.'
         : 'Générez un planning pour activer le mode live.';
+    } else if (rotatingGenerationWarning) {
+      elements.resultsPrimaryHint.textContent = rotatingGenerationWarning;
     } else {
       elements.resultsPrimaryHint.textContent = getModeLaunchHint();
     }
@@ -12922,7 +15089,7 @@ function setLiveModeAvailability(enabled) {
     elements.returnLiveBtn.disabled = !enabled || swissMode;
   }
   if (elements.liveChronoBtn) {
-    elements.liveChronoBtn.disabled = !enabled || swissMode;
+    elements.liveChronoBtn.disabled = !enabled || swissMode || challengeMode;
   }
   if (elements.resultsProjectionBtn) {
     elements.resultsProjectionBtn.disabled = swissMode;

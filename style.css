@@ -60,6 +60,10 @@ body[data-screen='pool-pilot'] {
   display: block;
 }
 
+body[data-screen='rotating-pilot'] {
+  display: block;
+}
+
 .app-shell {
   width: min(1100px, 100%);
   padding: clamp(16px, 4vw, 32px);
@@ -91,6 +95,12 @@ body[data-screen='pool-pilot'] .app-shell {
   padding: 0;
 }
 
+body[data-screen='rotating-pilot'] .app-shell {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
 body[data-screen='swiss-pilot'] .topbar,
 body[data-screen='swiss-pilot'] .stepper {
   display: none;
@@ -98,6 +108,11 @@ body[data-screen='swiss-pilot'] .stepper {
 
 body[data-screen='pool-pilot'] .topbar,
 body[data-screen='pool-pilot'] .stepper {
+  display: none;
+}
+
+body[data-screen='rotating-pilot'] .topbar,
+body[data-screen='rotating-pilot'] .stepper {
   display: none;
 }
 
@@ -4047,6 +4062,51 @@ body.mode-chrono #timerWidget {
   color: var(--muted);
 }
 
+.session-organization-card {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.session-organization-copy {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.session-organization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.session-organization-item {
+  border-radius: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-organization-item span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.session-organization-item strong {
+  font-size: 1.1rem;
+}
+
+.session-organization-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-organization-notes p,
+.session-organization-copy {
+  color: var(--muted);
+}
+
 #finalRankingModal .final-ranking-card {
   width: min(1040px, calc(100vw - 32px));
   max-height: 90vh;
@@ -4114,6 +4174,13 @@ body.mode-chrono #timerWidget {
   background: linear-gradient(180deg, #15110f, #0f0d0c);
 }
 
+.rotating-pilot-screen {
+  width: 100vw;
+  min-height: 100vh;
+  padding: clamp(16px, 2.4vw, 28px);
+  background: linear-gradient(180deg, #15110f, #0f0d0c);
+}
+
 .pool-pilot-card {
   width: 100%;
   min-height: calc(100vh - clamp(32px, 4.8vw, 56px));
@@ -4129,6 +4196,10 @@ body.mode-chrono #timerWidget {
 }
 
 #poolPilotCloseBtn {
+  display: none;
+}
+
+#rotatingPilotCloseBtn {
   display: none;
 }
 
@@ -4161,6 +4232,123 @@ body.mode-chrono #timerWidget {
 
 .pool-pilot-list .live-match-card .teams {
   gap: 16px;
+}
+
+.rotating-pool-preview-card {
+  gap: 12px;
+}
+
+.rotating-pool-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rotating-pool-preview-head p {
+  margin: 4px 0 0;
+  opacity: 0.7;
+  font-size: 0.95rem;
+}
+
+.rotating-config-alert {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+}
+
+.rotating-config-alert strong {
+  color: #fee2e2;
+}
+
+.rotating-config-alert p {
+  margin: 0;
+  color: #fecaca;
+}
+
+.rotating-match-card .teams.rotating-teams-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.rotating-team {
+  gap: 10px;
+}
+
+.rotating-team-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rotating-player-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rotating-player-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rotating-player-pill.team-a {
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border: 1px solid rgba(129, 140, 248, 0.28);
+}
+
+.rotating-player-pill.team-b {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+}
+
+.rotating-team-head span {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.68;
+}
+
+.rotating-team-head strong {
+  overflow-wrap: anywhere;
+}
+
+.rotating-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rotating-card-meta p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rotating-ranking-wrap .ranking-card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  .rotating-match-card .teams.rotating-teams-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .pool-pilot-list .live-team strong {
@@ -4703,6 +4891,60 @@ body.modal-open {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 0.92rem;
+}
+
+.ladder-group-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ladder-group-panel-head h4 {
+  margin: 6px 0 0;
+}
+
+.ladder-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.ladder-group-card {
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ladder-group-card h5 {
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.ladder-group-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.ladder-group-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ladder-group-notes p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .ladder-legend {

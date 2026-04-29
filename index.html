@@ -260,11 +260,11 @@
                 <span>Nombre de terrains</span>
                 <input type="number" id="fieldCount" min="1" max="16" value="2" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="matchDurationField">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,sportco-poules-tournantes,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="matchDurationField">
                 <span id="modeDurationLabel">Durée d’un match (minutes)</span>
                 <input type="number" id="matchDuration" min="1" max="180" value="12" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="availableDurationField">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,sportco-poules-tournantes,raquettes-poule,raquettes-montee-descente,raquettes-ronde-suisse" id="availableDurationField">
                 <span>Durée disponible (optionnel)</span>
                 <input type="number" id="availableDuration" min="0" max="1440" placeholder="Durée totale" />
               </label>
@@ -280,7 +280,7 @@
                 <span>Terrains sans arbitre dédié</span>
                 <input type="number" id="ladderFreeCourts" min="0" value="0" />
               </label>
-              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,raquettes-poule,raquettes-montee-descente,raquettes-defi,raquettes-ronde-suisse" id="endTimeField">
+              <label class="field mode-field" data-mode-field="sportco-championnat,sportco-worldcup,sportco-poules-tournantes,raquettes-poule,raquettes-montee-descente,raquettes-defi,raquettes-ronde-suisse" id="endTimeField">
                 <span>Prévision de fin (optionnel)</span>
                 <input type="time" id="endTime" />
               </label>
@@ -344,6 +344,67 @@
                   <span>Score cible (points)</span>
                   <input type="number" id="scoreTarget" min="1" max="50" value="11" />
                 </label>
+              </article>
+              <article class="panel-card" data-mode-field="sportco-poules-tournantes">
+                <header>
+                  <p class="eyebrow">Poules tournantes</p>
+                  <h4>Réglages de séance</h4>
+                </header>
+                <label class="field">
+                  <span>Organisation</span>
+                  <select id="rotatingOrganization">
+                    <option value="pools" selected>Par poules</option>
+                    <option value="full-random">Aléatoire classe entière</option>
+                  </select>
+                </label>
+                <label class="field" id="rotatingPoolCountField">
+                  <span>Nombre de poules</span>
+                  <input type="number" id="rotatingPoolCount" min="1" max="6" value="1" />
+                </label>
+                <label class="field" id="rotatingAutoAssignField">
+                  <span>Répartition</span>
+                  <select id="rotatingAutoAssign">
+                    <option value="balanced" selected>Automatique équilibrée</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Taille des équipes</span>
+                  <select id="rotatingTeamSize">
+                    <option value="2">2c2</option>
+                    <option value="3" selected>3c3</option>
+                    <option value="4">4c4</option>
+                    <option value="5">5c5</option>
+                    <option value="6">6c6</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Objectif de matchs par élève</span>
+                  <input type="number" id="rotatingTargetMatches" min="1" max="12" value="4" />
+                </label>
+                <div class="field">
+                  <span>Barème individuel</span>
+                  <div class="mode-primary-grid">
+                    <label class="field">
+                      <span>Victoire</span>
+                      <input type="number" id="rotatingWinPoints" min="0" max="10" value="3" />
+                    </label>
+                    <label class="field">
+                      <span>Nul</span>
+                      <input type="number" id="rotatingDrawPoints" min="0" max="10" value="1" />
+                    </label>
+                    <label class="field">
+                      <span>Défaite</span>
+                      <input type="number" id="rotatingLossPoints" min="0" max="10" value="0" />
+                    </label>
+                  </div>
+                </div>
+              </article>
+              <article class="panel-card" data-mode-field="sportco-poules-tournantes">
+                <header>
+                  <p class="eyebrow">Aperçu de groupe</p>
+                  <h4>Poules prévues</h4>
+                </header>
+                <div id="rotatingPoolsPreview" class="ladder-group-panel"></div>
               </article>
               <article class="panel-card" data-mode-field="sportco-worldcup">
                 <header>
@@ -890,6 +951,26 @@
           </div>
         </section>
 
+        <section class="screen ladder-pilot-screen pool-pilot-screen rotating-pilot-screen" data-screen="rotating-pilot" id="rotatingPilotScreen">
+          <div class="ladder-pilot-screen-shell ladder-pilot-modal-card pool-pilot-card rotating-pilot-card">
+            <div class="ladder-pilot-toolbar pool-pilot-toolbar">
+              <div>
+                <p class="eyebrow">Poules tournantes</p>
+                <h3 id="rotatingPilotTitle">Poules tournantes — Rotation 1</h3>
+                <p class="live-meta" id="rotatingPilotMeta"></p>
+              </div>
+              <button class="btn ghost small" id="rotatingPilotCloseBtn" aria-label="Fermer le pilotage des poules tournantes">Fermer</button>
+            </div>
+            <div class="ladder-pilot-actions pool-pilot-actions">
+              <button class="btn secondary" id="rotatingPilotBackBtn">Retour planning</button>
+              <button class="btn success" id="rotatingPilotSaveBtn">Sauvegarder la séance</button>
+              <button class="btn primary" id="rotatingPilotNextBtn">Passer à la rotation suivante</button>
+              <button class="btn ghost" id="rotatingPilotRankingBtn">Voir le classement</button>
+            </div>
+            <div class="ladder-pilot-modal-body pool-pilot-body rotating-pilot-body" id="rotatingPilotBody"></div>
+          </div>
+        </section>
+
     <div class="modal-overlay hidden" id="statusModal" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
       <div class="modal-card status-card">
         <header>
@@ -982,6 +1063,26 @@
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="configEditModalCancelBtn">Annuler</button>
           <button type="button" class="btn primary" id="configEditModalConfirmBtn">Continuer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="sessionOrganizationModal" role="dialog" aria-modal="true" aria-labelledby="sessionOrganizationTitle">
+      <div class="modal-card session-organization-card">
+        <header>
+          <div>
+            <p class="eyebrow">Vérification avant lancement</p>
+            <h3 id="sessionOrganizationTitle">Organisation de la séance</h3>
+          </div>
+          <button class="btn ghost small" id="sessionOrganizationCloseBtn" aria-label="Fermer l’organisation de séance">Fermer</button>
+        </header>
+        <p class="session-organization-copy">Tous les élèves ne pourront pas jouer en même temps.</p>
+        <div class="session-organization-grid" id="sessionOrganizationGrid"></div>
+        <div class="session-organization-notes" id="sessionOrganizationNotes"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn primary" id="sessionOrganizationLaunchBtn">Lancer comme ça</button>
+          <button type="button" class="btn secondary" id="sessionOrganizationOptionsBtn">Modifier les paramètres</button>
+          <button type="button" class="btn ghost" id="sessionOrganizationModeBtn">Choisir un autre mode</button>
         </div>
       </div>
     </div>
