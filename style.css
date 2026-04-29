@@ -3046,6 +3046,7 @@ input[type='range']::-webkit-slider-thumb {
   flex-direction: column;
   gap: 12px;
   transition: border 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
 }
 
 .live-match-card header {
@@ -3121,8 +3122,8 @@ input[type='range']::-webkit-slider-thumb {
 .live-match-card .teams {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  align-items: center;
+  gap: 14px;
+  align-items: start;
 }
 
 .live-team {
@@ -3133,17 +3134,25 @@ input[type='range']::-webkit-slider-thumb {
 
 .live-team strong {
   font-size: 1.2rem;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .live-score-pad {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 38px minmax(44px, 58px) 38px;
+  gap: 6px;
+  width: 100%;
+  max-width: 148px;
 }
 
 .score-adjust {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  flex: 0 0 38px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.04);
@@ -3158,7 +3167,8 @@ input[type='range']::-webkit-slider-thumb {
 }
 
 .live-score-pad input {
-  width: 68px;
+  width: 100%;
+  min-width: 0;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.05);
@@ -4215,7 +4225,7 @@ body.mode-chrono #timerWidget {
 
 .pool-pilot-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   width: 100%;
 }
@@ -4251,6 +4261,72 @@ body.mode-chrono #timerWidget {
   font-size: 0.95rem;
 }
 
+.rotating-config-shell {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0 16px;
+}
+
+.rotating-config-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.rotating-config-row .field.compact {
+  gap: 8px;
+  min-width: 0;
+}
+
+.rotating-config-row-info {
+  grid-template-columns: repeat(auto-fit, minmax(220px, max-content));
+}
+
+.rotating-editor-grid {
+  align-items: start;
+}
+
+.rotating-pool-editor-card.invalid {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.rotating-pool-warning {
+  margin: 0;
+  color: #fca5a5;
+  overflow-wrap: anywhere;
+}
+
+.rotating-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rotating-editor-students {
+  display: grid;
+  gap: 10px;
+}
+
+.rotating-editor-student {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.rotating-editor-student strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rotating-editor-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .rotating-config-alert {
   display: grid;
   gap: 6px;
@@ -4273,8 +4349,9 @@ body.mode-chrono #timerWidget {
 
 .rotating-match-card .teams.rotating-teams-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .rotating-team {
@@ -4302,6 +4379,9 @@ body.mode-chrono #timerWidget {
   font-weight: 600;
   line-height: 1.2;
   overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .rotating-player-pill.team-a {
@@ -4324,7 +4404,10 @@ body.mode-chrono #timerWidget {
 }
 
 .rotating-team-head strong {
+  max-width: 100%;
+  white-space: normal;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .rotating-card-meta {
@@ -4345,6 +4428,111 @@ body.mode-chrono #timerWidget {
   margin-bottom: 0;
 }
 
+.rotating-recommendation-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rotating-recommendation-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rotating-recommendation-head p {
+  margin: 6px 0 0;
+  opacity: 0.82;
+  overflow-wrap: anywhere;
+}
+
+.rotating-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px 14px;
+}
+
+.rotating-recommendation-grid span {
+  overflow-wrap: anywhere;
+}
+
+.rotating-recommendation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rotating-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.rotating-history-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  overflow-wrap: anywhere;
+}
+
+.rotating-match-card,
+.rotating-match-card *,
+.live-match-card,
+.live-match-card * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.rotating-teams-grid,
+.rotating-match-card .teams,
+.live-match-card .teams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.rotating-player-pill,
+.live-team strong,
+.live-team span,
+.match-title,
+.match-label {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.score-inputs {
+  display: grid;
+  grid-template-columns: 38px minmax(44px, 58px) 38px;
+  gap: 6px;
+  width: 100%;
+  max-width: 148px;
+}
+
+.score-inputs input {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .rotating-teams-grid,
+  .rotating-match-card .teams,
+  .live-match-card .teams {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .rotating-match-card .teams.rotating-teams-grid {
     grid-template-columns: 1fr;
@@ -4357,13 +4545,15 @@ body.mode-chrono #timerWidget {
 }
 
 .pool-pilot-list .score-adjust {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   border-radius: 16px;
 }
 
 .pool-pilot-list .live-score-pad input {
-  width: 78px;
+  width: 100%;
+  min-width: 0;
   min-height: 52px;
   font-size: 1.45rem;
 }

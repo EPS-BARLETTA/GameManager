@@ -351,6 +351,12 @@ function formatRaquetteDisplayName(raw) {
 function formatNameForPractice(name, practiceType, index, fallbackLabel) {
   const trimmed = (name || '').trim();
   if (!trimmed) return '';
+  if (practiceType === 'eleve') {
+    const fallbackPattern = new RegExp(`^${escapeRegExp(fallbackLabel)}\\s+\\d+$`, 'i');
+    if (fallbackPattern.test(trimmed)) return trimmed;
+    const formatted = formatStudentDisplayName(trimmed);
+    return formatted || trimmed;
+  }
   if (practiceType === 'raquette') {
     const fallbackPattern = new RegExp(`^${escapeRegExp(fallbackLabel)}\\s+\\d+$`, 'i');
     if (fallbackPattern.test(trimmed)) return trimmed;
@@ -358,6 +364,29 @@ function formatNameForPractice(name, practiceType, index, fallbackLabel) {
     return formatted || trimmed;
   }
   return trimmed;
+}
+
+function formatStudentDisplayName(rawName) {
+  const clean = String(rawName || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  if (!clean) return '';
+  if (/^[A-ZÀ-Ÿ]\.\s+/u.test(clean)) return clean;
+
+  const parts = clean.split(' ');
+  if (parts.length === 1) return clean;
+  const isUpperSurnameFirst =
+    parts.length > 1 &&
+    /^[A-ZÀ-Ÿ' -]+$/u.test(parts[0]) &&
+    parts[0] === parts[0].toUpperCase();
+  const firstName = isUpperSurnameFirst ? parts.slice(1).join(' ') : parts.slice(0, -1).join(' ');
+  const lastName = isUpperSurnameFirst ? parts[0] : parts[parts.length - 1];
+  const initialMatch = lastName.match(/\p{L}/u);
+  if (!initialMatch) return clean;
+  const initial = initialMatch[0].toUpperCase();
+
+  return `${initial}. ${firstName}`;
 }
 
 function getRoleSettings() {
@@ -747,6 +776,8 @@ const APP_SAVE_TYPE = 'gamemanager-save';
 const APP_SAVE_VERSION = 1;
 const APP_SESSIONS_KEY = 'gamemanager-sessions-v1';
 const APP_SESSION_CLASS_META_KEY = 'gamemanager-session-classes-v1';
+const ROTATING_POOLS_STORAGE_KEY = 'gamemanager_rotating_pools_v1';
+let latestRotatingRecommendation = null;
 
 function getRotatingTeamSize(options = state.options) {
   return clampNumber(Number(options?.rotatingTeams?.teamSize) || 2, 2, 6, 2);
@@ -754,6 +785,20 @@ function getRotatingTeamSize(options = state.options) {
 
 function getRotatingTargetMatches(options = state.options) {
   return clampNumber(Number(options?.rotatingTeams?.targetMatches) || 3, 1, 12, 3);
+}
+
+function getRotatingGoalMode(options = state.options) {
+  const mode = options?.rotatingTeams?.goalMode;
+  if (mode === 'rotation-count' || mode === 'matches-per-pool') return mode;
+  return 'target-per-player';
+}
+
+function getRotatingRotationGoal(options = state.options) {
+  return clampNumber(Number(options?.rotatingTeams?.rotationGoal) || 3, 1, 24, 3);
+}
+
+function getRotatingMatchesPerPoolGoal(options = state.options) {
+  return clampNumber(Number(options?.rotatingTeams?.matchesPerPoolGoal) || 3, 1, 24, 3);
 }
 
 function getRotatingScoring(options = state.options) {
@@ -770,7 +815,100 @@ function getRotatingOrganization(options = state.options) {
 }
 
 function getRotatingPoolCount(options = state.options, participantCount = state.participants) {
-  return clampNumber(Number(options?.rotatingTeams?.poolCount) || 1, 1, Math.min(6, Math.max(1, participantCount)), 1);
+  return clampNumber(Number(options?.rotatingTeams?.poolCount) || 1, 1, Math.min(10, Math.max(1, participantCount)), 1);
+}
+
+function buildBalancedRotatingManualPools(participantCount, poolCount) {
+  const safeCount = Math.max(0, Number(participantCount) || 0);
+  const safePools = Math.max(1, Math.min(poolCount || 1, safeCount || 1));
+  const pools = Array.from({ length: safePools }, () => []);
+  for (let index = 0; index < safeCount; index += 1) {
+    const row = Math.floor(index / safePools);
+    const slot = index % safePools;
+    const targetPool = row % 2 === 0 ? slot : safePools - 1 - slot;
+    pools[targetPool].push(index);
+  }
+  return pools;
+}
+
+function normalizeRotatingManualPools(rawPools, participantCount, poolCount) {
+  const safeCount = Math.max(0, Number(participantCount) || 0);
+  const safePools = Math.max(1, Math.min(Number(poolCount) || 1, safeCount || 1));
+  const fallback = buildBalancedRotatingManualPools(safeCount, safePools);
+  if (!Array.isArray(rawPools) || !rawPools.length) {
+    return fallback;
+  }
+  const pools = Array.from({ length: safePools }, (_, index) => (Array.isArray(rawPools[index]) ? [...rawPools[index]] : []));
+  const seen = new Set();
+  pools.forEach(pool => {
+    for (let index = pool.length - 1; index >= 0; index -= 1) {
+      const value = Number(pool[index]);
+      if (!Number.isInteger(value) || value < 0 || value >= safeCount || seen.has(value)) {
+        pool.splice(index, 1);
+      } else {
+        pool[index] = value;
+        seen.add(value);
+      }
+    }
+  });
+  for (let index = 0; index < safeCount; index += 1) {
+    if (seen.has(index)) continue;
+    const lightestPool = pools.reduce((best, pool, poolIndex) => (
+      pool.length < pools[best].length ? poolIndex : best
+    ), 0);
+    pools[lightestPool].push(index);
+  }
+  return pools;
+}
+
+function getRotatingManualPools(options = state.options, participantCount = state.participants) {
+  const poolCount = getRotatingPoolCount(options, participantCount);
+  return normalizeRotatingManualPools(options?.rotatingTeams?.manualPools, participantCount, poolCount);
+}
+
+function setRotatingManualPools(pools) {
+  normalizeRotatingTeamsOptions();
+  state.options.rotatingTeams.manualPools = normalizeRotatingManualPools(pools, state.participants, getRotatingPoolCount());
+}
+
+function moveRotatingManualPlayer(playerIndex, targetPoolIndex) {
+  const pools = getRotatingManualPools().map(pool => [...pool]);
+  pools.forEach(pool => {
+    const index = pool.indexOf(playerIndex);
+    if (index !== -1) pool.splice(index, 1);
+  });
+  if (!pools[targetPoolIndex]) return;
+  pools[targetPoolIndex].push(playerIndex);
+  setRotatingManualPools(pools);
+}
+
+function shuffleRotatingManualPool(poolIndex) {
+  const pools = getRotatingManualPools().map(pool => [...pool]);
+  if (!pools[poolIndex]) return;
+  for (let index = pools[poolIndex].length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [pools[poolIndex][index], pools[poolIndex][swapIndex]] = [pools[poolIndex][swapIndex], pools[poolIndex][index]];
+  }
+  setRotatingManualPools(pools);
+}
+
+function resetRotatingManualPools(autoMode = false) {
+  normalizeRotatingTeamsOptions();
+  state.options.rotatingTeams.manualPools = buildBalancedRotatingManualPools(state.participants, getRotatingPoolCount());
+  state.options.rotatingTeams.autoAssign = autoMode ? 'balanced' : 'manual';
+}
+
+function getRotatingEditablePools(names = getFinalTeamNames(), options = state.options) {
+  const poolCount = getRotatingPoolCount(options, names.length);
+  const manualPools = getRotatingManualPools(options, names.length);
+  return Array.from({ length: poolCount }, (_, index) => ({
+    id: String.fromCharCode(65 + index),
+    label: `Poule ${String.fromCharCode(65 + index)}`,
+    members: (manualPools[index] || []).map(playerIndex => ({
+      index: playerIndex,
+      name: names[playerIndex] || `Élève ${playerIndex + 1}`,
+    })),
+  }));
 }
 
 function isRotatingTeamsMode(schedule = state.schedule) {
@@ -817,9 +955,13 @@ function normalizeRotatingTeamsOptions(target = state.options) {
   target.rotatingTeams = {
     organization: getRotatingOrganization(target),
     poolCount: getRotatingPoolCount(target),
-    autoAssign: 'balanced',
+    autoAssign: target?.rotatingTeams?.autoAssign === 'manual' ? 'manual' : 'balanced',
+    manualPools: getRotatingManualPools(target, state.participants),
     teamSize: getRotatingTeamSize(target),
     targetMatches: getRotatingTargetMatches(target),
+    goalMode: getRotatingGoalMode(target),
+    rotationGoal: getRotatingRotationGoal(target),
+    matchesPerPoolGoal: getRotatingMatchesPerPoolGoal(target),
     ...getRotatingScoring(target),
   };
   return target.rotatingTeams;
@@ -2609,7 +2751,7 @@ function bindNavigation() {
       state.options.rotatingTeams.poolCount = clampNumber(
         Number(event.target.value),
         1,
-        Math.min(6, Math.max(1, state.participants)),
+        Math.min(10, Math.max(1, state.participants)),
         1
       );
       event.target.value = state.options.rotatingTeams.poolCount;
@@ -2620,7 +2762,7 @@ function bindNavigation() {
   if (elements.rotatingAutoAssign) {
     elements.rotatingAutoAssign.addEventListener('change', event => {
       normalizeRotatingTeamsOptions();
-      state.options.rotatingTeams.autoAssign = event.target.value === 'balanced' ? 'balanced' : 'balanced';
+      state.options.rotatingTeams.autoAssign = event.target.value === 'manual' ? 'manual' : 'balanced';
       renderRotatingPoolsPreview();
       persistState();
     });
@@ -2630,6 +2772,7 @@ function bindNavigation() {
       normalizeRotatingTeamsOptions();
       state.options.rotatingTeams.targetMatches = clampNumber(Number(event.target.value), 1, 12, 3);
       event.target.value = state.options.rotatingTeams.targetMatches;
+      renderRotatingPoolsPreview();
       persistState();
     });
   }
@@ -2655,6 +2798,72 @@ function bindNavigation() {
       state.options.rotatingTeams.lossPoints = clampNumber(Number(event.target.value), 0, 10, 0);
       event.target.value = state.options.rotatingTeams.lossPoints;
       persistState();
+    });
+  }
+  if (elements.rotatingPoolsPreview) {
+    elements.rotatingPoolsPreview.addEventListener('change', event => {
+      const target = event.target;
+      const setting = target.dataset.rotatingSetting;
+      if (!setting) return;
+      normalizeRotatingTeamsOptions();
+      if (setting === 'autoAssign') {
+        state.options.rotatingTeams.autoAssign = target.value === 'manual' ? 'manual' : 'balanced';
+      }
+      if (setting === 'goalMode') {
+        state.options.rotatingTeams.goalMode =
+          target.value === 'rotation-count' || target.value === 'matches-per-pool' ? target.value : 'target-per-player';
+      }
+      if (setting === 'goalValue') {
+        applyRotatingGoalValue(target.value);
+      }
+      latestRotatingRecommendation = null;
+      renderRotatingPoolsPreview();
+      persistState();
+    });
+    elements.rotatingPoolsPreview.addEventListener('click', event => {
+      const actionButton = event.target.closest('[data-rotating-action]');
+      if (!actionButton) return;
+      const action = actionButton.dataset.rotatingAction;
+      if (action === 'move-player') {
+        normalizeRotatingTeamsOptions();
+        state.options.rotatingTeams.autoAssign = 'manual';
+        moveRotatingManualPlayer(Number(actionButton.dataset.playerIndex), Number(actionButton.dataset.targetPool));
+        latestRotatingRecommendation = null;
+        renderRotatingPoolsPreview();
+        persistState();
+        return;
+      }
+      if (action === 'shuffle-pool') {
+        normalizeRotatingTeamsOptions();
+        state.options.rotatingTeams.autoAssign = 'manual';
+        shuffleRotatingManualPool(Number(actionButton.dataset.poolIndex));
+        latestRotatingRecommendation = null;
+        renderRotatingPoolsPreview();
+        persistState();
+        return;
+      }
+      if (action === 'auto-balance-pools') {
+        resetRotatingManualPools(false);
+        latestRotatingRecommendation = null;
+        renderRotatingPoolsPreview();
+        persistState();
+        return;
+      }
+      if (action === 'reset-manual-pools') {
+        resetRotatingManualPools(true);
+        latestRotatingRecommendation = null;
+        renderRotatingPoolsPreview();
+        persistState();
+        return;
+      }
+      if (action === 'recommend') {
+        latestRotatingRecommendation = computeRotatingBestOrganization();
+        renderRotatingPoolsPreview();
+        return;
+      }
+      if (action === 'use-recommendation') {
+        applyRotatingRecommendation(latestRotatingRecommendation, { generateNow: true });
+      }
     });
   }
   if (elements.worldCupGroupCount) {
@@ -4263,10 +4472,12 @@ function syncOptionInputs() {
   if (elements.rotatingTeamSize) {
     elements.rotatingTeamSize.value = state.options.rotatingTeams.teamSize;
   }
+  ensureRotatingAutoAssignOptions();
   if (elements.rotatingOrganization) {
     elements.rotatingOrganization.value = state.options.rotatingTeams.organization;
   }
   if (elements.rotatingPoolCount) {
+    elements.rotatingPoolCount.max = String(Math.min(10, Math.max(1, state.participants)));
     elements.rotatingPoolCount.value = state.options.rotatingTeams.poolCount;
   }
   if (elements.rotatingAutoAssign) {
@@ -4318,7 +4529,10 @@ function getFinalTeamNames() {
   return ensureTeamListLength(state.teamNames, state.participants, state.practiceType).map((name, index) => {
     const trimmed = name.trim();
     const participantLabel = formatParticipantLabel({ capitalized: true });
-    return trimmed || `${participantLabel} ${index + 1}`;
+    const normalized = trimmed
+      ? formatNameForPractice(trimmed, state.practiceType, index, participantLabel) || trimmed
+      : `${participantLabel} ${index + 1}`;
+    return normalized;
   });
 }
 
@@ -5078,11 +5292,300 @@ function updateRoleControlsState() {
 
 function updateRotatingOptionsVisibility() {
   const isPoolsMode = getRotatingOrganization() === 'pools';
+  ensureRotatingAutoAssignOptions();
   if (elements.rotatingPoolCountField) {
     elements.rotatingPoolCountField.classList.toggle('hidden', !isPoolsMode);
   }
   if (elements.rotatingAutoAssignField) {
     elements.rotatingAutoAssignField.classList.toggle('hidden', !isPoolsMode);
+  }
+}
+
+function ensureRotatingAutoAssignOptions() {
+  if (!elements.rotatingAutoAssign) return;
+  const expected = [
+    { value: 'balanced', label: 'Automatique équilibrée' },
+    { value: 'manual', label: 'Manuel (ordre saisi)' },
+  ];
+  expected.forEach(optionDef => {
+    const exists = Array.from(elements.rotatingAutoAssign.options).some(option => option.value === optionDef.value);
+    if (exists) return;
+    const option = document.createElement('option');
+    option.value = optionDef.value;
+    option.textContent = optionDef.label;
+    elements.rotatingAutoAssign.appendChild(option);
+  });
+}
+
+function getRotatingGoalModeLabel(goalMode = getRotatingGoalMode()) {
+  if (goalMode === 'rotation-count') return 'Nombre de rotations';
+  if (goalMode === 'matches-per-pool') return 'Nombre de matchs par poule';
+  return 'Objectif de matchs par élève';
+}
+
+function getRotatingGoalValue(goalMode = getRotatingGoalMode(), options = state.options) {
+  if (goalMode === 'rotation-count') return getRotatingRotationGoal(options);
+  if (goalMode === 'matches-per-pool') return getRotatingMatchesPerPoolGoal(options);
+  return getRotatingTargetMatches(options);
+}
+
+function buildRotatingGoalControlsHTML() {
+  const goalMode = getRotatingGoalMode();
+  const goalValue = getRotatingGoalValue(goalMode);
+  const options = [
+    { value: 'target-per-player', label: 'Objectif par élève' },
+    { value: 'rotation-count', label: 'Nombre de rotations' },
+    { value: 'matches-per-pool', label: 'Matchs par poule' },
+  ];
+  return `
+    <div class="rotating-config-row">
+      <label class="field compact">
+        <span>Organisation initiale</span>
+        <select data-rotating-setting="autoAssign">
+          <option value="balanced" ${state.options.rotatingTeams.autoAssign === 'balanced' ? 'selected' : ''}>Automatique équilibrée</option>
+          <option value="manual" ${state.options.rotatingTeams.autoAssign === 'manual' ? 'selected' : ''}>Manuel (ordre saisi)</option>
+        </select>
+      </label>
+      <label class="field compact">
+        <span>Logique de séance</span>
+        <select data-rotating-setting="goalMode">
+          ${options.map(option => `<option value="${option.value}" ${goalMode === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field compact">
+        <span>${getRotatingGoalModeLabel(goalMode)}</span>
+        <input type="number" min="1" max="24" value="${goalValue}" data-rotating-setting="goalValue" />
+      </label>
+    </div>
+  `;
+}
+
+function buildRotatingPoolEditorHTML(editablePools, teamSize) {
+  const playersPerMatch = teamSize * 2;
+  return `
+    <section class="ladder-group-panel">
+      <div class="ladder-group-panel-head">
+        <h4>Éditeur manuel des poules</h4>
+        <span class="ladder-summary-pill">Les poules restent stables, les équipes seront rebrassées à chaque rotation.</span>
+      </div>
+      <div class="ladder-group-grid rotating-editor-grid">
+        ${editablePools.map((pool, poolIndex) => {
+          const maxMatches = Math.floor(pool.members.length / playersPerMatch);
+          const enoughPlayers = pool.members.length >= playersPerMatch;
+          return `
+            <article class="ladder-group-card rotating-pool-editor-card ${enoughPlayers ? '' : 'invalid'}">
+              <header class="rotating-pool-preview-head">
+                <div>
+                  <h5>${escapeHtml(pool.label)}</h5>
+                  <p>${pool.members.length} élève${pool.members.length > 1 ? 's' : ''}</p>
+                </div>
+                <span class="ladder-summary-pill">${maxMatches} match${maxMatches > 1 ? 's' : ''} / rotation</span>
+              </header>
+              ${enoughPlayers ? '' : `<p class="rotating-pool-warning">Au moins ${playersPerMatch} élèves sont nécessaires pour générer un match ${teamSize}c${teamSize}.</p>`}
+              <div class="rotating-editor-actions">
+                <button type="button" class="btn ghost small" data-rotating-action="shuffle-pool" data-pool-index="${poolIndex}">Mélanger cette poule</button>
+              </div>
+              <div class="rotating-editor-students">
+                ${pool.members.map(member => `
+                  <article class="rotating-editor-student">
+                    <strong>${escapeHtml(member.name)}</strong>
+                    <div class="rotating-editor-moves">
+                      ${editablePools.map((targetPool, targetPoolIndex) => {
+                        if (targetPoolIndex === poolIndex) return '';
+                        return `<button type="button" class="btn ghost tiny" data-rotating-action="move-player" data-player-index="${member.index}" data-target-pool="${targetPoolIndex}">Vers ${escapeHtml(targetPool.id)}</button>`;
+                      }).join('')}
+                    </div>
+                  </article>
+                `).join('')}
+              </div>
+            </article>
+          `;
+        }).join('')}
+      </div>
+      <div class="rotating-editor-actions">
+        <button type="button" class="btn ghost" data-rotating-action="auto-balance-pools">Répartition automatique équilibrée</button>
+        <button type="button" class="btn ghost" data-rotating-action="reset-manual-pools">Réinitialiser la répartition</button>
+      </div>
+    </section>
+  `;
+}
+
+function getRotatingRecommendationQuality(score) {
+  if (score >= 85) return 'Excellent';
+  if (score >= 65) return 'Correct';
+  return 'À revoir';
+}
+
+function computeRotatingBestOrganization(names = getFinalTeamNames(), options = state.options) {
+  const availableInfo = getAvailableWindow(options);
+  const playerCount = names.length;
+  if (!playerCount) return null;
+  const teamSizeCandidates = [2, 3, 4, 5, 6].filter(size => playerCount >= size * 2);
+  if (!teamSizeCandidates.length) return null;
+  const organizationCandidates = ['pools', 'full-random'];
+  const recommendations = [];
+  const duration = clampNumber(Number(options.duration) || 12, 1, 180, 12);
+  const turnaround = clampNumber(Number(options.turnaround) || 2, 0, 60, 2);
+  const maxRotationsFromTime = availableInfo.availableMinutes
+    ? Math.max(1, Math.floor((Math.max(availableInfo.availableMinutes - (options.breakMinutes || 0), 0) + turnaround) / (duration + turnaround)))
+    : 4;
+  organizationCandidates.forEach(organization => {
+    const maxPools = organization === 'pools' ? Math.min(10, Math.max(1, Math.floor(playerCount / 4))) : 1;
+    for (let poolCount = 1; poolCount <= maxPools; poolCount += 1) {
+      if (organization === 'full-random' && poolCount > 1) continue;
+      for (const teamSize of teamSizeCandidates) {
+        const normalizedRotatingTeams = {
+          ...(options.rotatingTeams || {}),
+        };
+        const candidateOptions = {
+          ...options,
+          rotatingTeams: normalizedRotatingTeams,
+        };
+        candidateOptions.rotatingTeams = {
+          ...(options.rotatingTeams || {}),
+          organization,
+          poolCount,
+          autoAssign: 'balanced',
+          teamSize,
+          goalMode: 'rotation-count',
+          rotationGoal: Math.min(6, Math.max(2, maxRotationsFromTime)),
+          matchesPerPoolGoal: getRotatingMatchesPerPoolGoal(options),
+          targetMatches: getRotatingTargetMatches(options),
+          winPoints: getRotatingScoring(options).win,
+          drawPoints: getRotatingScoring(options).draw,
+          lossPoints: getRotatingScoring(options).loss,
+        };
+        const validation = validateRotatingPoolsConfig(names, candidateOptions);
+        if (!validation.valid) continue;
+        const schedule = generateRotatingTeamsSchedule(names, candidateOptions);
+        if (schedule.meta?.generationError || !schedule.meta?.matchCount) continue;
+        const summary = computeTimeSummary(schedule, candidateOptions);
+        const waitingAverage = schedule.rotations.length
+          ? Math.round(schedule.rotations.reduce((sum, rotation) => sum + (rotation.byes?.length || 0), 0) / schedule.rotations.length)
+          : 0;
+        const matchesPerStudent = playerCount > 0 ? Math.round(((schedule.meta.matchCount * teamSize * 2) / playerCount) * 10) / 10 : 0;
+        const mixingScore = Math.min(100, 55 + teamSize * 4 + (organization === 'full-random' ? 12 : 0));
+        const waitScore = Math.max(0, 100 - waitingAverage * 12);
+        const playScore = Math.min(100, matchesPerStudent * 22);
+        const timeScore = summary?.feasibility?.ok === false ? 20 : summary ? 90 : 70;
+        const score = Math.round((mixingScore * 0.35) + (waitScore * 0.25) + (playScore * 0.25) + (timeScore * 0.15));
+        recommendations.push({
+          organization,
+          poolCount,
+          teamSize,
+          rotationGoal: candidateOptions.rotatingTeams.rotationGoal,
+          schedule,
+          summary,
+          score,
+          waitingAverage,
+          matchesPerStudent,
+          quality: getRotatingRecommendationQuality(score),
+          explanation:
+            organization === 'pools'
+              ? `Recommandation : ${poolCount} poule${poolCount > 1 ? 's' : ''}, équipes en ${teamSize}c${teamSize}, ${candidateOptions.rotatingTeams.rotationGoal} rotations. Tous les élèves gardent leur poule et changent d’équipe à chaque rotation.`
+              : `Recommandation : classe entière en ${teamSize}c${teamSize}, ${candidateOptions.rotatingTeams.rotationGoal} rotations. Brassage maximal avec attente limitée.`,
+        });
+      }
+    }
+  });
+  recommendations.sort((a, b) => b.score - a.score);
+  return recommendations[0] || null;
+}
+
+function renderRotatingRecommendationHTML(recommendation = latestRotatingRecommendation) {
+  if (!recommendation) {
+    return `
+      <div class="rotating-recommendation-actions">
+        <button type="button" class="btn success" data-rotating-action="recommend">Trouver la meilleure organisation</button>
+      </div>
+    `;
+  }
+  const durationLabel = recommendation.summary ? humanizeDuration(recommendation.summary.totalMinutes) : '—';
+  return `
+    <div class="rotating-recommendation-card">
+      <div class="rotating-recommendation-head">
+        <div>
+          <h5>Meilleure solution EPS</h5>
+          <p>${escapeHtml(recommendation.explanation)}</p>
+        </div>
+        <span class="ladder-summary-pill">${recommendation.quality}</span>
+      </div>
+      <div class="rotating-recommendation-grid">
+        <span><strong>Poules</strong> ${recommendation.organization === 'full-random' ? 'Classe entière' : recommendation.poolCount}</span>
+        <span><strong>Format</strong> ${recommendation.teamSize}c${recommendation.teamSize}</span>
+        <span><strong>Rotations</strong> ${recommendation.rotationGoal}</span>
+        <span><strong>Matchs</strong> ${recommendation.schedule.meta?.matchCount || 0}</span>
+        <span><strong>Durée</strong> ${durationLabel}</span>
+        <span><strong>Matchs / élève</strong> ${recommendation.matchesPerStudent}</span>
+        <span><strong>Attente / rotation</strong> ${recommendation.waitingAverage}</span>
+        <span><strong>Score EPS</strong> ${recommendation.score}/100</span>
+      </div>
+      <div class="rotating-recommendation-actions">
+        <button type="button" class="btn success" data-rotating-action="use-recommendation">Utiliser cette configuration</button>
+        <button type="button" class="btn ghost" data-rotating-action="recommend">Recalculer</button>
+      </div>
+    </div>
+  `;
+}
+
+function buildRotatingPoolsLocalSnapshot() {
+  if (!state.schedule || state.schedule.format !== 'rotating-teams') return null;
+  return {
+    savedAt: new Date().toISOString(),
+    state: JSON.parse(JSON.stringify(state)),
+  };
+}
+
+function saveRotatingPoolsLocalSnapshot() {
+  try {
+    const snapshot = buildRotatingPoolsLocalSnapshot();
+    if (!snapshot) return;
+    localStorage.setItem(ROTATING_POOLS_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn('Sauvegarde locale poules tournantes impossible', error);
+  }
+}
+
+function syncRotatingTournamentProgress() {
+  if (state.schedule?.format !== 'rotating-teams' || !state.schedule.rotatingTeams?.rotatingTournamentState) return;
+  state.schedule.rotatingTeams.rotatingTournamentState.currentRotationIndex = state.liveRotationIndex || 0;
+  state.schedule.rotatingTeams.rotatingTournamentState.completedMatchIds = Object.keys(state.validatedMatches || {}).filter(
+    matchId => state.validatedMatches[matchId]
+  );
+}
+
+function applyRotatingGoalValue(value) {
+  normalizeRotatingTeamsOptions();
+  const goalMode = getRotatingGoalMode();
+  const nextValue = clampNumber(Number(value), 1, 24, 3);
+  if (goalMode === 'rotation-count') {
+    state.options.rotatingTeams.rotationGoal = nextValue;
+  } else if (goalMode === 'matches-per-pool') {
+    state.options.rotatingTeams.matchesPerPoolGoal = nextValue;
+  } else {
+    state.options.rotatingTeams.targetMatches = clampNumber(nextValue, 1, 12, 3);
+  }
+}
+
+function applyRotatingRecommendation(recommendation = latestRotatingRecommendation, options = {}) {
+  if (!recommendation) return;
+  normalizeRotatingTeamsOptions();
+  state.options.rotatingTeams.organization = recommendation.organization;
+  state.options.rotatingTeams.poolCount = recommendation.poolCount;
+  state.options.rotatingTeams.autoAssign = 'balanced';
+  state.options.rotatingTeams.teamSize = recommendation.teamSize;
+  state.options.rotatingTeams.goalMode = 'rotation-count';
+  state.options.rotatingTeams.rotationGoal = recommendation.rotationGoal;
+  syncOptionInputs();
+  persistState();
+  latestRotatingRecommendation = recommendation;
+  renderRotatingPoolsPreview();
+  if (options.generateNow) {
+    const teams = getFinalTeamNames();
+    const schedule = generateSchedule(teams, state.options);
+    renderResults(schedule, { resetScores: true });
+    goTo('results');
+    requestSessionLaunch();
   }
 }
 
@@ -5097,10 +5600,15 @@ function renderRotatingPoolsPreview() {
     elements.rotatingPoolsPreview.innerHTML = '<p class="ladder-group-empty">Ajoutez des élèves pour prévisualiser l’organisation.</p>';
     return;
   }
+  if (latestRotatingRecommendation?.schedule?.meta?.teamCount !== names.length) {
+    latestRotatingRecommendation = null;
+  }
   const poolConfig = buildRotatingPoolsConfig(names, state.options);
+  const editablePools = getRotatingEditablePools(names, state.options);
   const validation = validateRotatingPoolsConfig(names, state.options);
   const teamSize = poolConfig.teamSize;
   const playersPerMatch = teamSize * 2;
+  const targetMeta = getRotatingRotationTargetMeta(buildRotatingConfig(state.options, names.length));
   const alertHtml = validation.valid
     ? ''
     : `
@@ -5142,8 +5650,17 @@ function renderRotatingPoolsPreview() {
       <h4>${poolConfig.organization === 'full-random' ? 'Classe entière' : `${poolConfig.poolCount} poule${poolConfig.poolCount > 1 ? 's' : ''} prévues`}</h4>
       <span class="ladder-summary-pill">${teamSize}c${teamSize} · ${playersPerMatch} élèves mobilisés par match</span>
     </div>
+    <div class="rotating-config-shell">
+      ${buildRotatingGoalControlsHTML()}
+      <div class="rotating-config-row rotating-config-row-info">
+        <span class="ladder-summary-pill">Cible utilisée : ${escapeHtml(targetMeta.targetLabel)}</span>
+        <span class="ladder-summary-pill">${state.options.rotatingTeams.autoAssign === 'manual' ? 'Mode manuel' : 'Mode automatique équilibré'}</span>
+      </div>
+      ${renderRotatingRecommendationHTML()}
+    </div>
     ${alertHtml}
     ${intro}
+    ${buildRotatingPoolEditorHTML(editablePools, teamSize)}
     <div class="ladder-group-grid">${cards}</div>
   `;
 }
@@ -6349,7 +6866,6 @@ function buildRotatingTeamsRankingRows(schedule = state.schedule, uptoRotation =
   rows.sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.goalAverage !== a.goalAverage) return b.goalAverage - a.goalAverage;
-    if (b.wins !== a.wins) return b.wins - a.wins;
     if (a.played !== b.played) return a.played - b.played;
     return a.name.localeCompare(b.name);
   });
@@ -9095,6 +9611,30 @@ function buildRotatingPilotMatchCards(rotation) {
     .join('');
 }
 
+function buildRotatingPilotHistoryHTML(schedule = state.schedule, uptoRotation = state.schedule?.rotations?.[state.liveRotationIndex]?.number) {
+  if (!schedule?.rotations?.length) {
+    return '<p class="live-empty">Aucun match terminé pour le moment.</p>';
+  }
+  const rows = [];
+  schedule.rotations.forEach(rotation => {
+    if (rotation.number > (uptoRotation || 0)) return;
+    rotation.matches.forEach(match => {
+      const record = state.scores?.[match.id];
+      if (!record || !state.validatedMatches?.[match.id]) return;
+      rows.push(`
+        <li>
+          <strong>${escapeHtml(match.groupLabel || `Rotation ${rotation.number}`)}</strong>
+          <span>Terrain ${match.field} · ${escapeHtml((match.homePlayers || []).join(', '))} ${record.home}-${record.away} ${escapeHtml((match.awayPlayers || []).join(', '))}</span>
+        </li>
+      `);
+    });
+  });
+  if (!rows.length) {
+    return '<p class="live-empty">Aucun match terminé pour le moment.</p>';
+  }
+  return `<ul class="rotating-history-list">${rows.reverse().join('')}</ul>`;
+}
+
 function renderRotatingTeamsPilot() {
   if (!elements.rotatingPilotBody || !isRotatingTeamsMode(state.schedule)) return;
   const rotation = state.schedule?.rotations?.[state.liveRotationIndex] || state.schedule?.rotations?.[0];
@@ -9114,6 +9654,7 @@ function renderRotatingTeamsPilot() {
   const disabledHint = isComplete
     ? 'Tous les scores sont renseignés. Vous pouvez enchaîner immédiatement.'
     : 'Complétez tous les scores pour débloquer la rotation suivante.';
+  const tournamentState = state.schedule.rotatingTeams?.rotatingTournamentState || null;
   const rankingCard = buildRotatingRankingCard(state.schedule, {
     title: 'Classement individuel live',
     compact: true,
@@ -9138,6 +9679,7 @@ function renderRotatingTeamsPilot() {
         <div class="ladder-focus-stats">
           <span class="ladder-summary-pill">${totalMatches} terrain${totalMatches > 1 ? 's' : ''} en jeu</span>
           <span class="ladder-summary-pill">${resolvedMatches} / ${totalMatches} score(s) saisi(s)</span>
+          ${tournamentState?.targetLabel ? `<span class="ladder-summary-pill">${escapeHtml(tournamentState.targetLabel)}</span>` : ''}
           ${rotation.startLabel ? `<span class="ladder-summary-pill">${rotation.startLabel}</span>` : ''}
         </div>
       </div>
@@ -9174,6 +9716,13 @@ function renderRotatingTeamsPilot() {
     <div class="pool-pilot-console rotating-pilot-console">
       <div class="pool-pilot-list">${buildRotatingPilotMatchCards(rotation)}</div>
       <div class="rotating-ranking-wrap">${rankingCard.html}</div>
+      <article class="ranking-card rotating-history-card">
+        <header>
+          <h3>Historique des matchs</h3>
+          <span class="ranking-status">Scores validés</span>
+        </header>
+        ${buildRotatingPilotHistoryHTML(state.schedule, rotation.number)}
+      </article>
       <div class="pool-pilot-next-cta">
         <button type="button" class="btn primary xl" data-rotating-next-cta ${isComplete ? '' : 'disabled'}>
           ${nextLabel}
@@ -11289,14 +11838,18 @@ function buildRotatingConfig(options = state.options, participantCount = state.p
   return {
     organization: getRotatingOrganization(options),
     poolCount: getRotatingPoolCount(options, participantCount),
+    manualPools: getRotatingManualPools(options, participantCount),
     teamSize: getRotatingTeamSize(options),
     targetMatches: getRotatingTargetMatches(options),
+    goalMode: getRotatingGoalMode(options),
+    rotationGoal: getRotatingRotationGoal(options),
+    matchesPerPoolGoal: getRotatingMatchesPerPoolGoal(options),
     points: getRotatingScoring(options),
     fieldCount: clampNumber(Number(options?.fields) || 1, 1, 16, 1),
     duration: clampNumber(Number(options?.duration) || 12, 1, 180, 12),
     startTime: options?.startTime || state.options.startTime,
     rotationBuffer: clampNumber(Number(options?.turnaround) || 0, 0, 60, 0),
-    autoAssign: options?.rotatingTeams?.autoAssign === 'balanced' ? 'balanced' : 'balanced',
+    autoAssign: options?.rotatingTeams?.autoAssign === 'manual' ? 'manual' : 'balanced',
   };
 }
 
@@ -11322,19 +11875,82 @@ function buildRotatingPlayers(teams, config) {
     return players;
   }
   const poolCount = Math.max(1, Math.min(config.poolCount, players.length));
-  const baseSize = Math.floor(players.length / poolCount);
-  const extra = players.length % poolCount;
-  let cursor = 0;
-  for (let index = 0; index < poolCount; index += 1) {
-    const size = baseSize + (index < extra ? 1 : 0);
-    const poolId = String.fromCharCode(65 + index);
-    for (let slot = 0; slot < size; slot += 1) {
-      if (!players[cursor]) break;
-      players[cursor].poolId = poolId;
-      cursor += 1;
-    }
+  const poolLabels = Array.from({ length: poolCount }, (_, index) => String.fromCharCode(65 + index));
+  if (config.autoAssign === 'manual') {
+    const manualPools = normalizeRotatingManualPools(config.manualPools, players.length, poolCount);
+    manualPools.forEach((pool, poolIndex) => {
+      const poolId = poolLabels[poolIndex];
+      pool.forEach(playerIndex => {
+        if (!players[playerIndex]) return;
+        players[playerIndex].poolId = poolId;
+      });
+    });
+    return players;
   }
+  players.forEach((player, index) => {
+    const row = Math.floor(index / poolCount);
+    const slot = index % poolCount;
+    const targetIndex = row % 2 === 0 ? slot : poolCount - 1 - slot;
+    player.poolId = poolLabels[targetIndex];
+  });
   return players;
+}
+
+function getRotatingRotationTargetMeta(config) {
+  if (config.goalMode === 'rotation-count') {
+    return {
+      targetLabel: `${config.rotationGoal} rotation${config.rotationGoal > 1 ? 's' : ''}`,
+      rotationLimit: config.rotationGoal,
+      matchLimit: null,
+      perPlayerTarget: null,
+    };
+  }
+  if (config.goalMode === 'matches-per-pool') {
+    return {
+      targetLabel: `${config.matchesPerPoolGoal} match${config.matchesPerPoolGoal > 1 ? 's' : ''} / poule`,
+      rotationLimit: null,
+      matchLimit: config.matchesPerPoolGoal,
+      perPlayerTarget: null,
+    };
+  }
+  return {
+    targetLabel: `${config.targetMatches} match${config.targetMatches > 1 ? 's' : ''} / élève`,
+    rotationLimit: null,
+    matchLimit: null,
+    perPlayerTarget: config.targetMatches,
+  };
+}
+
+function buildRotatingTournamentState(schedule, config) {
+  const targetMeta = getRotatingRotationTargetMeta(config);
+  return {
+    organization: config.organization,
+    poolCount: config.organization === 'pools' ? config.poolCount : 1,
+    teamSize: config.teamSize,
+    autoAssign: config.autoAssign,
+    targetMode: config.goalMode,
+    targetValue:
+      targetMeta.rotationLimit ??
+      targetMeta.matchLimit ??
+      targetMeta.perPlayerTarget ??
+      config.targetMatches,
+    targetLabel: targetMeta.targetLabel,
+    configuredFields: config.fieldCount,
+    duration: config.duration,
+    pools: (schedule.rotatingTeams?.pools || []).map(pool => ({
+      id: pool.id,
+      label: pool.label,
+      playerIds: [...(pool.playerIds || [])],
+    })),
+    players: (schedule.rotatingTeams?.players || []).map(player => ({
+      id: player.id,
+      name: player.name,
+      poolId: player.poolId || null,
+    })),
+    currentRotationIndex: state.liveRotationIndex || 0,
+    completedMatchIds: Object.keys(state.validatedMatches || {}).filter(matchId => state.validatedMatches[matchId]),
+    createdAt: state.generatedAt || new Date().toISOString(),
+  };
 }
 
 function groupPlayersByPool(players) {
@@ -11430,6 +12046,9 @@ function validateRotatingPoolsConfig(teams, options = state.options) {
     (sum, group) => sum + Math.floor(group.players.length / minPlayersPerMatch),
     0
   );
+  const averageWaiting = groups.length
+    ? groups.reduce((sum, group) => sum + Math.max(group.players.length - (Math.floor(group.players.length / minPlayersPerMatch) * minPlayersPerMatch), 0), 0) / groups.length
+    : 0;
   if (totalPossibleMatches <= 0) {
     return {
       valid: false,
@@ -11442,6 +12061,41 @@ function validateRotatingPoolsConfig(teams, options = state.options) {
         playerCount: names.length,
       }),
     };
+  }
+  if (averageWaiting > minPlayersPerMatch) {
+    return {
+      valid: false,
+      config,
+      players,
+      groups,
+      message: 'Cette configuration crée trop d’attente. Essayez 2c2, moins de poules ou classe entière.',
+      suggestion: getRotatingPoolsSuggestion({
+        config,
+        playerCount: names.length,
+      }),
+    };
+  }
+  if (config.goalMode === 'rotation-count') {
+    const availableInfo = getAvailableWindow(options);
+    if (availableInfo.availableMinutes) {
+      const maxRotations = Math.max(
+        1,
+        Math.floor(
+          (Math.max(availableInfo.availableMinutes - (Number(options.breakMinutes) || 0), 0) + (Number(options.turnaround) || 0)) /
+          (Math.max(Number(options.duration) || 12, 1) + (Number(options.turnaround) || 0))
+        )
+      );
+      if (config.rotationGoal > maxRotations) {
+        return {
+          valid: false,
+          config,
+          players,
+          groups,
+          message: `Objectif irréaliste : ${config.rotationGoal} rotations ne rentrent pas dans le créneau actuel.`,
+          suggestion: `Conseil : restez à ${maxRotations} rotation${maxRotations > 1 ? 's' : ''} maximum ou réduisez la durée des matchs.`,
+        };
+      }
+    }
   }
   return {
     valid: true,
@@ -11740,6 +12394,7 @@ function generateRotatingScheduleForGroup(groupPlayers, config) {
   const poolLabel = config.poolLabel || (poolId ? `Poule ${poolId}` : 'Classe entière');
   const teamSize = clampNumber(Number(config.teamSize) || 2, 2, 6, 2);
   const targetMatches = clampNumber(Number(config.targetMatches) || 3, 1, 12, 3);
+  const targetMeta = getRotatingRotationTargetMeta(config);
   const localFieldCount = Math.max(0, Math.min(Number(config.fieldCount) || 1, Math.floor(players.length / (teamSize * 2))));
   const warnings = [];
   if (players.length < teamSize * 2) {
@@ -11761,10 +12416,20 @@ function generateRotatingScheduleForGroup(groupPlayers, config) {
   const opponentCounts = new Map();
   const minRotationEstimate = Math.max(1, Math.ceil((players.length * targetMatches) / Math.max(localFieldCount * teamSize * 2, 1)));
   const rotations = [];
+  let generatedMatchCount = 0;
   let rotationNumber = 1;
   const remainingTarget = () => Math.min(...players.map(player => playedCounts.get(player.id) || 0));
 
-  while (rotationNumber <= 48 && (rotationNumber <= minRotationEstimate || remainingTarget() < targetMatches)) {
+  while (rotationNumber <= 48) {
+    if (targetMeta.rotationLimit != null && rotationNumber > targetMeta.rotationLimit) break;
+    if (targetMeta.matchLimit != null && generatedMatchCount >= targetMeta.matchLimit) break;
+    if (
+      targetMeta.rotationLimit == null &&
+      targetMeta.matchLimit == null &&
+      !(rotationNumber <= minRotationEstimate || remainingTarget() < targetMatches)
+    ) {
+      break;
+    }
     const summary = generateBalancedMatchesForGroup(group, {
       teamSize,
       fieldQuota: localFieldCount,
@@ -11797,6 +12462,7 @@ function generateRotatingScheduleForGroup(groupPlayers, config) {
       refereeIds: summary.referees.map(player => player.id),
       localFieldCount: matches.length,
     });
+    generatedMatchCount += matches.length;
     rotationNumber += 1;
   }
 
@@ -12024,9 +12690,13 @@ function generateRotatingTeamsSchedule(teams, options) {
       organization: config.organization,
       teamSize: config.teamSize,
       targetMatches: config.targetMatches,
+      goalMode: config.goalMode,
+      rotationGoal: config.rotationGoal,
+      matchesPerPoolGoal: config.matchesPerPoolGoal,
       scoring: config.points,
       configuredFields: config.fieldCount,
       activeFields,
+      rotatingTournamentState: null,
     },
   };
 
@@ -12045,6 +12715,8 @@ function generateRotatingTeamsSchedule(teams, options) {
   if (!validateRotatingPoolIntegrity(schedule, players, config)) {
     schedule.meta.generationError = 'Erreur de génération : une poule contient des joueurs d’une autre poule.';
   }
+
+  schedule.rotatingTeams.rotatingTournamentState = buildRotatingTournamentState(schedule, config);
 
   return schedule;
 }
@@ -13636,10 +14308,24 @@ function hydrateScheduleForSpecialModes(schedule) {
       12,
       getRotatingTargetMatches(state.options)
     );
+    schedule.rotatingTeams.goalMode =
+      schedule.rotatingTeams.goalMode === 'rotation-count' || schedule.rotatingTeams.goalMode === 'matches-per-pool'
+        ? schedule.rotatingTeams.goalMode
+        : 'target-per-player';
+    schedule.rotatingTeams.rotationGoal = clampNumber(Number(schedule.rotatingTeams.rotationGoal), 1, 24, getRotatingRotationGoal(state.options));
+    schedule.rotatingTeams.matchesPerPoolGoal = clampNumber(
+      Number(schedule.rotatingTeams.matchesPerPoolGoal),
+      1,
+      24,
+      getRotatingMatchesPerPoolGoal(state.options)
+    );
     schedule.rotatingTeams.scoring = {
       ...getRotatingScoring(state.options),
       ...(schedule.rotatingTeams.scoring || {}),
     };
+    if (!schedule.rotatingTeams.rotatingTournamentState) {
+      schedule.rotatingTeams.rotatingTournamentState = buildRotatingTournamentState(schedule, buildRotatingConfig(state.options, schedule.teams?.length || state.participants));
+    }
   }
 }
 
@@ -14788,8 +15474,12 @@ function createDefaultState() {
         organization: 'pools',
         poolCount: 1,
         autoAssign: 'balanced',
+        manualPools: [],
         teamSize: 2,
         targetMatches: 3,
+        goalMode: 'target-per-player',
+        rotationGoal: 3,
+        matchesPerPoolGoal: 3,
         winPoints: 3,
         drawPoints: 1,
         lossPoints: 0,
@@ -14820,8 +15510,11 @@ function createDefaultState() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (raw) return JSON.parse(raw);
+    const rotatingRaw = localStorage.getItem(ROTATING_POOLS_STORAGE_KEY);
+    if (!rotatingRaw) return null;
+    const rotatingSnapshot = JSON.parse(rotatingRaw);
+    return rotatingSnapshot?.state || null;
   } catch (error) {
     console.warn('Impossible de charger la sauvegarde', error);
     return null;
@@ -14880,10 +15573,21 @@ function sanitizeState(raw) {
   );
   optionSource.rotatingTeams = {
     organization: optionSource?.rotatingTeams?.organization === 'full-random' ? 'full-random' : 'pools',
-    poolCount: clampNumber(Number(optionSource?.rotatingTeams?.poolCount), 1, Math.min(6, Math.max(1, merged.participants)), 1),
-    autoAssign: 'balanced',
+    poolCount: clampNumber(Number(optionSource?.rotatingTeams?.poolCount), 1, Math.min(10, Math.max(1, merged.participants)), 1),
+    autoAssign: optionSource?.rotatingTeams?.autoAssign === 'manual' ? 'manual' : 'balanced',
+    manualPools: normalizeRotatingManualPools(
+      optionSource?.rotatingTeams?.manualPools,
+      merged.participants,
+      clampNumber(Number(optionSource?.rotatingTeams?.poolCount), 1, Math.min(10, Math.max(1, merged.participants)), 1)
+    ),
     teamSize: clampNumber(Number(optionSource?.rotatingTeams?.teamSize), 2, 6, 2),
     targetMatches: clampNumber(Number(optionSource?.rotatingTeams?.targetMatches), 1, 12, 3),
+    goalMode:
+      optionSource?.rotatingTeams?.goalMode === 'rotation-count' || optionSource?.rotatingTeams?.goalMode === 'matches-per-pool'
+        ? optionSource.rotatingTeams.goalMode
+        : 'target-per-player',
+    rotationGoal: clampNumber(Number(optionSource?.rotatingTeams?.rotationGoal), 1, 24, 3),
+    matchesPerPoolGoal: clampNumber(Number(optionSource?.rotatingTeams?.matchesPerPoolGoal), 1, 24, 3),
     winPoints: clampNumber(Number(optionSource?.rotatingTeams?.winPoints), 0, 10, 3),
     drawPoints: clampNumber(Number(optionSource?.rotatingTeams?.drawPoints), 0, 10, 1),
     lossPoints: clampNumber(Number(optionSource?.rotatingTeams?.lossPoints), 0, 10, 0),
@@ -15009,6 +15713,7 @@ function sanitizeState(raw) {
 
 function persistState() {
   try {
+    syncRotatingTournamentProgress();
     const canSnapshotCurrentSession = Boolean(state.schedule && doesActiveModeMatchSchedule());
     if (canSnapshotCurrentSession) {
       ensureCurrentSessionMetadata();
@@ -15016,6 +15721,9 @@ function persistState() {
     }
     const snapshot = { ...state };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    if (state.schedule?.format === 'rotating-teams') {
+      saveRotatingPoolsLocalSnapshot();
+    }
     if (canSnapshotCurrentSession) {
       upsertStoredSessionSnapshot(buildAppSaveSnapshot());
     }
@@ -15031,6 +15739,7 @@ function resetApplication() {
   if (!confirmed) return;
   challengeIdSeed = 0;
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(ROTATING_POOLS_STORAGE_KEY);
   state = sanitizeState(createDefaultState());
   persistState();
   renderParticipants();
