@@ -3006,6 +3006,10 @@ function bindNavigation() {
 
   elements.generateBtn.addEventListener('click', handleGenerate);
   elements.regenerateBtn.addEventListener('click', () => {
+    if (state.activeModeId === 'raquettes-defi' && !hasChallengeClassName()) {
+      alert('Renseignez une classe ou un groupe pour sauvegarder ce classement.');
+      return;
+    }
     closeResultsMorePanel();
     if (!state.schedule) return;
     const teams = getFinalTeamNames();
@@ -3246,6 +3250,28 @@ function bindNavigation() {
   if (elements.poolPilotNextBtn) {
     elements.poolPilotNextBtn.addEventListener('click', advancePoolPilotRotation);
   }
+  const challengePilotCloseBtn = document.getElementById('challengePilotCloseBtn');
+  if (challengePilotCloseBtn) {
+    challengePilotCloseBtn.addEventListener('click', () => {
+      goTo('results');
+      setActiveView('rotations');
+    });
+  }
+  const challengePilotBody = document.getElementById('challengePilotBody');
+  if (challengePilotBody) {
+    challengePilotBody.addEventListener('click', handleChallengeClick);
+    challengePilotBody.addEventListener('dblclick', handleChallengeDoubleClick);
+    challengePilotBody.addEventListener('change', event => {
+      const input = event.target.closest('#challengeRangeLive');
+      if (!input) return;
+      const next = Math.max(1, Math.min(27, Number(input.value) || 1));
+      input.value = next;
+      state.options.challengeRange = next;
+      if (state.schedule?.challenge) state.schedule.challenge.range = next;
+      persistState();
+      renderChallengePilotScreen();
+    });
+  }
   if (elements.rotatingPilotCloseBtn) {
     elements.rotatingPilotCloseBtn.addEventListener('click', closeRotatingTeamsPilotScreen);
   }
@@ -3314,6 +3340,18 @@ function bindNavigation() {
   }
   if (elements.rotationView) {
     elements.rotationView.addEventListener('click', handleChallengeClick);
+    elements.rotationView.addEventListener('change', event => {
+      const input = event.target.closest('#challengeRangeLive');
+      if (!input) return;
+      const next = Math.max(1, Math.min(27, Number(input.value) || 1));
+      input.value = next;
+      state.options.challengeRange = next;
+      if (state.schedule?.challenge) {
+        state.schedule.challenge.range = next;
+      }
+      persistState();
+      renderChallengeBoard(state.schedule);
+    });
     elements.rotationView.addEventListener('dblclick', handleChallengeDoubleClick);
   }
   if (elements.simulateBtn) {
@@ -3361,6 +3399,11 @@ function bindNavigation() {
       }
       if (btn.dataset.resultsModeTarget === 'pilot' && isRotatingTeamsMode(state.schedule)) {
         requestSessionLaunch();
+        return;
+      }
+      if (btn.dataset.resultsModeTarget === 'pilot' && state.schedule?.format === 'challenge') {
+        requestSessionLaunch();
+        return;
       }
     });
   }
@@ -7170,7 +7213,21 @@ function renderChallengeBoard(schedule = state.schedule) {
       <header class="challenge-shell-header">
         <div>
           <p class="eyebrow">Mode Défi</p>
-          <h3>Classement · fenêtre ±${range}</h3>
+          <div class="challenge-range-control">
+            <h3>Classement</h3>
+            <label class="challenge-range-label">
+              Fenêtre ±
+              <input
+                type="number"
+                id="challengeRangeLive"
+                class="challenge-range-input"
+                min="1"
+                max="27"
+                value="${range}"
+                inputmode="numeric"
+              />
+            </label>
+          </div>
         </div>
         <p class="challenge-shell-hint">
           Touchez un joueur pour voir ses adversaires · Touchez deux fois ou “Défi” pour saisir
@@ -7561,6 +7618,12 @@ function selectChallengePlayer(playerId) {
   applyChallengeSelectionState();
   _challengeAutoReset = setTimeout(() => {
     clearChallengeSelection();
+    const board = document.getElementById('challengeBoard') ||
+                  document.querySelector('.challenge-board');
+    if (board) {
+      board.classList.add('selection-expired');
+      setTimeout(() => board.classList.remove('selection-expired'), 500);
+    }
   }, 3000);
 }
 
@@ -9255,12 +9318,26 @@ function getNextStageActionLabel(schedule = state.schedule) {
 
 function openChallengePilotView() {
   if (!state.schedule || state.schedule.format !== 'challenge') return;
-  goTo('results');
-  setResultsMode('pilot');
-  setActiveView('rotations');
-  window.requestAnimationFrame(() => {
-    elements.rotationView?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+  const pilotBody = document.getElementById('challengePilotBody');
+  if (!pilotBody) return;
+  pilotBody.innerHTML = '';
+  const boardClone = document.createElement('div');
+  boardClone.className = 'challenge-pilot-inner';
+  pilotBody.appendChild(boardClone);
+  goTo('challenge-pilot');
+  renderChallengePilotScreen();
+}
+
+function renderChallengePilotScreen() {
+  const pilotBody = document.getElementById('challengePilotBody');
+  if (!pilotBody || state.schedule?.format !== 'challenge') return;
+  const tempDiv = document.createElement('div');
+  document.body.appendChild(tempDiv);
+  const originalView = elements.rotationView;
+  elements.rotationView = pilotBody;
+  renderChallengeBoard(state.schedule);
+  elements.rotationView = originalView;
+  document.body.removeChild(tempDiv);
 }
 
 function isRotatingTeamsPilotScreenOpen() {
@@ -14340,7 +14417,13 @@ function hydrateChallengeBoard(schedule) {
     };
   }
   const challenge = schedule.challenge;
-  challenge.names = schedule.teams.map(team => team.name);
+  const teamNames = (schedule.teams || []).map(t => t.name);
+  if (!Array.isArray(challenge.names) || challenge.names.length !== teamNames.length) {
+    console.warn('[Challenge] Désynchronisation names/teams — réinitialisation de challenge.names');
+    challenge.names = teamNames;
+  } else {
+    challenge.names = teamNames;
+  }
   challenge.range = clampNumber(Number(challenge.range) || getChallengeRange(), 1, 10, getChallengeRange());
   if (!Array.isArray(challenge.history)) {
     challenge.history = [];
